@@ -5,32 +5,44 @@ import flet as ft
 class ApiClient:
     def __init__(self, page: ft.Page):
         self.page = page
-        # URL del backend en Railway
+        
+        # --- 1. AÑADIDO: Almacén para el token ---
+        self.token = None 
+        
         raw_url = os.environ.get("BACKEND_URL", "https://gestor-de-laboratorios-production.up.railway.app")
         
-        # --- INICIO DE LA CORRECCIÓN ---
-        # Nos aseguramos de que la URL tenga el esquema (http/https)
         if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
             print(f"⚠️  URL de backend ({raw_url}) sin esquema. Añadiendo https:// por defecto.")
             self.base_url = f"https://{raw_url}"
         else:
             self.base_url = raw_url
-        # --- FIN DE LA CORRECCIÓN ---
             
         print(f"🔗 Conectando a backend en: {self.base_url}")
         
     def _make_request(self, method, endpoint, **kwargs):
         """Método genérico para hacer requests al backend"""
         url = f"{self.base_url}{endpoint}"
+        
+        # --- 2. AÑADIDO: Lógica para enviar el token ---
+        headers = kwargs.pop("headers", {})
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        # --- FIN LÓGICA DE TOKEN ---
+
         try:
-            response = requests.request(method, url, **kwargs)
+            # Pasa los headers actualizados a la petición
+            response = requests.request(method, url, headers=headers, **kwargs) 
             print(f"📡 Request: {method} {url} - Status: {response.status_code}")
             
             if response.status_code == 200:
                 return response.json()
             else:
                 print(f"❌ Error {response.status_code}: {response.text}")
-                return {"error": f"Error {response.status_code}: {response.text}"}
+                # Devuelve el error JSON del backend si existe
+                try:
+                    return {"error": response.json().get("detail", response.text)}
+                except requests.exceptions.JSONDecodeError:
+                    return {"error": f"Error {response.status_code}: {response.text}"}
                 
         except requests.exceptions.ConnectionError:
             print(f"❌ Error de conexión con el backend en {url}")
@@ -42,6 +54,7 @@ class ApiClient:
             print(f"❌ Error inesperado: {e}")
             return {"error": "Error inesperado en la conexión"}
     
+    # ... (get_captcha_image y get_captcha siguen igual) ...
     def get_captcha_image(self):
         """Obtener imagen CAPTCHA del backend - método específico para captcha_view"""
         try:
@@ -69,20 +82,27 @@ class ApiClient:
         return self._make_request("POST", "/verify-captcha", 
                                 json={"text": captcha_text, "id": captcha_id})
     
-    # ... el resto de tus métodos permanecen igual
     def login(self, username, password, captcha):
         """
         Login de usuario (con CAPTCHA).
         Llama al endpoint /token del backend.
         """
-        return self._make_request("POST", "/token", 
+        response_data = self._make_request("POST", "/token", 
                                 json={"username": username, "password": password, "captcha": captcha})
+        
+        # --- 3. AÑADIDO: Guardar el token si el login es exitoso ---
+        if response_data and "access_token" in response_data:
+            self.token = response_data.get("access_token")
+            print("INFO: Token de acceso guardado en ApiClient.")
+        # --- FIN GUARDAR TOKEN ---
+        
+        return response_data
     
     def register(self, user_data):
         """Registro de usuario"""
         return self._make_request("POST", "/register", json=user_data)
     
-    # Métodos para laboratorios
+    # ... (Métodos de laboratorios siguen igual) ...
     def get_laboratorios(self):
         return self._make_request("GET", "/laboratorios")
     
@@ -98,7 +118,7 @@ class ApiClient:
     def delete_laboratorio(self, lab_id):
         return self._make_request("DELETE", f"/laboratorios/{lab_id}")
     
-    # Métodos para reservas
+    # ... (Métodos de reservas siguen igual) ...
     def get_reservas(self):
         return self._make_request("GET", "/reservas")
     
@@ -111,6 +131,13 @@ class ApiClient:
     def delete_reserva(self, reserva_id):
         return self._make_request("DELETE", f"/reservas/{reserva_id}")
     
+    # --- 4. AÑADIDO: El método que faltaba ---
+    # (Basado en tu main.py)
+    def get_mis_prestamos(self):
+        """Obtiene los préstamos del usuario actual (requiere token)"""
+        return self._make_request("GET", "/prestamos/mis-solicitudes")
+    # --- FIN MÉTODO AÑADIDO ---
+
     # Métodos para préstamos
     def get_prestamos(self):
         return self._make_request("GET", "/prestamos")
@@ -124,14 +151,13 @@ class ApiClient:
     def delete_prestamo(self, prestamo_id):
         return self._make_request("DELETE", f"/prestamos/{prestamo_id}")
     
-    # Métodos para planteles
+    # ... (El resto de métodos siguen igual) ...
     def get_planteles(self):
         return self._make_request("GET", "/planteles")
     
     def create_plantel(self, data):
         return self._make_request("POST", "/planteles", json=data)
     
-    # Métodos para usuarios
     def get_usuarios(self):
         return self._make_request("GET", "/usuarios")
     
@@ -140,3 +166,4 @@ class ApiClient:
     
     def update_perfil(self, data):
         return self._make_request("PUT", "/perfil", json=data)
+}
