@@ -57,16 +57,31 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
             show_snack("Las contraseñas no coinciden.", is_error=True)
             return
 
-        # --- Llamada a la API ---
-        result = api.register(nombre, correo, usuario, password, rol)
+        # --- INICIO DE LA CORRECCIÓN ---
         
-        if result:
+        # 1. Empaquetar los datos en un diccionario
+        user_data = {
+            "nombre": nombre,
+            "correo": correo,
+            "user": usuario,
+            "password": password,
+            "rol": rol
+        }
+        
+        # 2. Enviar ese único diccionario a la API
+        result = api.register(user_data)
+        
+        # 3. Comprobar si la respuesta NO tiene un error
+        if result and "error" not in result:
             show_snack("¡Registro exitoso! Ahora puedes iniciar sesión.")
             # Llama a la función on_success para redirigir (ej. al login)
             on_success()
         else:
-            # api_client se encarga de imprimir el detalle del error en la consola.
-            show_snack("Error en el registro. El usuario o correo ya podría existir.", is_error=True)
+            # Si hay un error, lo mostramos
+            error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error en el registro."
+            show_snack(f"Error: {error_msg}", is_error=True)
+            
+        # --- FIN DE LA CORRECCIÓN ---
 
     # --- Layout ---
     header = ft.Column(
