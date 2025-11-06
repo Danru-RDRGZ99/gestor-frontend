@@ -9,9 +9,12 @@ from ui.components.cards import Card
 
 def DashboardView(page: ft.Page, api: ApiClient):
 
+    # --- INICIO DE LA CORRECCIÓN ---
+    # 'user_session' (el diccionario guardado) ES 'user_data'.
     user_session = page.session.get("user_session") or {}
-    user_data = user_session.get("user", {})
-    role = user_data.get("rol", "").lower()
+    user_data = user_session  # <-- ¡Esta es la corrección!
+    role = user_data.get("rol", "").lower() # <-- Esta línea (14) ahora funcionará.
+    # --- FIN DE LA CORRECCIÓN ---
 
     # --- Paleta de Colores Dinámica ---
     def get_palette():
@@ -72,9 +75,20 @@ def DashboardView(page: ft.Page, api: ApiClient):
         error_display.value = ""
         prestamos_data = api.get_mis_prestamos()
 
-        if not isinstance(prestamos_data, list):
-            error_detail = prestamos_data.get("detail", "Error desconocido") if isinstance(prestamos_data, dict) else "Respuesta inesperada"
+        # Comprueba si la respuesta es un error
+        if isinstance(prestamos_data, dict) and "error" in prestamos_data:
+            error_detail = prestamos_data.get("error", "Error desconocido")
             error_msg = f"Error al cargar préstamos: {error_detail}"
+            print(f"ERROR DashboardView: {error_msg}")
+            error_display.value = error_msg
+            mis_prestamos_list.controls.append(SectionHeader(ft.Icons.SWIPE_RIGHT, "Mis Préstamos Recientes (Error)"))
+            if mis_prestamos_list.page: mis_prestamos_list.update()
+            if error_display.page: error_display.update()
+            return
+
+        # Comprueba si la respuesta no es una lista (otro error)
+        if not isinstance(prestamos_data, list):
+            error_msg = f"Error al cargar préstamos: Respuesta inesperada del API ({type(prestamos_data)})"
             print(f"ERROR DashboardView: {error_msg}")
             error_display.value = error_msg
             mis_prestamos_list.controls.append(SectionHeader(ft.Icons.SWIPE_RIGHT, "Mis Préstamos Recientes (Error)"))
@@ -90,8 +104,8 @@ def DashboardView(page: ft.Page, api: ApiClient):
         else:
             for p in prestamos:
                 if not isinstance(p, dict):
-                     print(f"WARN: Expected dict for préstamo, got {type(p)}: {p}")
-                     continue
+                        print(f"WARN: Expected dict for préstamo, got {type(p)}: {p}")
+                        continue
 
                 prestamo_id = p.get('id', 'N/A')
                 recurso_id = p.get('recurso', {}).get('id', 'N/A')
@@ -113,13 +127,23 @@ def DashboardView(page: ft.Page, api: ApiClient):
         mis_reservas_list.controls.clear()
 
         if role != "docente":
-             if mis_reservas_list.page: mis_reservas_list.update()
-             return
+            if mis_reservas_list.page: mis_reservas_list.update()
+            return
+        
+        # --- NOTA: 'get_mis_reservas' no existe en api_client.py ---
+        # --- Deberás añadirlo para que esta sección funcione ---
+        if not hasattr(api, "get_mis_reservas"):
+            print("WARN: api.get_mis_reservas() no existe. Omitiendo sección.")
+            mis_reservas_list.controls.append(SectionHeader(ft.Icons.BOOKMARK_ADD, "Mis Reservas Recientes"))
+            mis_reservas_list.controls.append(ft.Text("Función no implementada en API client.", color=PAL["error_text"]))
+            if mis_reservas_list.page: mis_reservas_list.update()
+            return
+        # --- FIN NOTA ---
 
         reservas_data = api.get_mis_reservas()
 
-        if not isinstance(reservas_data, list):
-            error_detail = reservas_data.get("detail", "Error desconocido") if isinstance(reservas_data, dict) else "Respuesta inesperada"
+        if isinstance(reservas_data, dict) and "error" in reservas_data:
+            error_detail = reservas_data.get("error", "Error desconocido")
             error_msg = f"Error al cargar reservas: {error_detail}"
             print(f"ERROR DashboardView: {error_msg}")
             mis_reservas_list.controls.append(SectionHeader(ft.Icons.BOOKMARK_ADD, "Mis Reservas Recientes (Error)"))
@@ -127,6 +151,14 @@ def DashboardView(page: ft.Page, api: ApiClient):
             if mis_reservas_list.page: mis_reservas_list.update()
             return
 
+        if not isinstance(reservas_data, list):
+            error_msg = f"Error al cargar reservas: Respuesta inesperada del API ({type(reservas_data)})"
+            print(f"ERROR DashboardView: {error_msg}")
+            mis_reservas_list.controls.append(SectionHeader(ft.Icons.BOOKMARK_ADD, "Mis Reservas Recientes (Error)"))
+            mis_reservas_list.controls.append(ft.Text(error_msg, color=PAL["error_text"]))
+            if mis_reservas_list.page: mis_reservas_list.update()
+            return
+            
         reservas = reservas_data
         mis_reservas_list.controls.append(SectionHeader(ft.Icons.BOOKMARK_ADD, f"Mis Reservas Recientes ({len(reservas)})"))
 
@@ -134,22 +166,22 @@ def DashboardView(page: ft.Page, api: ApiClient):
             mis_reservas_list.controls.append(ft.Text("Aún no tienes reservas.", color=PAL["text_secondary"]))
         else:
             for r in reservas:
-                 if not isinstance(r, dict):
-                     print(f"WARN: Expected dict for reserva, got {type(r)}: {r}")
-                     continue
+                if not isinstance(r, dict):
+                    print(f"WARN: Expected dict for reserva, got {type(r)}: {r}")
+                    continue
 
-                 reserva_id = r.get('id', 'N/A')
-                 lab_id = r.get('laboratorio_id', 'N/A')
-                 inicio = r.get('inicio')
-                 fin = r.get('fin')
-                 estado = r.get('estado', '-')
+                reserva_id = r.get('id', 'N/A')
+                lab_id = r.get('laboratorio_id', 'N/A')
+                inicio = r.get('inicio')
+                fin = r.get('fin')
+                estado = r.get('estado', '-')
 
-                 title = ft.Text(f"Reserva #{reserva_id} · Laboratorio #{lab_id}", size=15, weight=ft.FontWeight.W_600)
-                 timeline = ft.Text(f"Desde: {format_iso_date(inicio)} · Hasta: {format_iso_date(fin)}", size=12, color=PAL["text_secondary"])
+                title = ft.Text(f"Reserva #{reserva_id} · Laboratorio #{lab_id}", size=15, weight=ft.FontWeight.W_600)
+                timeline = ft.Text(f"Desde: {format_iso_date(inicio)} · Hasta: {format_iso_date(fin)}", size=12, color=PAL["text_secondary"])
 
-                 left = ft.Column([title, timeline], spacing=2, expand=True)
-                 right = chip_estado(estado)
-                 mis_reservas_list.controls.append(ItemCard(ft.Row([left, right], vertical_alignment=ft.CrossAxisAlignment.CENTER)))
+                left = ft.Column([title, timeline], spacing=2, expand=True)
+                right = chip_estado(estado)
+                mis_reservas_list.controls.append(ItemCard(ft.Row([left, right], vertical_alignment=ft.CrossAxisAlignment.CENTER)))
 
         if mis_reservas_list.page: mis_reservas_list.update()
 
@@ -165,32 +197,29 @@ def DashboardView(page: ft.Page, api: ApiClient):
     # Tarjeta de Bienvenida / Resumen
     welcome_content = [saludo]
     if role in ["admin", "docente", "estudiante"]:
-         welcome_content.append(ft.Text(f"Rol actual: {role.capitalize()}", color=PAL["text_secondary"]))
+        welcome_content.append(ft.Text(f"Rol actual: {role.capitalize()}", color=PAL["text_secondary"]))
     else:
-         welcome_content.append(ft.Text("Bienvenido. Usa el menú de la izquierda.", color=PAL["text_secondary"]))
-    # --- CORRECCIÓN AQUÍ: bgcolor removido ---
+        welcome_content.append(ft.Text("Bienvenido. Usa el menú de la izquierda.", color=PAL["text_secondary"]))
     main_column.controls.append(Card(ft.Column(welcome_content)))
 
 
     # Añadir sección de préstamos (siempre visible para roles definidos)
     if role in ["admin", "docente", "estudiante"]:
-        # --- CORRECCIÓN AQUÍ: bgcolor removido ---
         main_column.controls.append(Card(mis_prestamos_list))
 
     # Añadir sección de reservas (solo para docente)
     if role == "docente":
-        # --- CORRECCIÓN AQUÍ: bgcolor removido ---
         main_column.controls.append(Card(mis_reservas_list))
 
 
     # --- Render inicial ---
     try:
-         render_mis_prestamos()
-         render_mis_reservas()
+        render_mis_prestamos()
+        render_mis_reservas()
     except Exception as e:
-         print(f"CRITICAL: Error during initial render in DashboardView: {e}")
-         traceback.print_exc()
-         error_display.value = f"Error inesperado al renderizar dashboard: {e}"
+        print(f"CRITICAL: Error during initial render in DashboardView: {e}")
+        traceback.print_exc()
+        error_display.value = f"Error inesperado al renderizar dashboard: {e}"
 
     # --- Manejo de cambio de tema ---
     def on_theme_change(msg):
@@ -200,9 +229,9 @@ def DashboardView(page: ft.Page, api: ApiClient):
             render_mis_prestamos()
             render_mis_reservas()
         except Exception as e:
-             print(f"ERROR: Failed to re-render dashboard on theme change: {e}")
-             error_display.value = f"Error al actualizar tema: {e}"
-             if error_display.page: error_display.update()
+            print(f"ERROR: Failed to re-render dashboard on theme change: {e}")
+            error_display.value = f"Error al actualizar tema: {e}"
+            if error_display.page: error_display.update()
         page.update()
 
     if page:
