@@ -6,7 +6,17 @@ class ApiClient:
     def __init__(self, page: ft.Page):
         self.page = page
         # URL del backend en Railway
-        self.base_url = os.environ.get("BACKEND_URL", "https://gestor-de-laboratorios-production.up.railway.app")
+        raw_url = os.environ.get("BACKEND_URL", "https://gestor-de-laboratorios-production.up.railway.app")
+        
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Nos aseguramos de que la URL tenga el esquema (http/https)
+        if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
+            print(f"⚠️  URL de backend ({raw_url}) sin esquema. Añadiendo https:// por defecto.")
+            self.base_url = f"https://{raw_url}"
+        else:
+            self.base_url = raw_url
+        # --- FIN DE LA CORRECCIÓN ---
+            
         print(f"🔗 Conectando a backend en: {self.base_url}")
         
     def _make_request(self, method, endpoint, **kwargs):
@@ -127,3 +137,4 @@ class ApiClient:
     
     def update_perfil(self, data):
         return self._make_request("PUT", "/perfil", json=data)
+}
