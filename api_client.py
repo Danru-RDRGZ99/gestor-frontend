@@ -24,17 +24,17 @@ class ApiClient:
         """Método genérico para hacer requests al backend"""
         url = f"{self.base_url}{endpoint}"
         
-        # --- 2. SOLUCIÓN: Ya no se manejan headers aquí ---
-        # La sesión (self.session) los manejará automáticamente
-
         try:
-            # --- 3. SOLUCIÓN: Usar self.session.request en lugar de requests.request ---
+            # Usar self.session.request en lugar de requests.request
             response = self.session.request(method, url, **kwargs) 
             
             print(f"📡 Request: {method} {url} - Status: {response.status_code}")
             
-            if response.status_code == 200:
-                return response.json()
+            # --- Manejo de Errores Mejorado ---
+            if response.ok: # Acepta 200, 201, 204
+                if response.status_code == 204: # No Content (para DELETE)
+                    return {"success": True} 
+                return response.json() # Para 200, 201
             else:
                 print(f"❌ Error {response.status_code}: {response.text}")
                 try:
@@ -68,7 +68,6 @@ class ApiClient:
         response_data = self._make_request("POST", "/token", 
                                 json={"username": username, "password": password, "captcha": captcha})
         
-        # --- 4. SOLUCIÓN: Guardar el token en los headers de la SESIÓN ---
         if response_data and "access_token" in response_data:
             token_val = f"Bearer {response_data.get('access_token')}"
             self.session.headers.update({"Authorization": token_val})
@@ -81,7 +80,6 @@ class ApiClient:
         response_data = self._make_request("POST", "/auth/google-token",
                                 json={"idToken": google_id_token})
         
-        # --- 5. SOLUCIÓN: Guardar también el token de Google en la SESIÓN ---
         if response_data and "access_token" in response_data:
             token_val = f"Bearer {response_data.get('access_token')}"
             self.session.headers.update({"Authorization": token_val})
@@ -94,7 +92,6 @@ class ApiClient:
         return self._make_request("POST", "/register", json=user_data)
     
     # --- Métodos de Recursos (Laboratorios, Préstamos, etc.) ---
-    # (No necesitan cambios, _make_request se encarga de todo)
 
     def get_laboratorios(self):
         return self._make_request("GET", "/laboratorios")
@@ -145,11 +142,51 @@ class ApiClient:
     def create_plantel(self, data):
         return self._make_request("POST", "/planteles", json=data)
     
-    def get_usuarios(self):
-        return self._make_request("GET", "/usuarios")
+    # --- INICIO DE MÉTODOS PARA SETTINGS_VIEW ---
+
+    def get_users(self, q: str = "", rol: str = ""):
+        """
+        Obtiene usuarios filtrados (Admin).
+        (RENOMBRADO de get_usuarios y CON PARÁMETROS)
+        """
+        params = {}
+        if q:
+            params["q"] = q
+        if rol:
+            params["rol"] = rol
+        return self._make_request("GET", "/usuarios", params=params)
     
-    def get_perfil(self):
-        return self._make_request("GET", "/perfil")
+    def update_profile(self, nombre: str, user: str, correo: str):
+        """
+        Actualiza el perfil del propio usuario.
+        (RENOMBRADO de update_perfil y CORREGIDO)
+        """
+        data = {"nombre": nombre, "user": user, "correo": correo}
+        return self._make_request("PUT", "/usuarios/me/profile", json=data)
+
+    def change_password(self, old_password: str, new_password: str):
+        """
+        Cambia la contraseña del propio usuario.
+        (NUEVO MÉTODO)
+        """
+        data = {"old_password": old_password, "new_password": new_password}
+        return self._make_request("PUT", "/usuarios/me/password", json=data)
+
+    def update_user_by_admin(self, user_id: int, update_data: dict):
+        """
+        Actualiza el perfil de otro usuario (Admin).
+        (NUEVO MÉTODO)
+        """
+        # update_data debe ser {"nombre": ..., "user": ..., "correo": ..., "rol": ...}
+        return self._make_request("PUT", f"/usuarios/{user_id}", json=update_data)
+
+    def delete_user(self, user_id: int):
+        """
+        Elimina a un usuario (Admin).
+        (NUEVO MÉTODO)
+        """
+        return self._make_request("DELETE", f"/usuarios/{user_id}")
+
+    # (Método 'get_perfil' obsoleto, reemplazado por la sesión)
     
-    def update_perfil(self, data):
-        return self._make_request("PUT", "/perfil", json=data)
+    # --- FIN DE MÉTODOS PARA SETTINGS_VIEW ---
