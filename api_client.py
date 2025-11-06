@@ -5,7 +5,10 @@ import flet as ft
 class ApiClient:
     def __init__(self, page: ft.Page):
         self.page = page
-        self.token = None 
+        
+        # --- 1. SOLUCIÓN: Usar un objeto Session ---
+        # Esto guardará las cookies (para el captcha) y los headers (para el token)
+        self.session = requests.Session() 
         
         raw_url = os.environ.get("BACKEND_URL", "https://gestor-de-laboratorios-production.up.railway.app")
         
@@ -20,12 +23,14 @@ class ApiClient:
     def _make_request(self, method, endpoint, **kwargs):
         """Método genérico para hacer requests al backend"""
         url = f"{self.base_url}{endpoint}"
-        headers = kwargs.pop("headers", {})
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
+        
+        # --- 2. SOLUCIÓN: Ya no se manejan headers aquí ---
+        # La sesión (self.session) los manejará automáticamente
 
         try:
-            response = requests.request(method, url, headers=headers, **kwargs) 
+            # --- 3. SOLUCIÓN: Usar self.session.request en lugar de requests.request ---
+            response = self.session.request(method, url, **kwargs) 
+            
             print(f"📡 Request: {method} {url} - Status: {response.status_code}")
             
             if response.status_code == 200:
@@ -33,7 +38,6 @@ class ApiClient:
             else:
                 print(f"❌ Error {response.status_code}: {response.text}")
                 try:
-                    # Devuelve el error del backend (ej. {"detail": "..."})
                     error_json = response.json()
                     return {"error": error_json.get("detail", response.text)}
                 except requests.exceptions.JSONDecodeError:
@@ -53,7 +57,6 @@ class ApiClient:
 
     def get_captcha_image(self):
         """Obtiene el string base64 de la imagen del captcha."""
-        # Llama al endpoint /captcha que devuelve JSON {"image_data": "..."}
         response = self._make_request("GET", "/captcha") 
         if response and "image_data" in response:
             return response.get("image_data")
@@ -65,33 +68,33 @@ class ApiClient:
         response_data = self._make_request("POST", "/token", 
                                 json={"username": username, "password": password, "captcha": captcha})
         
+        # --- 4. SOLUCIÓN: Guardar el token en los headers de la SESIÓN ---
         if response_data and "access_token" in response_data:
-            self.token = response_data.get("access_token")
-            print("INFO: Token de acceso (login normal) guardado en ApiClient.")
+            token_val = f"Bearer {response_data.get('access_token')}"
+            self.session.headers.update({"Authorization": token_val})
+            print("INFO: Token de acceso (login normal) guardado en la Sesión del ApiClient.")
         
         return response_data
 
-    # --- ¡NUEVO MÉTODO PARA GOOGLE LOGIN! ---
     def login_with_google(self, google_id_token: str):
         """Login con Google. Llama al endpoint /auth/google-token."""
-        
-        # Llama al endpoint del backend
-        # Nota: el backend espera "idToken" (con 'T' mayúscula)
         response_data = self._make_request("POST", "/auth/google-token",
                                 json={"idToken": google_id_token})
         
+        # --- 5. SOLUCIÓN: Guardar también el token de Google en la SESIÓN ---
         if response_data and "access_token" in response_data:
-            self.token = response_data.get("access_token")
-            print("INFO: Token de acceso (Google) guardado en ApiClient.")
+            token_val = f"Bearer {response_data.get('access_token')}"
+            self.session.headers.update({"Authorization": token_val})
+            print("INFO: Token de acceso (Google) guardado en la Sesión del ApiClient.")
             
         return response_data
-    # --- FIN DEL NUEVO MÉTODO ---
 
     def register(self, user_data):
         """Registro de usuario"""
         return self._make_request("POST", "/register", json=user_data)
     
     # --- Métodos de Recursos (Laboratorios, Préstamos, etc.) ---
+    # (No necesitan cambios, _make_request se encarga de todo)
 
     def get_laboratorios(self):
         return self._make_request("GET", "/laboratorios")
