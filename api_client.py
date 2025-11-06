@@ -144,14 +144,17 @@ class ApiClient:
     
     # --- INICIO DE MÉTODOS PARA SETTINGS_VIEW ---
 
-    def get_users(self, q: str = "", rol: str = ""):
+    def get_users(self, q: str = None, rol: str = None):
         """
         Obtiene usuarios filtrados (Admin).
         (RENOMBRADO de get_usuarios y CON PARÁMETROS)
         """
         params = {}
+        # Solo añade los parámetros si no son None
+        # Una cadena vacía "" para 'q' es válida
         if q is not None:
             params["q"] = q
+        # Un valor None para 'rol' significa "Todos"
         if rol is not None:
             params["rol"] = rol
         return self._make_request("GET", "/usuarios", params=params)
@@ -186,7 +189,25 @@ class ApiClient:
         (NUEVO MÉTODO)
         """
         return self._make_request("DELETE", f"/usuarios/{user_id}")
-
-    # (Método 'get_perfil' obsoleto, reemplazado por la sesión)
     
     # --- FIN DE MÉTODOS PARA SETTINGS_VIEW ---
+
+    # --- INICIO DE MÉTODOS PARA HORARIOS_ADMIN_VIEW ---
+
+    def get_reglas_horario(self):
+        """Obtiene todas las reglas de horario (Admin)."""
+        return self._make_request("GET", "/admin/horarios/reglas")
+
+    def create_regla_horario(self, payload: dict):
+        """Crea una nueva regla de horario (Admin)."""
+        return self._make_request("POST", "/admin/horarios/reglas", json=payload)
+
+    def update_regla_horario(self, regla_id: int, payload: dict):
+        """Actualiza una regla de horario (Admin)."""
+        return self._make_request("PUT", f"/admin/horarios/reglas/{regla_id}", json=payload)
+
+    def delete_regla_horario(self, regla_id: int):
+        """Elimina una regla de horario (Admin)."""
+        return self._make_request("DELETE", f"/admin/horarios/reglas/{regla_id}")
+
+    # --- FIN DE MÉTODOS PARA HORARIOS_ADMIN_VIEW ---
