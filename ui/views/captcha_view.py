@@ -1,7 +1,5 @@
 import flet as ft
-# --- MODIFICADO: Ya no necesitamos datetime ni API_BASE_URL ---
 from api_client import ApiClient
-# --- FIN MODIFICADO ---
 from ui.components.buttons import Primary, Ghost
 from ui.components.cards import Card
 
@@ -11,7 +9,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
 
     # --- Widgets de CAPTCHA ---
     
-    # --- MODIFICADO: Usamos src_base64 ---
+    # Usamos src_base64
     captcha_image = ft.Image(
         # La fuente se cargará con la función refresh_captcha
         src_base64=None, 
@@ -30,7 +28,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
             info.value = "Error al cargar CAPTCHA. Revise la API."
             info.color = ft.Colors.RED_400
         page.update()
-    # --- FIN MODIFICADO ---
 
     refresh_btn = ft.IconButton(
         icon=ft.Icons.REFRESH,
@@ -70,24 +67,34 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
             return
         
         # 2. Ahora sí, llamamos a la API con todo
-        # Esta llamada ahora usará la sesión correcta
         response_data = api.login(username, password, captcha)
         
         # 3. Manejamos la respuesta
         if not response_data:
             info.value = "Error de conexión o API no disponible."
             info.color = ft.Colors.RED_400
-        elif response_data.get("detail"): # Si la API devolvió un error (ej: captcha incorrecto)
-            info.value = response_data.get("detail")
+
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Comprobamos si la llave 'error' existe en la respuesta
+        elif "error" in response_data: 
+            info.value = response_data.get("error", "Error desconocido") # Muestra el error
             info.color = ft.Colors.RED_400
+        # --- FIN DE LA CORRECCIÓN ---
+
         else: # ¡Éxito!
             page.session.remove("login_attempt")
-            page.session.set("user_session", response_data)
-            print("LOGIN Y CAPTCHA EXITOSO, SESIÓN GUARDADA:", response_data)
+            
+            # --- CORRECCIÓN EXTRA ---
+            # Guardamos solo el objeto 'user' que viene dentro de la respuesta
+            user_data = response_data.get("user")
+            page.session.set("user_session", user_data)
+            print(f"LOGIN Y CAPTCHA EXITOSO, SESIÓN GUARDADA: {user_data}")
+            # --- FIN CORRECCIÓN EXTRA ---
+            
             on_success()
             return 
 
-        # Si falló, refrescamos el captcha
+        # Si falló (ej. captcha incorrecto), refrescamos la imagen
         refresh_captcha(None)
         captcha_field.value = ""
         page.update()
@@ -103,9 +110,8 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     captcha_field.on_change = validate
     validate(None) # Llamada inicial
 
-    # --- AÑADIDO: Carga inicial del CAPTCHA ---
+    # Carga inicial del CAPTCHA al mostrar la vista
     refresh_captcha(None)
-    # --- FIN AÑADIDO ---
 
     # --- Construcción del Layout ---
     header = ft.Column(
