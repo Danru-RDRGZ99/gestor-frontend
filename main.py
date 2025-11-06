@@ -2,46 +2,56 @@ import os
 import flet as ft
 import sys
 
-# Diagnosticar la estructura de archivos
-print("=== DIAGNÓSTICO DE ESTRUCTURA ===")
-print("Directorio actual:", os.getcwd())
-print("Contenido del directorio:", os.listdir('.'))
+# Configuración para Railway
+port = int(os.environ.get("PORT", 8501))
 
-# Verificar estructura de carpetas
+print("=== INICIANDO APLICACIÓN ===")
+print("Estructura detectada:")
 for item in os.listdir('.'):
     if os.path.isdir(item):
-        print(f"Carpeta '{item}': {os.listdir(item)}")
+        print(f"📁 {item}/")
 
-# Agregar el directorio actual al path para imports
+# Agregar directorio actual al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Función para crear mocks compatibles que acepten cualquier argumento
-def create_compatible_mock(message="Vista en desarrollo"):
-    class CompatibleMock(ft.Column):
+# Importar módulos desde ui.views
+try:
+    from ui.views import (
+        login_view,
+        register_view,
+        dashboard_view,
+        planteles_view,
+        laboratorios_view,
+        reservas_view,
+        prestamos_view,
+        settings_view,
+        captcha_view,
+        horarios_admin_view,
+    )
+    print("✅ Todas las vistas importadas correctamente")
+    VIEWS_AVAILABLE = True
+except ImportError as e:
+    print(f"❌ Error importando vistas: {e}")
+    VIEWS_AVAILABLE = False
+    # Crear placeholders de emergencia
+    class EmergencyView(ft.Column):
         def __init__(self, *args, **kwargs):
             super().__init__()
-            self.controls = [
-                ft.Text(message, size=20, weight=ft.FontWeight.BOLD),
-                ft.Text("Esta funcionalidad estará disponible pronto", size=16),
-                ft.Text(f"Args recibidos: {len(args)}", size=12),
-                ft.Text(f"Ruta actual: {os.getcwd()}", size=10),
-            ]
+            self.controls = [ft.Text("Sistema de Gestión de Laboratorios", size=20)]
+            self.expand = True
             self.alignment = ft.MainAxisAlignment.CENTER
             self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-            self.expand = True
-    return CompatibleMock()
-
-# Crear mocks para todas las vistas (solución temporal)
-LoginView = create_compatible_mock("Login")
-RegisterView = create_compatible_mock("Registro")
-DashboardView = create_compatible_mock("Dashboard")
-PlantelesView = create_compatible_mock("Planteles")
-LaboratoriosView = create_compatible_mock("Laboratorios")
-ReservasView = create_compatible_mock("Reservas")
-PrestamosView = create_compatible_mock("Préstamos")
-SettingsView = create_compatible_mock("Ajustes")
-CaptchaView = create_compatible_mock("Captcha")
-HorariosAdminView = create_compatible_mock("Horarios Admin")
+    
+    login_view = type('login_view', (), {'LoginView': EmergencyView})()
+    register_view = type('register_view', (), {'RegisterView': EmergencyView})()
+    dashboard_view = type('dashboard_view', (), {'DashboardView': EmergencyView})()
+    planteles_view = type('planteles_view', (), {'PlantelesView': EmergencyView})()
+    laboratorios_view = type('laboratorios_view', (), {'LaboratoriosView': EmergencyView})()
+    reservas_view = type('reservas_view', (), {'ReservasView': EmergencyView})()
+    prestamos_view = type('prestamos_view', (), {'PrestamosView': EmergencyView})()
+    settings_view = type('settings_view', (), {'SettingsView': EmergencyView})()
+    captcha_view = type('captcha_view', (), {'CaptchaView': EmergencyView})()
+    horarios_admin_view = type('horarios_admin_view', (), {'HorariosAdminView': EmergencyView})()
 
 # Importar otros módulos
 try:
@@ -141,7 +151,7 @@ def main(page: ft.Page):
             ft.IconButton(theme_icon, tooltip="Cambiar tema", on_click=toggle_theme),
             ft.PopupMenuButton(
                 items=[
-                    ft.PopupMenuItem(text="Usuario Demo"),
+                    ft.PopupMenuItem(text=user_data.get("user", "Usuario")),
                     ft.PopupMenuItem(),
                     ft.PopupMenuItem(text="Ajustes", icon=ft.Icons.SETTINGS, on_click=lambda _: page.go("/ajustes")),
                     ft.PopupMenuItem(text="Cerrar sesión", icon=ft.Icons.LOGOUT, on_click=logout),
@@ -197,19 +207,13 @@ def main(page: ft.Page):
 
         if not user_session:
             if current_route_key == "register":
-                page.views.append(
-                    ft.View(
-                        "/register",
-                        [RegisterView],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        vertical_alignment=ft.MainAxisAlignment.CENTER,
-                    )
-                )
+                register_view_instance = register_view.RegisterView(page, api, on_success=lambda: page.go("/"))
+                page.views.append(register_view_instance)
             elif current_route_key == "captcha-verify":
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
-                        [CaptchaView],
+                        [captcha_view.CaptchaView(page, api, on_login_success)],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
@@ -220,13 +224,13 @@ def main(page: ft.Page):
                 page.views.append(
                     ft.View(
                         "/",
-                        [LoginView],
+                        [login_view.LoginView(page, api, on_success=lambda: page.go("/captcha-verify"))],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
                 )
         else:
-            user_rol = user_session.get("user", {}).get("rol", "admin")
+            user_rol = user_session.get("user", {}).get("rol", "")
             allowed_routes_for_user = get_allowed_routes(user_rol)
 
             if not current_route_key:
@@ -238,23 +242,39 @@ def main(page: ft.Page):
                 return
 
             view_map = {
-                "dashboard": DashboardView,
-                "planteles": PlantelesView,
-                "laboratorios": LaboratoriosView,
-                "recursos": PrestamosView,
-                "reservas": ReservasView,
-                "ajustes": SettingsView,
-                "horarios": HorariosAdminView,
+                "dashboard": dashboard_view.DashboardView,
+                "planteles": planteles_view.PlantelesView,
+                "laboratorios": laboratorios_view.LaboratoriosView,
+                "recursos": prestamos_view.PrestamosView,
+                "reservas": reservas_view.ReservasView,
+                "ajustes": settings_view.SettingsView,
+                "horarios": horarios_admin_view.HorariosAdminView,
             }
 
-            body = view_map.get(current_route_key, DashboardView)
-            page.views.append(build_shell(current_route_key, body))
+            view_function = view_map.get(current_route_key)
+
+            if view_function:
+                try:
+                    body = view_function(page, api)
+                    page.views.append(build_shell(current_route_key, body))
+                except Exception as e:
+                    print(f"Error building view for '{current_route_key}': {e}")
+                    import traceback
+                    traceback.print_exc()
+                    body = ft.Column([
+                        ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.colors.ERROR),
+                        ft.Text(str(e))
+                    ], expand=True)
+                    page.views.append(build_shell(current_route_key, body))
+            else:
+                body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.colors.ERROR)
+                page.views.append(build_shell(current_route_key, body))
 
         page.update()
 
     page.on_route_change = router
-    
-   
+    page.go(page.route)
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
     print(f"🚀 Iniciando aplicación en puerto {port}")
