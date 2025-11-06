@@ -6,7 +6,7 @@ class ApiClient:
     def __init__(self, page: ft.Page):
         self.page = page
         
-        # --- 1. AÑADIDO: Almacén para el token ---
+        # --- 1. Almacén para el token ---
         self.token = None 
         
         raw_url = os.environ.get("BACKEND_URL", "https://gestor-de-laboratorios-production.up.railway.app")
@@ -23,7 +23,7 @@ class ApiClient:
         """Método genérico para hacer requests al backend"""
         url = f"{self.base_url}{endpoint}"
         
-        # --- 2. AÑADIDO: Lógica para enviar el token ---
+        # --- 2. Lógica para enviar el token ---
         headers = kwargs.pop("headers", {})
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -54,7 +54,6 @@ class ApiClient:
             print(f"❌ Error inesperado: {e}")
             return {"error": "Error inesperado en la conexión"}
     
-    # ... (get_captcha_image y get_captcha siguen igual) ...
     def get_captcha_image(self):
         """Obtener imagen CAPTCHA del backend - método específico para captcha_view"""
         try:
@@ -90,7 +89,7 @@ class ApiClient:
         response_data = self._make_request("POST", "/token", 
                                 json={"username": username, "password": password, "captcha": captcha})
         
-        # --- 3. AÑADIDO: Guardar el token si el login es exitoso ---
+        # --- 3. Guardar el token si el login es exitoso ---
         if response_data and "access_token" in response_data:
             self.token = response_data.get("access_token")
             print("INFO: Token de acceso guardado en ApiClient.")
@@ -102,7 +101,7 @@ class ApiClient:
         """Registro de usuario"""
         return self._make_request("POST", "/register", json=user_data)
     
-    # ... (Métodos de laboratorios siguen igual) ...
+    # Métodos para laboratorios
     def get_laboratorios(self):
         return self._make_request("GET", "/laboratorios")
     
@@ -118,7 +117,7 @@ class ApiClient:
     def delete_laboratorio(self, lab_id):
         return self._make_request("DELETE", f"/laboratorios/{lab_id}")
     
-    # ... (Métodos de reservas siguen igual) ...
+    # Métodos para reservas
     def get_reservas(self):
         return self._make_request("GET", "/reservas")
     
@@ -131,12 +130,10 @@ class ApiClient:
     def delete_reserva(self, reserva_id):
         return self._make_request("DELETE", f"/reservas/{reserva_id}")
     
-    # --- 4. AÑADIDO: El método que faltaba ---
-    # (Basado en tu main.py)
+    # --- 4. El método que faltaba ---
     def get_mis_prestamos(self):
         """Obtiene los préstamos del usuario actual (requiere token)"""
         return self._make_request("GET", "/prestamos/mis-solicitudes")
-    # --- FIN MÉTODO AÑADIDO ---
 
     # Métodos para préstamos
     def get_prestamos(self):
@@ -151,13 +148,14 @@ class ApiClient:
     def delete_prestamo(self, prestamo_id):
         return self._make_request("DELETE", f"/prestamos/{prestamo_id}")
     
-    # ... (El resto de métodos siguen igual) ...
+    # Métodos para planteles
     def get_planteles(self):
         return self._make_request("GET", "/planteles")
     
     def create_plantel(self, data):
         return self._make_request("POST", "/planteles", json=data)
     
+    # Métodos para usuarios
     def get_usuarios(self):
         return self._make_request("GET", "/usuarios")
     
@@ -166,4 +164,3 @@ class ApiClient:
     
     def update_perfil(self, data):
         return self._make_request("PUT", "/perfil", json=data)
-}
