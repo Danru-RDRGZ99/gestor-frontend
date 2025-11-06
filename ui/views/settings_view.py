@@ -13,8 +13,12 @@ def SettingsView(page: ft.Page, api: ApiClient):
     Vista para que el usuario actualice su perfil/contraseña
     y para que el admin gestione usuarios, con feedback visual mejorado.
     """
+    # --- INICIO DE LA CORRECCIÓN ---
+    # 'user_session' ES el diccionario de datos del usuario.
     user_session = page.session.get("user_session") or {}
-    me = user_session.get("user", {})
+    me = user_session # <-- ¡Esta es la corrección!
+    # --- FIN DE LA CORRECCIÓN ---
+    
     is_admin = me.get("rol") == "admin"
 
     if not me:
