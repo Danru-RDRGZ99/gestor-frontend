@@ -150,9 +150,9 @@ class ApiClient:
         (RENOMBRADO de get_usuarios y CON PARÁMETROS)
         """
         params = {}
-        if q:
+        if q is not None:
             params["q"] = q
-        if rol:
+        if rol is not None:
             params["rol"] = rol
         return self._make_request("GET", "/usuarios", params=params)
     
