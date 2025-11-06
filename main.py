@@ -270,7 +270,10 @@ def main(page: ft.Page):
                     import traceback
                     traceback.print_exc()
                     body = ft.Column([
-                        ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.colors.ERROR),
+                        # --- INICIO DE LA CORRECCIÓN ---
+                        # Era ft.colors.ERROR, lo cambié a ft.Colors.ERROR
+                        ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.Colors.ERROR),
+                        # --- FIN DE LA CORRECCIÓN ---
                         ft.Text(str(e))
                     ], expand=True)
                     page.views.append(build_shell(current_route_key, body))
