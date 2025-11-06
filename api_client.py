@@ -137,4 +137,3 @@ class ApiClient:
     
     def update_perfil(self, data):
         return self._make_request("PUT", "/perfil", json=data)
-}
