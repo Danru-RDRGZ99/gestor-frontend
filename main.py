@@ -120,8 +120,11 @@ def main(page: ft.Page):
             page.go("/")
             return ft.View()
 
-        user_data = user_session.get("user", {})
+        # --- INICIO DE LA CORRECCIÓN 1 ---
+        # 'user_session' ES el diccionario de datos del usuario, no está anidado.
+        user_data = user_session 
         allowed = get_allowed_routes(user_data.get("rol", ""))
+        # --- FIN DE LA CORRECCIÓN 1 ---
 
         if active_key not in allowed:
             active_key = allowed[0]
@@ -151,7 +154,8 @@ def main(page: ft.Page):
             ft.IconButton(theme_icon, tooltip="Cambiar tema", on_click=toggle_theme),
             ft.PopupMenuButton(
                 items=[
-                    ft.PopupMenuItem(text=user_data.get("user", "Usuario")),
+                    # 'user_data' ahora es correcto gracias a la corrección 1
+                    ft.PopupMenuItem(text=user_data.get("user", "Usuario")), 
                     ft.PopupMenuItem(),
                     ft.PopupMenuItem(text="Ajustes", icon=ft.Icons.SETTINGS, on_click=lambda _: page.go("/ajustes")),
                     ft.PopupMenuItem(text="Cerrar sesión", icon=ft.Icons.LOGOUT, on_click=logout),
@@ -230,7 +234,11 @@ def main(page: ft.Page):
                     )
                 )
         else:
-            user_rol = user_session.get("user", {}).get("rol", "")
+            # --- INICIO DE LA CORRECCIÓN 2 (La que causaba el crash) ---
+            # Leemos el 'rol' directamente del diccionario user_session
+            user_rol = user_session.get("rol", "")
+            # --- FIN DE LA CORRECCIÓN 2 ---
+            
             allowed_routes_for_user = get_allowed_routes(user_rol)
 
             if not current_route_key:
