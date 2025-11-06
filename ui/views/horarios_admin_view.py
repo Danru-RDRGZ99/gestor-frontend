@@ -36,8 +36,11 @@ def format_time_str(time_str: Optional[str]) -> str:
 
 def HorariosAdminView(page: ft.Page, api: ApiClient):
 
+    # --- INICIO DE LA CORRECCIÓN ---
     user_session = page.session.get("user_session") or {}
-    if user_session.get("user", {}).get("rol") != "admin":
+    # 'user_session' ES el diccionario del usuario, leemos 'rol' directamente
+    if user_session.get("rol") != "admin":
+    # --- FIN DE LA CORRECCIÓN ---
         return ft.Text("Acceso denegado. Solo para administradores.")
 
     # Modified state to track group editing
@@ -69,8 +72,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         checkbox_controls.append(cb)
     dias_checkboxes_row_control = ft.Row(checkbox_controls, spacing=5, wrap=True, run_spacing=0, alignment=ft.MainAxisAlignment.START)
     dias_checkboxes_container = ft.Column(
-         [ft.Text("Días:", weight=ft.FontWeight.BOLD, size=12), dias_checkboxes_row_control],
-         col={"md": 8}, spacing=2
+        [ft.Text("Días:", weight=ft.FontWeight.BOLD, size=12), dias_checkboxes_row_control],
+        col={"md": 8}, spacing=2
     )
 
     dd_inicio = Dropdown(label="Hora Inicio", options=HORA_OPTIONS, col={"sm": 6, "md": 3})
@@ -175,11 +178,11 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         for rule_id in rule_ids_to_delete:
             result = api.delete_regla_horario(rule_id)
-            if result is True:
+            if result and result.get("success"): # Check for success key from _make_request
                 success_count += 1
             else:
                 error_count += 1
-                last_error = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
+                last_error = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
 
         if error_count == 0:
             info_txt.value = f"Grupo ({success_count} reglas) eliminado con éxito."
@@ -193,11 +196,11 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     def delete_regla_click(regla_id: int):
         nonlocal info_txt
         result = api.delete_regla_horario(regla_id)
-        if result is True:
+        if result and result.get("success"): # Check for success key
             info_txt.value = "Regla eliminada."
             render_reglas()
         else:
-            info_txt.value = result.get("detail", "Error al eliminar.") if isinstance(result, dict) else "Error desconocido al eliminar."
+            info_txt.value = result.get("error", "Error al eliminar.") if isinstance(result, dict) else "Error desconocido al eliminar."
         info_txt.update()
 
     # --- NEW: Group Card ---
@@ -228,8 +231,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         subtitle = ft.Text(f"Horario: {hora_str}", size=12, opacity=0.8)
 
         status_chip = ft.Chip(label=ft.Text(tipo_str, size=11, color=status_color),
-                              bgcolor=ft.Colors.with_opacity(0.1, status_color),
-                              height=28)
+                                  bgcolor=ft.Colors.with_opacity(0.1, status_color),
+                                  height=28)
 
         btns = ft.Row([
             Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", on_click=lambda e, grp=group_rules: edit_group_click(grp)), # Edit Group Icon
@@ -267,8 +270,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         subtitle = ft.Text(f"Horario: {hora_str}", size=12, opacity=0.8)
 
         status_chip = ft.Chip(label=ft.Text(tipo_str, size=11, color=status_color),
-                              bgcolor=ft.Colors.with_opacity(0.1, status_color),
-                              height=28)
+                                  bgcolor=ft.Colors.with_opacity(0.1, status_color),
+                                  height=28)
 
         btns = ft.Row([
             Icon(ft.Icons.EDIT_OUTLINED, "Editar", on_click=lambda e, r=regla: edit_regla_click(r)), # Edit Single Icon
@@ -290,7 +293,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         all_reglas = load_reglas_for_render()
 
         if not isinstance(all_reglas, list):
-            detail = all_reglas.get("detail", "Error") if isinstance(all_reglas, dict) else "Error desconocido"
+            detail = all_reglas.get("error", "Error") if isinstance(all_reglas, dict) else "Error desconocido"
             reglas_list_panel.controls.append(ft.Text(f"Error al cargar reglas: {detail}", color=ft.Colors.ERROR))
         elif not all_reglas:
             reglas_list_panel.controls.append(ft.Text("No hay reglas de horario definidas."))
@@ -321,12 +324,21 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             # --- INICIO DE LA CORRECCIÓN (Sort Key) ---
             # =========================================================================
             # Sort rendered cards
-            rendered_items.sort(key=lambda card: (
-                # Check if title starts with "General", accessing title directly
-                not card.content.controls[0].controls[0].value.startswith("General (Todos)"), # Sort General first (True comes after False)
-                # Then sort by the full title string
-                card.content.controls[0].controls[0].value
-            ))
+            def get_sort_key(card):
+                try:
+                    # Accede al control de texto del título
+                    title_text = card.content.controls[0].controls[0].value
+                    # Clave de orden: (0 si es "General", 1 si no), luego el texto del título
+                    sort_key = (
+                        not title_text.startswith("General (Todos)"), # 0 (False) para General, 1 (True) para otros
+                        title_text
+                    )
+                    return sort_key
+                except Exception:
+                    # Fallback por si la estructura de la tarjeta es inesperada
+                    return (1, "")
+
+            rendered_items.sort(key=get_sort_key)
             # =========================================================================
             # --- FIN DE LA CORRECCIÓN ---
             # =========================================================================
@@ -424,17 +436,17 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                     try:
                         result = api.update_regla_horario(rule_to_update["id"], payload)
                         if result and result.get("id"): success_count += 1
-                        else: error_count += 1; last_error = result.get("detail", "Update failed") if isinstance(result, dict) else "Update failed"
+                        else: error_count += 1; last_error = result.get("error", "Update failed") if isinstance(result, dict) else "Update failed"
                     except Exception as ex: error_count += 1; last_error = f"Update Ex: {ex}"
 
             # Delete removed days
             for dia_num in dias_to_delete:
-                 rule_to_delete = original_rule_map.get(dia_num)
-                 if rule_to_delete and rule_to_delete.get("id"):
+                rule_to_delete = original_rule_map.get(dia_num)
+                if rule_to_delete and rule_to_delete.get("id"):
                     try:
                         result = api.delete_regla_horario(rule_to_delete["id"])
-                        if result is True: delete_count += 1 # Count deletions separately
-                        else: error_count += 1; last_error = result.get("detail", "Delete failed") if isinstance(result, dict) else "Delete failed"
+                        if result and result.get("success"): delete_count += 1 # Count deletions separately
+                        else: error_count += 1; last_error = result.get("error", "Delete failed") if isinstance(result, dict) else "Delete failed"
                     except Exception as ex: error_count += 1; last_error = f"Delete Ex: {ex}"
 
             # Create added days
@@ -447,7 +459,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 try:
                     result = api.create_regla_horario(payload)
                     if result and result.get("id"): success_count += 1
-                    else: error_count += 1; last_error = result.get("detail", "Create failed") if isinstance(result, dict) else "Create failed"
+                    else: error_count += 1; last_error = result.get("error", "Create failed") if isinstance(result, dict) else "Create failed"
                 except Exception as ex: error_count += 1; last_error = f"Create Ex: {ex}"
 
         # Mode 2: Editing a Single Rule
@@ -455,9 +467,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             action_summary = "Actualizando Regla Individual: "
             # Should only have one day selected if UI logic worked
             if len(selected_dias_nums) != 1:
-                 info_txt.value = "Error: Al editar una regla individual, solo debe seleccionar un día."
-                 info_txt.color=ft.Colors.ERROR
-                 info_txt.update(); return
+                info_txt.value = "Error: Al editar una regla individual, solo debe seleccionar un día."
+                info_txt.color=ft.Colors.ERROR
+                info_txt.update(); return
             dia_num = list(selected_dias_nums)[0]
             payload = {
                 "laboratorio_id": lab_id, "dia_semana": dia_num,
@@ -467,7 +479,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             try:
                 result = api.update_regla_horario(state["editing_single_rule_id"], payload)
                 if result and result.get("id"): success_count += 1
-                else: error_count += 1; last_error = result.get("detail", "Update failed") if isinstance(result, dict) else "Update failed"
+                else: error_count += 1; last_error = result.get("error", "Update failed") if isinstance(result, dict) else "Update failed"
             except Exception as ex: error_count += 1; last_error = f"Update Ex: {ex}"
 
         # Mode 3: Creating New Rule(s)
@@ -482,7 +494,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 try:
                     result = api.create_regla_horario(payload)
                     if result and result.get("id"): success_count += 1
-                    else: error_count += 1; last_error = result.get("detail", "Create failed") if isinstance(result, dict) else "Create failed"
+                    else: error_count += 1; last_error = result.get("error", "Create failed") if isinstance(result, dict) else "Create failed"
                 except Exception as ex: error_count += 1; last_error = f"Create Ex: {ex}"
 
         # --- Final Feedback ---
