@@ -32,8 +32,26 @@ class ApiClient:
             print(f"❌ Error inesperado: {e}")
             return {"error": "Error inesperado en la conexión"}
     
+    def get_captcha_image(self):
+        """Obtener imagen CAPTCHA del backend - método específico para captcha_view"""
+        try:
+            url = f"{self.base_url}/captcha"
+            response = requests.get(url)
+            print(f"📡 CAPTCHA Request: GET {url} - Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ CAPTCHA obtenido correctamente")
+                return data.get("image_data")
+            else:
+                print(f"❌ Error obteniendo CAPTCHA: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"❌ Error en get_captcha_image: {e}")
+            return None
+    
     def get_captcha(self):
-        """Obtener CAPTCHA del backend"""
+        """Obtener CAPTCHA del backend (método alternativo)"""
         return self._make_request("GET", "/captcha")
     
     def verify_captcha(self, captcha_text, captcha_id):
@@ -41,6 +59,7 @@ class ApiClient:
         return self._make_request("POST", "/verify-captcha", 
                                 json={"text": captcha_text, "id": captcha_id})
     
+    # ... el resto de tus métodos permanecen igual
     def login(self, email, password):
         """Login de usuario"""
         return self._make_request("POST", "/login", 
