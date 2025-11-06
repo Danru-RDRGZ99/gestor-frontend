@@ -195,14 +195,6 @@ def main(page: ft.Page):
         user_session = page.session.get("user_session") or {}
         current_route_key = page.route.strip("/")
 
-        # Para testing - crear sesión demo
-        if not user_session and current_route_key == "demo":
-            page.session.set("user_session", {
-                "user": {"user": "Usuario Demo", "rol": "admin"}
-            })
-            page.go("/dashboard")
-            return
-
         if not user_session:
             if current_route_key == "register":
                 page.views.append(
@@ -262,12 +254,7 @@ def main(page: ft.Page):
 
     page.on_route_change = router
     
-    # Iniciar con sesión demo para testing
-    page.session.set("user_session", {
-        "user": {"user": "Usuario Demo", "rol": "admin"}
-    })
-    page.go("/dashboard")
-
+   
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
     print(f"🚀 Iniciando aplicación en puerto {port}")
