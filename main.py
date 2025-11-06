@@ -1,11 +1,12 @@
+import os
 import flet as ft
 from ui.theme import apply_theme
 from api_client import ApiClient
 
 # Importa todas tus vistas
-from ui.views import (
+from views import (
     login_view,
-    register_view, # <-- Ensure this is imported correctly
+    register_view,
     dashboard_view,
     planteles_view,
     laboratorios_view,
@@ -29,10 +30,19 @@ ROUTE_META = {
 NAV_WIDTH = 250
 
 def main(page: ft.Page):
+    # Configuración para Railway
+    port = int(os.environ.get("PORT", 8501))
+    
     page.title = "Gestor de Laboratorios"
     page.padding = 0
     page.window_min_width = 1100
     page.window_min_height = 680
+
+    # Configuración específica para despliegue web
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.fonts = {
+        "Roboto": "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+    }
 
     apply_theme(page)
 
@@ -72,7 +82,6 @@ def main(page: ft.Page):
             # Still return an empty view here as page.go triggers a new route change
             return ft.View(f"/{active_key}", [])
 
-
         try:
             active_index = allowed.index(active_key)
         except ValueError:
@@ -80,7 +89,6 @@ def main(page: ft.Page):
             active_index = 0 # Default index if key somehow isn't found
 
         # --- Theme Toggle Logic ---
-        # Define top_app_bar *before* toggle_theme if it needs to access it
         top_app_bar = ft.AppBar() # Initialize AppBar
 
         def toggle_theme(_):
@@ -109,7 +117,6 @@ def main(page: ft.Page):
             )
         ]
         # --- End Theme Toggle Logic ---
-
 
         def nav_change(e):
             selected_route = allowed[e.control.selected_index]
@@ -162,16 +169,9 @@ def main(page: ft.Page):
 
         if not user_session:
             # Vistas públicas: Login, Registro, Verificación de Captcha
-            # =========================================================================
-            # --- INICIO DE LA CORRECCIÓN (Unknown control: View) ---
-            # =========================================================================
             if current_route_key == "register":
-                # Directly call RegisterView, which already returns the ft.View object
                 register_view_instance = register_view.RegisterView(page, api, on_success=lambda: page.go("/"))
-                page.views.append(register_view_instance) # Append the returned View directly
-            # =========================================================================
-            # --- FIN DE LA CORRECCIÓN ---
-            # =========================================================================
+                page.views.append(register_view_instance)
             elif current_route_key == "captcha-verify":
                 page.views.append(
                     ft.View(
@@ -203,9 +203,9 @@ def main(page: ft.Page):
 
             if current_route_key not in allowed_routes_for_user:
                 print(f"WARN: Ruta '{current_route_key}' no permitida para rol '{user_rol}'. Redirigiendo a dashboard.")
-                page.go("/dashboard") # Redirect disallowed routes
-                page.update() # Necessary after page.go inside route handler
-                return # Stop processing this route change
+                page.go("/dashboard")
+                page.update()
+                return
 
             # Mapa de vistas protegidas
             view_map = {
@@ -226,21 +226,32 @@ def main(page: ft.Page):
                     page.views.append(build_shell(current_route_key, body))
                 except Exception as e:
                     print(f"Error building view for '{current_route_key}': {e}")
+                    import traceback
                     traceback.print_exc()
                     body = ft.Column([
                         ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.colors.ERROR),
                         ft.Text(str(e))
                         ])
-                    page.views.append(build_shell(current_route_key, body)) # Show error within shell
+                    page.views.append(build_shell(current_route_key, body))
             else:
                 print(f"ERROR: Ruta '{current_route_key}' permitida pero no mapeada a una función de vista.")
                 body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.colors.ERROR)
-                page.views.append(build_shell(current_route_key, body)) # Show error within shell
+                page.views.append(build_shell(current_route_key, body))
 
         page.update()
 
     page.on_route_change = router
-    page.go(page.route) # Llama al router inicial para cargar la vista correcta
+    page.go(page.route)
 
+# Configuración para Railway
 if __name__ == "__main__":
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER) # Use WEB_BROWSER for web apps
+    # Obtener el puerto de Railway o usar 8501 por defecto
+    port = int(os.environ.get("PORT", 8501))
+    
+    # Configuración para producción
+    ft.app(
+        target=main,
+        view=ft.AppView.FLET_APP,  # Usar FLET_APP para mejor compatibilidad
+        port=port,
+        host="0.0.0.0"  # Importante: escuchar en todas las interfaces
+    )
