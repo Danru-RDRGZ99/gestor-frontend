@@ -70,10 +70,13 @@ class ApiClient:
                                 json={"text": captcha_text, "id": captcha_id})
     
     # ... el resto de tus métodos permanecen igual
-    def login(self, email, password):
-        """Login de usuario"""
-        return self._make_request("POST", "/login", 
-                                json={"email": email, "password": password})
+    def login(self, username, password, captcha):
+        """
+        Login de usuario (con CAPTCHA).
+        Llama al endpoint /token del backend.
+        """
+        return self._make_request("POST", "/token", 
+                                json={"username": username, "password": password, "captcha": captcha})
     
     def register(self, user_data):
         """Registro de usuario"""
