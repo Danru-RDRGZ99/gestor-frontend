@@ -278,7 +278,7 @@ def main(page: ft.Page):
                     ], expand=True)
                     page.views.append(build_shell(current_route_key, body))
             else:
-                body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.colors.ERROR)
+                body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.Colors.ERROR)
                 page.views.append(build_shell(current_route_key, body))
 
         page.update()
