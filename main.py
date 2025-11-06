@@ -5,57 +5,82 @@ import sys
 # Agregar el directorio actual al path para imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Importar módulos de forma absoluta
+# Función para crear mocks compatibles con Flet
+def create_compatible_mock():
+    class CompatibleMock(ft.Column):
+        def __init__(self, message="Vista en desarrollo"):
+            super().__init__()
+            self.controls = [
+                ft.Text(message, size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Esta funcionalidad estará disponible pronto", size=16),
+            ]
+            self.alignment = ft.MainAxisAlignment.CENTER
+            self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+            self.expand = True
+    return CompatibleMock
+
+# Importar módulos con mejor manejo de errores
+def safe_import(module_name, class_name, fallback_message=None):
+    try:
+        module = __import__(module_name, fromlist=[class_name])
+        return getattr(module, class_name)
+    except ImportError as e:
+        print(f"Error importando {class_name} from {module_name}: {e}")
+        return create_compatible_mock()
+
+# Importar todas las vistas
 try:
-    # Importar vistas individualmente
-    from views import login_view
-    from views import register_view
-    from views import dashboard_view
-    from views import planteles_view
-    from views import laboratorios_view  # Asegúrate que el archivo se llame así
-    from views import reservas_view      # Asegúrate que el archivo se llame así
-    from views import prestamos_view
-    from views import settings_view
-    from views import captcha_view
-    from views import horarios_admin_view
-except ImportError as e:
-    print(f"Error de importación: {e}")
-    print("Directorios disponibles:", os.listdir('.'))
-    if os.path.exists('views'):
-        print("Archivos en views:", os.listdir('views'))
-    # Crear mocks para evitar errores
-    class MockView:
-        def __init__(self, *args, **kwargs):
-            self.content = ft.Text("Vista no disponible")
-        def __call__(self, *args, **kwargs):
-            return self.content
+    # Verificar si la carpeta views existe
+    if not os.path.exists('views'):
+        print("ERROR: No existe la carpeta 'views'")
+        raise ImportError("No views directory")
     
-    login_view = type('login_view', (), {'LoginView': MockView})()
-    register_view = type('register_view', (), {'RegisterView': MockView})()
-    dashboard_view = type('dashboard_view', (), {'DashboardView': MockView})()
-    planteles_view = type('planteles_view', (), {'PlantelesView': MockView})()
-    laboratorios_view = type('laboratorios_view', (), {'LaboratoriosView': MockView})()
-    reservas_view = type('reservas_view', (), {'ReservasView': MockView})()
-    prestamos_view = type('prestamos_view', (), {'PrestamosView': MockView})()
-    settings_view = type('settings_view', (), {'SettingsView': MockView})()
-    captcha_view = type('captcha_view', (), {'CaptchaView': MockView})()
-    horarios_admin_view = type('horarios_admin_view', (), {'HorariosAdminView': MockView})()
+    print("Archivos en views:", os.listdir('views'))
+    
+    # Importar cada vista individualmente
+    LoginView = safe_import('views.login_view', 'LoginView', "Login no disponible")
+    RegisterView = safe_import('views.register_view', 'RegisterView', "Registro no disponible")
+    DashboardView = safe_import('views.dashboard_view', 'DashboardView', "Dashboard no disponible")
+    PlantelesView = safe_import('views.planteles_view', 'PlantelesView', "Planteles no disponible")
+    LaboratoriosView = safe_import('views.laboratorios_view', 'LaboratoriosView', "Laboratorios no disponible")
+    ReservasView = safe_import('views.reservas_view', 'ReservasView', "Reservas no disponible")
+    PrestamosView = safe_import('views.prestamos_view', 'PrestamosView', "Préstamos no disponible")
+    SettingsView = safe_import('views.settings_view', 'SettingsView', "Ajustes no disponible")
+    CaptchaView = safe_import('views.captcha_view', 'CaptchaView', "Captcha no disponible")
+    HorariosAdminView = safe_import('views.horarios_admin_view', 'HorariosAdminView', "Horarios no disponible")
+    
+except Exception as e:
+    print(f"Error crítico en imports: {e}")
+    # Crear mocks de emergencia
+    LoginView = create_compatible_mock()
+    RegisterView = create_compatible_mock()
+    DashboardView = create_compatible_mock()
+    PlantelesView = create_compatible_mock()
+    LaboratoriosView = create_compatible_mock()
+    ReservasView = create_compatible_mock()
+    PrestamosView = create_compatible_mock()
+    SettingsView = create_compatible_mock()
+    CaptchaView = create_compatible_mock()
+    HorariosAdminView = create_compatible_mock()
 
 # Importar otros módulos
 try:
     from ui.theme import apply_theme
+    print("Tema importado correctamente")
 except ImportError:
+    print("Usando tema por defecto")
     def apply_theme(page, theme_mode=None):
         page.theme_mode = theme_mode or ft.ThemeMode.LIGHT
-        print("Tema aplicado (mock)")
+        page.update()
 
 try:
     from api_client import ApiClient
+    print("ApiClient importado correctamente")
 except ImportError:
+    print("Usando ApiClient mock")
     class ApiClient:
         def __init__(self, page):
             self.page = page
-            print("ApiClient mockeado")
 
 # El resto de tu código permanece igual...
 ROUTE_META = {
@@ -82,7 +107,6 @@ def main(page: ft.Page):
 
     api = ApiClient(page)
 
-    # [TODO EL RESTO DE TU CÓDIGO ORIGINAL - mantén todo igual desde aquí]
     def logout(e):
         page.session.remove("user_session")
         if page.session.contains_key("login_attempt"):
@@ -193,13 +217,15 @@ def main(page: ft.Page):
 
         if not user_session:
             if current_route_key == "register":
-                register_view_instance = register_view.RegisterView(page, api, on_success=lambda: page.go("/"))
-                page.views.append(register_view_instance)
+                # Usar RegisterView directamente como función
+                register_content = RegisterView(page, api, lambda: page.go("/"))
+                page.views.append(register_content)
             elif current_route_key == "captcha-verify":
+                captcha_content = CaptchaView(page, api, on_login_success)
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
-                        [captcha_view.CaptchaView(page, api, on_login_success)],
+                        [captcha_content],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
@@ -207,10 +233,11 @@ def main(page: ft.Page):
             else:
                 if current_route_key != "":
                     page.go("/")
+                login_content = LoginView(page, api, lambda: page.go("/captcha-verify"))
                 page.views.append(
                     ft.View(
                         "/",
-                        [login_view.LoginView(page, api, on_success=lambda: page.go("/captcha-verify"))],
+                        [login_content],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
@@ -228,13 +255,13 @@ def main(page: ft.Page):
                 return
 
             view_map = {
-                "dashboard": dashboard_view.DashboardView,
-                "planteles": planteles_view.PlantelesView,
-                "laboratorios": laboratorios_view.LaboratoriosView,
-                "recursos": prestamos_view.PrestamosView,
-                "reservas": reservas_view.ReservasView,
-                "ajustes": settings_view.SettingsView,
-                "horarios": horarios_admin_view.HorariosAdminView,
+                "dashboard": lambda p, a: DashboardView(p, a),
+                "planteles": lambda p, a: PlantelesView(p, a),
+                "laboratorios": lambda p, a: LaboratoriosView(p, a),
+                "recursos": lambda p, a: PrestamosView(p, a),
+                "reservas": lambda p, a: ReservasView(p, a),
+                "ajustes": lambda p, a: SettingsView(p, a),
+                "horarios": lambda p, a: HorariosAdminView(p, a),
             }
 
             view_function = view_map.get(current_route_key)
@@ -250,7 +277,7 @@ def main(page: ft.Page):
                     body = ft.Column([
                         ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.colors.ERROR),
                         ft.Text(str(e))
-                    ])
+                    ], expand=True)
                     page.views.append(build_shell(current_route_key, body))
             else:
                 body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.colors.ERROR)
@@ -263,6 +290,7 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
+    print(f"Iniciando aplicación en puerto {port}")
     ft.app(
         target=main,
         view=ft.AppView.FLET_APP,
