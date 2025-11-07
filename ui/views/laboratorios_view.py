@@ -15,9 +15,11 @@ class Laboratorio:
 
 def LaboratoriosView(page: ft.Page, api: ApiClient):
     
+    # --- INICIO DE LA CORRECCIÓN 1 ---
     user_session = page.session.get("user_session") or {}
-    u = user_session.get("user", {}) 
+    u = user_session # 'u' es ahora el diccionario de sesión: {'rol': 'admin', ...}
     is_admin = u.get("rol") == "admin"
+    # --- FIN DE LA CORRECCIÓN 1 ---
 
     state = {"editing_lab_id": None}
 
@@ -31,8 +33,15 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
     capacidad = TextField("Capacidad")
     capacidad.col = {"sm": 12, "md": 6, "lg": 2}
     
+    # --- INICIO DE LA CORRECCIÓN 2 ---
+    # Carga de datos robusta
+    plantel_options = []
     planteles_data = api.get_planteles()
-    plantel_options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_data]
+    if isinstance(planteles_data, list):
+        plantel_options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_data if "id" in p]
+    else:
+        print(f"Error al cargar planteles: {planteles_data.get('error', 'Error desconocido')}")
+    # --- FIN DE LA CORRECCIÓN 2 ---
     
     dd_plantel_add = ft.Dropdown(label="Plantel", options=plantel_options)
     dd_plantel_add.col = {"sm": 12, "md": 6, "lg": 2}
@@ -48,10 +57,14 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
 
         if lab_id_to_delete:
             result = api.delete_laboratorio(lab_id_to_delete)
-            if result:
+            # --- INICIO DE LA CORRECCIÓN 4 ---
+            # Comprobar la respuesta de la API correctamente
+            if result and result.get("success"):
                 show_info_and_reload("Laboratorio eliminado correctamente.")
             else:
-                show_info_and_reload("Error: No se puede eliminar. El laboratorio puede tener recursos o reservas asociadas.")
+                error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
+                show_info_and_reload(f"Error: {error_msg}")
+            # --- FIN DE LA CORRECCIÓN 4 ---
 
     delete_dialog = ft.AlertDialog(
         modal=True,
@@ -63,7 +76,8 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
         ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
-    page.overlay.append(delete_dialog)
+    if delete_dialog not in page.overlay:
+        page.overlay.append(delete_dialog)
 
 
     # --- Lógica de botones y formularios ---
@@ -76,7 +90,8 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
         dd_plantel_add.value = None
         btn_save.text = "Agregar"
         btn_cancel.visible = False
-        form_card.content.update() 
+        if form_card.content: # Comprobación de seguridad
+            form_card.content.update() 
 
     def edit_lab_click(lab: Laboratorio):
         state["editing_lab_id"] = lab.id
@@ -86,9 +101,10 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
         dd_plantel_add.value = str(lab.plantel_id)
         btn_save.text = "Actualizar"
         btn_cancel.visible = True
-        form_card.content.update()
+        if form_card.content: # Comprobación de seguridad
+            form_card.content.update()
         info.value = f"Editando: {lab.nombre}"
-        info.update()
+        if info.page: info.update()
 
     def delete_lab_click(lab: Laboratorio):
         page.dialog = delete_dialog
@@ -104,8 +120,9 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
             clear_form()
         
         render_list() 
-        info.update()
+        if info.page: info.update()
 
+    # --- INICIO DE LA CORRECCIÓN 3 ---
     def save_lab(e):
         """Maneja tanto la creación (POST) como la actualización (PUT)."""
         if not is_admin:
@@ -117,51 +134,55 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
         
         try:
             lab_id = state.get("editing_lab_id")
-            data_nombre = nombre.value.strip()
-            data_ubicacion = (ubicacion.value or "").strip()
-            data_capacidad = int(capacidad.value)
-            data_plantel_id = int(dd_plantel_add.value)
+            
+            # 1. Empaquetar los datos en un diccionario (payload)
+            payload = {
+                "nombre": nombre.value.strip(),
+                "ubicacion": (ubicacion.value or "").strip(),
+                "capacidad": int(capacidad.value),
+                "plantel_id": int(dd_plantel_add.value)
+            }
 
             if lab_id is None:
-                nuevo_lab = api.add_laboratorio(
-                    nombre=data_nombre,
-                    ubicacion=data_ubicacion,
-                    capacidad=data_capacidad,
-                    plantel_id=data_plantel_id
-                )
-                if nuevo_lab:
-                    show_info_and_reload("Laboratorio creado")
-                else:
-                    show_info_and_reload("Error al crear laboratorio")
-            
+                # 2. Llamar a 'create_laboratorio' con el payload
+                result = api.create_laboratorio(payload)
+                msg = "Laboratorio creado"
             else:
-                updated_lab = api.update_laboratorio(
-                    lab_id=lab_id,
-                    nombre=data_nombre,
-                    ubicacion=data_ubicacion,
-                    capacidad=data_capacidad,
-                    plantel_id=data_plantel_id
-                )
-                if updated_lab:
-                    show_info_and_reload("Laboratorio actualizado")
-                else:
-                    show_info_and_reload("Error al actualizar laboratorio")
+                # 3. Llamar a 'update_laboratorio' con lab_id y el payload
+                result = api.update_laboratorio(lab_id, payload)
+                msg = "Laboratorio actualizado"
+
+            # 4. Comprobar la respuesta de la API
+            if result and "error" not in result:
+                show_info_and_reload(msg)
+            else:
+                error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
+                show_info_and_reload(f"Error: {error_msg}")
         
         except ValueError:
             show_info_and_reload("La capacidad debe ser un número")
         except Exception as ex:
             show_info_and_reload(f"Error inesperado: {ex}")
+    # --- FIN DE LA CORRECCIÓN 3 ---
 
     # --- Renderizado de la lista ---
     def render_list():
         list_panel.controls.clear()
         try:
-            labs_data = api.get_laboratorios() or []
-            planteles_map = {str(p["id"]): p["nombre"] for p in planteles_data}
+            # --- INICIO DE LA CORRECCIÓN 5 ---
+            # 'planteles_data' ya se cargó al inicio.
+            # Creamos el map a partir de la variable en el scope superior
+            planteles_map = {str(p["id"]): p["nombre"] for p in planteles_data if isinstance(p, dict) and "id" in p}
+            
+            labs_data = api.get_laboratorios()
+            if not isinstance(labs_data, list):
+                 print(f"Error al cargar laboratorios: {labs_data.get('error', 'Error desconocido')}")
+                 labs_data = [] # Asegurarse de que sea una lista para iterar
+            # --- FIN DE LA CORRECCIÓN 5 ---
 
             if not labs_data:
                 list_panel.controls.append(ft.Text("No hay laboratorios registrados."))
-        
+            
             for lab_dict in labs_data:
                 lab = Laboratorio(lab_dict)
                 plantel_nombre = planteles_map.get(str(lab.plantel_id), "N/A")
@@ -171,26 +192,23 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
                 admin_actions = ft.Row(spacing=4, alignment=ft.MainAxisAlignment.END)
                 if is_admin:
                     
-                    # --- SOLUCIÓN APLICADA AQUÍ ---
-                    # 1. Crear el ícono de editar
+                    # --- INICIO DE LA CORRECCIÓN 6 ---
+                    # Pasamos icon_color como argumento, no como propiedad
                     edit_icon = Icon(
                         ft.Icons.EDIT_OUTLINED,
                         tooltip="Editar",
                         on_click=lambda _, l=lab: edit_lab_click(l) 
                     )
                     
-                    # 2. Crear el ícono de eliminar
                     delete_icon = Icon(
                         ft.Icons.DELETE_OUTLINED,
                         tooltip="Eliminar",
                         on_click=lambda _, l=lab: delete_lab_click(l), 
+                        icon_color=ft.Colors.ERROR # Pasar como argumento
                     )
-                    # 3. Asignar la propiedad 'icon_color' después de crearlo
-                    delete_icon.icon_color = ft.Colors.ERROR
                     
-                    # 4. Añadirlos a los controles
                     admin_actions.controls.extend([edit_icon, delete_icon])
-                    # --- FIN DE LA SOLUCIÓN ---
+                    # --- FIN DE LA CORRECCIÓN 6 ---
 
                 header = ft.Row(
                     [
@@ -201,7 +219,6 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
                 )
                 list_panel.controls.append(Card(header, padding=14))
         except Exception as e:
-            # Aquí es donde viste el error
             print(f"Error al renderizar lista: {e}") # Imprimir en consola
             list_panel.controls.append(ft.Text(f"Error al cargar laboratorios: {e}"))
         
