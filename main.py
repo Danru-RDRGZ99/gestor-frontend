@@ -15,7 +15,7 @@ for item in os.listdir('.'):
 # Agregar directorio actual al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# --- Importar Vistas (sin cambios) ---
+# Importar módulos desde ui.views
 try:
     from ui.views import (
         login_view,
@@ -34,7 +34,7 @@ try:
 except ImportError as e:
     print(f"❌ Error importando vistas: {e}")
     VIEWS_AVAILABLE = False
-    # ... (Placeholders de emergencia sin cambios) ...
+    # Crear placeholders de emergencia
     class EmergencyView(ft.Column):
         def __init__(self, *args, **kwargs):
             super().__init__()
@@ -53,8 +53,8 @@ except ImportError as e:
     settings_view = type('settings_view', (), {'SettingsView': EmergencyView})()
     captcha_view = type('captcha_view', (), {'CaptchaView': EmergencyView})()
     horarios_admin_view = type('horarios_admin_view', (), {'HorariosAdminView': EmergencyView})()
-# --- Fin de Imports ---
 
+# Importar otros módulos
 try:
     from ui.theme import apply_theme
     print("✅ Tema importado correctamente")
@@ -85,64 +85,30 @@ ROUTE_META = {
 }
 NAV_WIDTH = 250
 
-# <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
-# (Se ejecuta ANTES de iniciar la app para evitar la caché)
-ICON_PATH = "ui/assets/icon.png"
-SPLASH_PATH = "ui/assets/splash.png"
-favicons_dict = {}
-splash_b64_data_uri = None 
-
-try:
-    if os.path.exists(ICON_PATH):
-        with open(ICON_PATH, "rb") as image_file:
-            icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            favicons_dict = {"": f"data:image/png;base64,{icon_b64}"}
-            print("✅ Favicon (icon.png) cargado en Base64.")
-    else:
-        print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
-except Exception as e:
-    print(f"❌ Error al cargar el favicon: {e}")
-
-try:
-    if os.path.exists(SPLASH_PATH):
-        with open(SPLASH_PATH, "rb") as image_file:
-            splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
-            print("✅ Pantalla de carga (splash.png) cargada en Base64.")
-    else:
-        print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
-except Exception as e:
-    print(f"❌ Error al cargar la pantalla de carga: {e}")
-# <--- FIN: LÓGICA DE CARGA DE ASSETS ---
-
-
 def main(page: ft.Page):
 
-    # Asignar Favicon y Splash (cargados en Base64)
+    # <--- ¡CORRECCIÓN 1: ASIGNAR FAVICONS A 'page' AQUÍ! ---
     if favicons_dict:
         page.favicons = favicons_dict
         
+    # <--- ¡CORRECCIÓN 2: ASIGNAR SPLASH A 'page' AQUÍ! ---
+    # 'splash' también es una propiedad de 'page', no un argumento de 'ft.app()'
     if splash_b64_data_uri:
         page.splash = ft.Image(src_base64=splash_b64_data_uri)
-    
-    # <--- INICIO: CAMBIOS RESPONSIVOS ---
-    # Punto de quiebre para cambiar a vista móvil
-    MOBILE_BREAKPOINT = 768 
-    # <--- FIN: CAMBIOS RESPONSIVOS ---
+    # <--- FIN DE LAS CORRECCIONES ---
 
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
     
     page.title = "BLACKLAB"
     page.padding = 0
-    # <--- CAMBIO RESPONSIVO: Se eliminan los anchos mínimos ---
-    # page.window_min_width = 1100  <-- Eliminado
-    # page.window_min_height = 680 <-- Eliminado
+    page.window_min_width = 1100
+    page.window_min_height = 680
 
     apply_theme(page)
+
     api = ApiClient(page)
 
-    # --- Funciones de Utilidad (sin cambios) ---
     def logout(e):
         page.session.remove("user_session")
         if page.session.contains_key("login_attempt"):
@@ -161,8 +127,6 @@ def main(page: ft.Page):
         """Función central de éxito de login: redirige al dashboard."""
         print("DEBUG: on_login_success llamado, redirigiendo a /dashboard")
         page.go("/dashboard")
-    # --- Fin de Funciones de Utilidad ---
-
 
     def build_shell(active_key: str, body: ft.Control):
         user_session = page.session.get("user_session") or {}
@@ -172,15 +136,6 @@ def main(page: ft.Page):
 
         user_data = user_session 
         allowed = get_allowed_routes(user_data.get("rol", ""))
-        
-        # <--- INICIO: LÓGICA DE DETECCIÓN MÓVIL (CORREGIDA) ---
-        # Usamos page.width en lugar de page.window_width
-        is_mobile = False # Default to desktop
-        if page.width: # Check if page.width has a value
-            is_mobile = page.width < MOBILE_BREAKPOINT
-        
-        print(f"Construyendo shell. Ancho: {page.width}. Es móvil: {is_mobile}")
-        # <--- FIN: LÓGICA DE DETECCIÓN MÓVIL (CORREGIDA) ---
         
         if active_key not in allowed:
             active_key = allowed[0]
@@ -192,8 +147,8 @@ def main(page: ft.Page):
         except ValueError:
             active_index = 0
 
-        # --- AppBar (sin cambios) ---
         top_app_bar = ft.AppBar()
+
         def toggle_theme(_):
             new_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
             apply_theme(page, new_mode)
@@ -201,7 +156,9 @@ def main(page: ft.Page):
             if top_app_bar and len(top_app_bar.actions) > 0 and isinstance(top_app_bar.actions[0], ft.IconButton):
                 top_app_bar.actions[0].icon = ft.Icons.DARK_MODE if new_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
             page.update()
+
         theme_icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
+
         top_app_bar.title = ft.Text(ROUTE_META.get(active_key, ("Desconocido",))[0], size=20)
         top_app_bar.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         top_app_bar.actions = [
@@ -215,15 +172,11 @@ def main(page: ft.Page):
                 ]
             )
         ]
-        # --- Fin de AppBar ---
 
         def nav_change(e):
             selected_route = allowed[e.control.selected_index]
             page.go(f"/{selected_route}")
 
-        # <--- INICIO: LÓGICA DE NAVEGACIÓN ADAPTATIVA ---
-        
-        # 1. NAVEGACIÓN DE ESCRITORIO (Lateral)
         navigation_rail = ft.NavigationRail(
             selected_index=active_index,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -237,22 +190,7 @@ def main(page: ft.Page):
                 ) for key in allowed
             ],
             on_change=nav_change,
-            visible=not is_mobile # <--- Oculto en móvil
         )
-        
-        # 2. NAVEGACIÓN MÓVIL (Inferior)
-        navigation_bar = ft.NavigationBar(
-            selected_index=active_index,
-            destinations=[
-                ft.NavigationDestination(
-                    icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
-                    label=ROUTE_META.get(key, ("Error",))[0]
-                ) for key in allowed
-            ],
-            on_change=nav_change,
-            visible=is_mobile # <--- Oculto en escritorio
-        )
-        # <--- FIN: LÓGICA DE NAVEGACIÓN ADAPTATIVA ---
 
         main_content = ft.Container(
             content=body,
@@ -266,18 +204,16 @@ def main(page: ft.Page):
                 top_app_bar,
                 ft.Row(
                     [
-                        navigation_rail, # <--- Se oculta/muestra solo
-                        ft.VerticalDivider(width=1, visible=not is_mobile), # <--- Se oculta en móvil
+                        navigation_rail,
+                        ft.VerticalDivider(width=1),
                         main_content,
                     ],
                     expand=True,
                 ),
             ],
-            navigation_bar=navigation_bar, # <--- Se añade la barra inferior
             padding=0,
         )
 
-    # --- Router (sin cambios en la lógica interna) ---
     def router(route):
         page.views.clear()
         user_session = page.session.get("user_session") or {}
@@ -285,10 +221,12 @@ def main(page: ft.Page):
 
         if not user_session:
             if current_route_key == "register":
+                # Flujo de Registro: va a on_login_success (-> /dashboard)
                 register_view_instance = register_view.RegisterView(page, api, on_success=on_login_success)
                 page.views.append(register_view_instance)
             
             elif current_route_key == "captcha-verify":
+                # Flujo de Captcha: va a on_login_success (-> /dashboard)
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
@@ -300,6 +238,10 @@ def main(page: ft.Page):
             else:
                 if current_route_key != "":
                     page.go("/")
+                
+                # Flujo de Login:
+                # - on_success (Google) va a on_login_success (-> /dashboard)
+                # - Login normal va a /captcha-verify (manejado en login_view.py)
                 page.views.append(
                     ft.View(
                         "/",
@@ -311,9 +253,12 @@ def main(page: ft.Page):
         else:
             # Flujo de Usuario Autenticado
             user_rol = user_session.get("rol", "")
+            
             allowed_routes_for_user = get_allowed_routes(user_rol)
+
             if not current_route_key:
                 current_route_key = "dashboard"
+
             if current_route_key not in allowed_routes_for_user:
                 page.go("/dashboard")
                 page.update()
@@ -328,7 +273,9 @@ def main(page: ft.Page):
                 "ajustes": settings_view.SettingsView,
                 "horarios": horarios_admin_view.HorariosAdminView,
             }
+
             view_function = view_map.get(current_route_key)
+
             if view_function:
                 try:
                     body = view_function(page, api)
@@ -347,26 +294,48 @@ def main(page: ft.Page):
                 page.views.append(build_shell(current_route_key, body))
 
         page.update()
-    
-    
-    # <--- INICIO: MANEJADOR DE CAMBIO DE TAMAÑO ---
-    def on_resize(e):
-        """
-        Se llama cuando el tamaño de la ventana cambia.
-        Vuelve a cargar la ruta actual para que 'build_shell'
-        pueda redibujar la navegación correcta (lateral o inferior).
-        """
-        print(f"Nuevo tamaño detectado: {page.width}") # <-- También cambiado a page.width
-        page.go(page.route)
-    # <--- FIN: MANEJADOR DE CAMBIO DE TAMAÑO ---
-    
-    # Asignar los manejadores a la página
+
     page.on_route_change = router
-    page.on_resize = on_resize # <--- Se asigna el nuevo manejador
-    
-    # Carga inicial
     page.go(page.route)
 
+
+# <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
+# (Se ejecuta ANTES de iniciar la app para evitar la caché)
+
+# 1. Definir rutas
+ICON_PATH = "ui/assets/icon.png"
+SPLASH_PATH = "ui/assets/splash.png"
+
+# 2. Preparar variables
+favicons_dict = {}
+splash_b64_data_uri = None # <--- CORRECCIÓN: CAMBIADO A SOLO EL 'data URI'
+
+# 3. Cargar Favicon (Ícono de la App)
+try:
+    if os.path.exists(ICON_PATH):
+        with open(ICON_PATH, "rb") as image_file:
+            icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+            favicons_dict = {
+                "": f"data:image/png;base64,{icon_b64}"
+            }
+            print("✅ Favicon (icon.png) cargado en Base64.")
+    else:
+        print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
+except Exception as e:
+    print(f"❌ Error al cargar el favicon: {e}")
+
+# 4. Cargar Splash (Pantalla de Carga)
+try:
+    if os.path.exists(SPLASH_PATH):
+        with open(SPLASH_PATH, "rb") as image_file:
+            splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+            # Guardamos solo el string del 'data URI'
+            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
+            print("✅ Pantalla de carga (splash.png) cargada en Base64.")
+    else:
+        print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
+except Exception as e:
+    print(f"❌ Error al cargar la pantalla de carga: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
@@ -376,5 +345,5 @@ if __name__ == "__main__":
         view=ft.AppView.FLET_APP,
         port=port,
         host="0.0.0.0",
-        assets_dir="ui/assets" # Mantenemos esto por si acaso
+        assets_dir="ui/assets" 
     )
