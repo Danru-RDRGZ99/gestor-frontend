@@ -1,3 +1,4 @@
+# prestamos_view.py
 from __future__ import annotations
 
 import flet as ft
@@ -209,7 +210,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             tipo=state["filter_tipo"]
         )
 
-        # --- VERIFICACIÓN ---
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar recursos: {detail}"
@@ -220,6 +221,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return
         
         if not isinstance(recursos_data, list):
+        # --- FIN CORRECCIÓN DE ERRORES ---
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar recursos: {detail}"
             print(f"ERROR render_recursos: {error_msg}")
@@ -227,7 +229,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             if error_display.page: error_display.update()
             if recursos_list_display.page: recursos_list_display.update()
             return
-        # --- FIN VERIFICACIÓN ---
 
         recursos = recursos_data
         if not recursos:
@@ -246,7 +247,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         error_display.value = ""
         solicitudes_data = (api.get_todos_los_prestamos() if is_admin else api.get_mis_prestamos())
 
-        # --- VERIFICACIÓN ---
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if isinstance(solicitudes_data, dict) and "error" in solicitudes_data:
             detail = solicitudes_data.get("error", "Error")
             error_msg = f"Error al cargar solicitudes: {detail}"
@@ -257,6 +258,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return
 
         if not isinstance(solicitudes_data, list):
+        # --- FIN CORRECCIÓN DE ERRORES ---
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar solicitudes: {detail}"
             print(f"ERROR render_solicitudes: {error_msg}")
@@ -264,7 +266,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             if error_display.page: error_display.update()
             if solicitudes_list_display.page: solicitudes_list_display.update()
             return
-        # --- FIN VERIFICACIÓN ---
 
         solicitudes = solicitudes_data
         if not solicitudes:
@@ -284,7 +285,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         error_display.value = ""
         recursos_data = api.get_recursos() # Admin ve *todos* los recursos
 
-        # --- VERIFICACIÓN ---
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar lista de admin: {detail}"
@@ -295,6 +296,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return
             
         if not isinstance(recursos_data, list):
+        # --- FIN CORRECCIÓN DE ERRORES ---
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar lista de admin: {detail}"
             print(f"ERROR render_admin_recursos: {error_msg}")
@@ -302,7 +304,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             if error_display.page: error_display.update()
             if recursos_admin_list_display.page: recursos_admin_list_display.update()
             return
-        # --- FIN VERIFICACIÓN ---
 
         recursos = recursos_data
         if not recursos:
@@ -344,8 +345,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
         # Volver a renderizar la lista de recursos con los nuevos filtros
         render_recursos()
-    
-    # Manejador específico para el filtro de lab (no resetea nada)
+
+    # --- INICIO CORRECCIÓN ---
+    # Handler específico para el filtro de lab (no resetea nada)
     def on_lab_filter_change(e):
         lid_val = dd_lab_filter.value
         if lid_val and lid_val.isdigit():
@@ -359,6 +361,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         state["filter_estado"] = dd_estado_filter.value or ""
         state["filter_tipo"] = dd_tipo_filter.value or ""
         render_recursos()
+    # --- FIN CORRECCIÓN ---
 
 
     # Asignar handlers
@@ -372,7 +375,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # ---------------------------------
     def update_loan_status(prestamo_id: int, new_status: str):
         result = api.update_prestamo_estado(prestamo_id, new_status)
-        if result and "error" not in result: # Check if valid response
+        # --- INICIO CORRECCIÓN DE ERRORES ---
+        if result and "error" not in result: 
+        # --- FIN CORRECCIÓN DE ERRORES ---
             page.snack_bar = ft.SnackBar(ft.Text(f"Préstamo actualizado a '{new_status}'"), open=True)
             render_solicitudes()
             render_recursos() # El estado del recurso puede haber cambiado
@@ -419,7 +424,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 msg = "Recurso creado"
 
             # Check if API call was successful
+            # --- INICIO CORRECCIÓN DE ERRORES ---
             if result and "error" not in result:
+            # --- FIN CORRECCIÓN DE ERRORES ---
                 page.snack_bar = ft.SnackBar(ft.Text(msg), open=True)
                 clear_recurso_form()
                 render_admin_recursos()
@@ -473,7 +480,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         result = api.delete_recurso(recurso_id)
 
         # Check API response
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if result and "success" in result:
+        # --- FIN CORRECCIÓN DE ERRORES ---
             page.snack_bar = ft.SnackBar(ft.Text("Recurso eliminado."), open=True)
             render_admin_recursos()
             render_recursos()
@@ -634,7 +643,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
         result = api.create_prestamo(prestamo_data)
 
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if result and "error" not in result:
+        # --- FIN CORRECCIÓN DE ERRORES ---
             page.snack_bar = ft.SnackBar(ft.Text("Solicitud creada con éxito."), open=True)
             close_solicitud_sheet(None)
             render_recursos()
@@ -668,17 +679,17 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # ---------------------------------
     # Helpers y Layout General (Mostly unchanged)
     # ---------------------------------
-    # def format_iso_date(date_str: str | None) -> str:
-    #     # Duplicated function - keep consistent with dashboard
-    #     if not date_str: return ""
-    #     try:
-    #         if isinstance(date_str, str) and date_str.endswith('Z'):
-    #             date_str = date_str[:-1] + '+00:00'
-    #         dt = datetime.fromisoformat(str(date_str))
-    #         return dt.strftime("%Y-%m-%d %H:%M")
-    #     except (ValueError, TypeError) as e:
-    #         print(f"WARN format_iso_date: Could not format '{date_str}': {e}")
-    #         return str(date_str)
+    def format_iso_date(date_str: str | None) -> str:
+        # Duplicated function - keep consistent with dashboard
+        if not date_str: return ""
+        try:
+            if isinstance(date_str, str) and date_str.endswith('Z'):
+                date_str = date_str[:-1] + '+00:00'
+            dt = datetime.fromisoformat(str(date_str))
+            return dt.strftime("%Y-%m-%d %H:%M")
+        except (ValueError, TypeError) as e:
+            print(f"WARN format_iso_date: Could not format '{date_str}': {e}")
+            return str(date_str)
 
 
     def chip_estado(txt: str):
