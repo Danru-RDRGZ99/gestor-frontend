@@ -1,8 +1,7 @@
 import os
 import requests
 import flet as ft
-# --- AÑADIDO: Importar 'date' para type hinting ---
-from datetime import date
+from datetime import date # <--- AÑADIDO para type hinting
 
 class ApiClient:
     def __init__(self, page: ft.Page):
@@ -26,24 +25,27 @@ class ApiClient:
         """Método genérico para hacer requests al backend"""
         url = f"{self.base_url}{endpoint}"
         
+        # La sesión (self.session) maneja los headers (token) automáticamente
         try:
             # Usar self.session.request en lugar de requests.request
             response = self.session.request(method, url, **kwargs) 
             
             print(f"📡 Request: {method} {url} - Status: {response.status_code}")
             
-            # --- Manejo de Errores Mejorado ---
-            if response.ok: # Acepta 200, 201, 204
-                if response.status_code == 204: # No Content (para DELETE)
-                    return {"success": True} 
-                return response.json() # Para 200, 201
-            else:
-                print(f"❌ Error {response.status_code}: {response.text}")
-                try:
-                    error_json = response.json()
-                    return {"error": error_json.get("detail", response.text)}
-                except requests.exceptions.JSONDecodeError:
-                    return {"error": f"Error {response.status_code}: {response.text}"}
+            # --- MANEJO DE RESPUESTAS MEJORADO ---
+            if response.status_code == 200:
+                return response.json() # Éxito
+            
+            if response.status_code == 204: # Para DELETE exitoso
+                return {"success": True} 
+
+            # Si no es 200 o 204, es un error
+            print(f"❌ Error {response.status_code}: {response.text}")
+            try:
+                error_json = response.json()
+                return {"error": error_json.get("detail", response.text)}
+            except requests.exceptions.JSONDecodeError:
+                return {"error": f"Error {response.status_code}: {response.text}"}
                 
         except requests.exceptions.ConnectionError:
             print(f"❌ Error de conexión con el backend en {url}")
@@ -89,11 +91,11 @@ class ApiClient:
             
         return response_data
 
-    def register(self, user_data):
-        """Registro de usuario"""
+    def register(self, user_data: dict):
+        """Registro de usuario. Espera un diccionario con los datos."""
         return self._make_request("POST", "/register", json=user_data)
     
-    # --- Métodos de Recursos (Laboratorios, Préstamos, etc.) ---
+    # --- Métodos de Laboratorios ---
 
     def get_laboratorios(self):
         return self._make_request("GET", "/laboratorios")
@@ -110,18 +112,21 @@ class ApiClient:
     def delete_laboratorio(self, lab_id):
         return self._make_request("DELETE", f"/laboratorios/{lab_id}")
     
-    def get_reservas(self):
-        """(Obsoleto? - El backend espera /reservas/{lab_id})"""
-        return self._make_request("GET", "/reservas")
-    
-    def get_reservas_por_lab(self, lab_id: int, start_dt: date, end_dt: date):
-        """Obtiene reservas para un lab_id y rango de fechas."""
+    # --- Métodos para Reservas ---
+
+    # --- INICIO DE LA CORRECCIÓN 1 ---
+    def get_reservas(self, lab_id: int, start_dt: date, end_dt: date):
+        """
+        Obtiene las reservas filtradas por lab y rango de fechas.
+        Llama al endpoint: GET /reservas/{lab_id}
+        """
         params = {
-            "start_dt": str(start_dt),
+            "start_dt": str(start_dt), # Convierte date a string YYYY-MM-DD
             "end_dt": str(end_dt)
         }
         return self._make_request("GET", f"/reservas/{lab_id}", params=params)
-
+    # --- FIN DE LA CORRECCIÓN 1 ---
+    
     def create_reserva(self, data):
         return self._make_request("POST", "/reservas", json=data)
     
@@ -131,35 +136,79 @@ class ApiClient:
     def delete_reserva(self, reserva_id):
         return self._make_request("DELETE", f"/reservas/{reserva_id}")
 
-    # --- INICIO DE LA CORRECCIÓN ---
-    def get_horario_laboratorio(self, lab_id: int, fecha_inicio: date, fecha_fin: date):
+    # --- INICIO DE LA CORRECCIÓN 2 ---
+    def get_horario_laboratorio(self, lab_id: int, start_dt: date, end_dt: date):
         """
-        Obtiene los slots de horario disponible para un lab en un rango de fechas.
-        (NUEVO MÉTODO PARA RESERVAS_VIEW)
+        Calcula el horario disponible para un laboratorio en un rango de fechas.
+        Llama al endpoint: GET /laboratorios/{lab_id}/horario
         """
         params = {
-            "fecha_inicio": str(fecha_inicio), # str() convierte date a "YYYY-MM-DD"
-            "fecha_fin": str(fecha_fin)
+            "fecha_inicio": str(start_dt),
+            "fecha_fin": str(end_dt)
         }
-        # Llama al endpoint correcto del backend
         return self._make_request("GET", f"/laboratorios/{lab_id}/horario", params=params)
-    # --- FIN DE LA CORRECCIÓN ---
+    # --- FIN DE LA CORRECCIÓN 2 ---
+
+    # --- Métodos para Préstamos / Recursos (de prestamos_view.py) ---
     
     def get_mis_prestamos(self):
         """Obtiene los préstamos del usuario actual (requiere token)"""
         return self._make_request("GET", "/prestamos/mis-solicitudes")
 
-    def get_prestamos(self):
-        return self._make_request("GET", "/prestamos")
-    
-    def create_prestamo(self, data):
+    def get_todos_los_prestamos(self):
+        """Obtiene TODOS los préstamos (admin)"""
+        return self._make_request("GET", "/admin/prestamos")
+
+    def create_prestamo(self, data: dict):
         return self._make_request("POST", "/prestamos", json=data)
+
+    def update_prestamo_estado(self, prestamo_id: int, new_status: str):
+        """Actualiza el estado de un préstamo (admin)"""
+        # El backend espera el estado en el body, no como query param
+        return self._make_request("PUT", f"/admin/prestamos/{prestamo_id}/estado?nuevo_estado={new_status}")
     
-    def update_prestamo(self, prestamo_id, data):
-        return self._make_request("PUT", f"/prestamos/{prestamo_id}", json=data)
-    
-    def delete_prestamo(self, prestamo_id):
-        return self._make_request("DELETE", f"/prestamos/{prestamo_id}")
+    def get_recursos(self, plantel_id: int = None, lab_id: int = None, estado: str = "", tipo: str = ""):
+        """Obtiene recursos filtrados"""
+        params = {}
+        if plantel_id:
+            params["plantel_id"] = plantel_id
+        if lab_id:
+            params["lab_id"] = lab_id
+        if estado:
+            params["estado"] = estado
+        if tipo:
+            params["tipo"] = tipo
+        return self._make_request("GET", "/recursos", params=params)
+
+    def get_recurso_tipos(self):
+        """Obtiene la lista de tipos de recursos únicos"""
+        return self._make_request("GET", "/recursos/tipos")
+
+    def create_recurso(self, tipo: str, estado: str, laboratorio_id: int, specs: str):
+        """Crea un nuevo recurso (admin)"""
+        payload = {
+            "tipo": tipo,
+            "estado": estado,
+            "laboratorio_id": laboratorio_id,
+            "specs": specs
+        }
+        return self._make_request("POST", "/recursos", json=payload)
+
+    def update_recurso(self, recurso_id: int, tipo: str, estado: str, laboratorio_id: int, specs: str):
+        """Actualiza un recurso existente (admin)"""
+        payload = {
+            "tipo": tipo,
+            "estado": estado,
+            "laboratorio_id": laboratorio_id,
+            "specs": specs
+        }
+        return self._make_request("PUT", f"/recursos/{recurso_id}", json=payload)
+
+    def delete_recurso(self, recurso_id: int):
+        """Elimina un recurso (admin)"""
+        return self._make_request("DELETE", f"/recursos/{recurso_id}")
+
+    # --- Métodos para Planteles ---
     
     def get_planteles(self):
         return self._make_request("GET", "/planteles")
@@ -167,61 +216,43 @@ class ApiClient:
     def create_plantel(self, data):
         return self._make_request("POST", "/planteles", json=data)
     
-    # --- INICIO DE MÉTODOS PARA SETTINGS_VIEW ---
+    # --- Métodos para Usuarios (de settings_view.py) ---
 
-    def get_users(self, q: str = None, rol: str = None):
-        """
-        Obtiene usuarios filtrados (Admin).
-        (RENOMBRADO de get_usuarios y CON PARÁMETROS)
-        """
+    def get_users(self, q: str = "", rol: str = None):
+        """Obtiene usuarios filtrados (Admin)."""
         params = {}
-        # Solo añade los parámetros si no son None
-        # Una cadena vacía "" para 'q' es válida
-        if q is not None:
+        if q:
             params["q"] = q
-        # Un valor None para 'rol' significa "Todos"
-        if rol is not None:
+        if rol is not None: # Permite enviar "" (vacío) pero no None
             params["rol"] = rol
         return self._make_request("GET", "/usuarios", params=params)
     
     def update_profile(self, nombre: str, user: str, correo: str):
-        """
-        Actualiza el perfil del propio usuario.
-        (RENOMBRADO de update_perfil y CORREGIDO)
-        """
-        data = {"nombre": nombre, "user": user, "correo": correo}
-        return self._make_request("PUT", "/usuarios/me/profile", json=data)
+        """Actualiza el perfil del usuario actual."""
+        payload = {"nombre": nombre, "user": user, "correo": correo}
+        return self._make_request("PUT", "/usuarios/me/profile", json=payload)
 
     def change_password(self, old_password: str, new_password: str):
-        """
-        Cambia la contraseña del propio usuario.
-        (NUEVO MÉTODO)
-        """
-        data = {"old_password": old_password, "new_password": new_password}
-        return self._make_request("PUT", "/usuarios/me/password", json=data)
+        """Cambia la contraseña del usuario actual."""
+        payload = {"old_password": old_password, "new_password": new_password}
+        return self._make_request("PUT", "/usuarios/me/password", json=payload)
 
-    def update_user_by_admin(self, user_id: int, update_data: dict):
-        """
-        Actualiza el perfil de otro usuario (Admin).
-        (NUEVO MÉTODO)
-        """
-        # update_data debe ser {"nombre": ..., "user": ..., "correo": ..., "rol": ...}
-        return self._make_request("PUT", f"/usuarios/{user_id}", json=update_data)
+    def update_user_by_admin(self, user_id: int, data: dict):
+        """Actualiza cualquier usuario (Admin)."""
+        return self._make_request("PUT", f"/usuarios/{user_id}", json=data)
 
     def delete_user(self, user_id: int):
-        """
-        Elimina a un usuario (Admin).
-        (NUEVO MÉTODO)
-        """
+        """Elimina un usuario (Admin)."""
         return self._make_request("DELETE", f"/usuarios/{user_id}")
-    
-    # --- FIN DE MÉTODOS PARA SETTINGS_VIEW ---
 
     # --- INICIO DE MÉTODOS PARA HORARIOS_ADMIN_VIEW ---
 
-    def get_reglas_horario(self):
-        """Obtiene todas las reglas de horario (Admin)."""
-        return self._make_request("GET", "/admin/horarios/reglas")
+    def get_reglas_horario(self, laboratorio_id: int = None):
+        """Obtiene las reglas de horario (Admin)."""
+        params = {}
+        if laboratorio_id is not None:
+            params["laboratorio_id"] = laboratorio_id
+        return self._make_request("GET", "/admin/horarios/reglas", params=params)
 
     def create_regla_horario(self, payload: dict):
         """Crea una nueva regla de horario (Admin)."""
