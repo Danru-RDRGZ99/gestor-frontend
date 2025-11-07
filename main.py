@@ -34,7 +34,7 @@ try:
 except ImportError as e:
     print(f"❌ Error importando vistas: {e}")
     VIEWS_AVAILABLE = False
-    # ... (Tu código de placeholders de emergencia) ...
+    # Crear placeholders de emergencia
     class EmergencyView(ft.Column):
         def __init__(self, *args, **kwargs):
             super().__init__()
@@ -54,13 +54,11 @@ except ImportError as e:
     captcha_view = type('captcha_view', (), {'CaptchaView': EmergencyView})()
     horarios_admin_view = type('horarios_admin_view', (), {'HorariosAdminView': EmergencyView})()
 
-
 # Importar otros módulos
 try:
     from ui.theme import apply_theme
     print("✅ Tema importado correctamente")
 except ImportError as e:
-    # ... (Tu código de placeholder) ...
     print(f"❌ Error importando tema: {e}")
     def apply_theme(page, theme_mode=None):
         page.theme_mode = theme_mode or ft.ThemeMode.LIGHT
@@ -70,13 +68,12 @@ try:
     from api_client import ApiClient
     print("✅ ApiClient importado correctamente")
 except ImportError as e:
-    # ... (Tu código de placeholder) ...
     print(f"❌ Error importando ApiClient: {e}")
     class ApiClient:
         def __init__(self, page):
             self.page = page
 
-# El resto de tu código permanece igual...
+# Metadatos de las rutas
 ROUTE_META = {
     "dashboard": ("Dashboard", ft.Icons.DASHBOARD),
     "planteles": ("Planteles", ft.Icons.DOMAIN),
@@ -90,7 +87,12 @@ NAV_WIDTH = 250
 
 def main(page: ft.Page):
 
-    # <--- HEMOS MOVIDO LA LÓGICA DEL FAVICON FUERA DE main() ---
+    # <--- ¡CORRECCIÓN 1: ASIGNAR FAVICONS A 'page' AQUÍ! ---
+    # 'favicons' es una propiedad de 'page', no un argumento de 'ft.app()'
+    # Usamos la variable 'favicons_dict' que cargamos globalmente.
+    if favicons_dict:
+        page.favicons = favicons_dict
+    # <--- FIN DE LA CORRECCIÓN 1 ---
 
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
@@ -124,23 +126,26 @@ def main(page: ft.Page):
         page.go("/dashboard")
 
     def build_shell(active_key: str, body: ft.Control):
-        # ... (Todo tu código de build_shell va aquí, sin cambios) ...
-        # (Lo omito por brevedad, pero está idéntico)
         user_session = page.session.get("user_session") or {}
         if not user_session:
             page.go("/")
             return ft.View()
+
         user_data = user_session 
         allowed = get_allowed_routes(user_data.get("rol", ""))
+        
         if active_key not in allowed:
             active_key = allowed[0]
             page.go(f"/{active_key}")
             return ft.View(f"/{active_key}", [])
+
         try:
             active_index = allowed.index(active_key)
         except ValueError:
             active_index = 0
+
         top_app_bar = ft.AppBar()
+
         def toggle_theme(_):
             new_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
             apply_theme(page, new_mode)
@@ -148,7 +153,9 @@ def main(page: ft.Page):
             if top_app_bar and len(top_app_bar.actions) > 0 and isinstance(top_app_bar.actions[0], ft.IconButton):
                 top_app_bar.actions[0].icon = ft.Icons.DARK_MODE if new_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
             page.update()
+
         theme_icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
+
         top_app_bar.title = ft.Text(ROUTE_META.get(active_key, ("Desconocido",))[0], size=20)
         top_app_bar.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         top_app_bar.actions = [
@@ -162,9 +169,11 @@ def main(page: ft.Page):
                 ]
             )
         ]
+
         def nav_change(e):
             selected_route = allowed[e.control.selected_index]
             page.go(f"/{selected_route}")
+
         navigation_rail = ft.NavigationRail(
             selected_index=active_index,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -179,11 +188,13 @@ def main(page: ft.Page):
             ],
             on_change=nav_change,
         )
+
         main_content = ft.Container(
             content=body,
             expand=True,
             padding=ft.padding.all(15),
         )
+
         return ft.View(
             f"/{active_key}",
             [
@@ -200,20 +211,19 @@ def main(page: ft.Page):
             padding=0,
         )
 
-
     def router(route):
-        # ... (Todo tu código de router va aquí, sin cambios) ...
-        # (Lo omito por brevedad, pero está idéntico al que ya tenías)
         page.views.clear()
         user_session = page.session.get("user_session") or {}
         current_route_key = page.route.strip("/")
 
         if not user_session:
             if current_route_key == "register":
+                # Flujo de Registro: va a on_login_success (-> /dashboard)
                 register_view_instance = register_view.RegisterView(page, api, on_success=on_login_success)
                 page.views.append(register_view_instance)
             
             elif current_route_key == "captcha-verify":
+                # Flujo de Captcha: va a on_login_success (-> /dashboard)
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
@@ -226,6 +236,9 @@ def main(page: ft.Page):
                 if current_route_key != "":
                     page.go("/")
                 
+                # Flujo de Login:
+                # - on_success (Google) va a on_login_success (-> /dashboard)
+                # - Login normal va a /captcha-verify (manejado en login_view.py)
                 page.views.append(
                     ft.View(
                         "/",
@@ -235,14 +248,19 @@ def main(page: ft.Page):
                     )
                 )
         else:
+            # Flujo de Usuario Autenticado
             user_rol = user_session.get("rol", "")
+            
             allowed_routes_for_user = get_allowed_routes(user_rol)
+
             if not current_route_key:
                 current_route_key = "dashboard"
+
             if current_route_key not in allowed_routes_for_user:
                 page.go("/dashboard")
                 page.update()
                 return
+
             view_map = {
                 "dashboard": dashboard_view.DashboardView,
                 "planteles": planteles_view.PlantelesView,
@@ -252,7 +270,9 @@ def main(page: ft.Page):
                 "ajustes": settings_view.SettingsView,
                 "horarios": horarios_admin_view.HorariosAdminView,
             }
+
             view_function = view_map.get(current_route_key)
+
             if view_function:
                 try:
                     body = view_function(page, api)
@@ -277,7 +297,7 @@ def main(page: ft.Page):
 
 
 # <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
-# (Esto ahora se ejecuta ANTES de iniciar la app)
+# (Se ejecuta ANTES de iniciar la app para evitar la caché)
 
 # 1. Definir rutas
 ICON_PATH = "ui/assets/icon.png"
@@ -325,12 +345,12 @@ if __name__ == "__main__":
         port=port,
         host="0.0.0.0",
         
-        # <--- CAMBIOS FINALES ---
-        # Pasamos los assets en Base64 directamente a Flet
-        favicons=favicons_dict,
+        # <--- ¡CORRECCIÓN 2: ARGUMENTOS DE APP CORREGIDOS! ---
+        # 'splash' es el argumento correcto para la pantalla de carga
         splash=splash_b64_data_uri,
         
-        # Mantenemos assets_dir por si alguna otra vista lo necesita
-        # (Aunque login_view.py ya no lo usa)
+        # 'favicons' se eliminó de aquí (se asigna a 'page' arriba)
+        
+        # Mantenemos 'assets_dir' por si alguna otra vista lo necesita
         assets_dir="ui/assets" 
     )
