@@ -70,7 +70,7 @@ class ApiClient:
     def login(self, username, password, captcha):
         """Login de usuario (con CAPTCHA). Llama al endpoint /token."""
         response_data = self._make_request("POST", "/token", 
-                                json={"username": username, "password": password, "captcha": captcha})
+                                       json={"username": username, "password": password, "captcha": captcha})
         
         if response_data and "access_token" in response_data:
             token_val = f"Bearer {response_data.get('access_token')}"
@@ -82,7 +82,7 @@ class ApiClient:
     def login_with_google(self, google_id_token: str):
         """Login con Google. Llama al endpoint /auth/google-token."""
         response_data = self._make_request("POST", "/auth/google-token",
-                                json={"idToken": google_id_token})
+                                       json={"idToken": google_id_token})
         
         if response_data and "access_token" in response_data:
             token_val = f"Bearer {response_data.get('access_token')}"
@@ -114,7 +114,6 @@ class ApiClient:
     
     # --- Métodos para Reservas ---
 
-    # --- INICIO DE LA CORRECCIÓN 1 ---
     def get_reservas(self, lab_id: int, start_dt: date, end_dt: date):
         """
         Obtiene las reservas filtradas por lab y rango de fechas.
@@ -125,7 +124,6 @@ class ApiClient:
             "end_dt": str(end_dt)
         }
         return self._make_request("GET", f"/reservas/{lab_id}", params=params)
-    # --- FIN DE LA CORRECCIÓN 1 ---
     
     def create_reserva(self, data):
         return self._make_request("POST", "/reservas", json=data)
@@ -136,7 +134,6 @@ class ApiClient:
     def delete_reserva(self, reserva_id):
         return self._make_request("DELETE", f"/reservas/{reserva_id}")
 
-    # --- INICIO DE LA CORRECCIÓN 2 ---
     def get_horario_laboratorio(self, lab_id: int, start_dt: date, end_dt: date):
         """
         Calcula el horario disponible para un laboratorio en un rango de fechas.
@@ -147,7 +144,13 @@ class ApiClient:
             "fecha_fin": str(end_dt)
         }
         return self._make_request("GET", f"/laboratorios/{lab_id}/horario", params=params)
-    # --- FIN DE LA CORRECCIÓN 2 ---
+
+    # --- INICIO: MÉTODO AÑADIDO (para Dashboard) ---
+    def get_mis_reservas(self):
+        """Obtiene las reservas del usuario actual (requiere token)."""
+        # Endpoint deducido, similar a get_mis_prestamos
+        return self._make_request("GET", "/reservas/mis-solicitudes")
+    # --- FIN: MÉTODO AÑADIDO ---
 
     # --- Métodos para Préstamos / Recursos (de prestamos_view.py) ---
     
