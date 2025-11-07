@@ -96,7 +96,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
 
         # Procesamos la respuesta de NUESTRO backend (¡igual que antes!)
         if resultado and "access_token" in resultado:
-            page.session.set("user_session", resultado)
+            page.session.set("user_session", resultado) 
             on_success() # Llama al on_success (que te redirige)
         else:
             # Error del backend (ej. token inválido, error de servidor)
@@ -152,7 +152,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
     header = ft.Column(
         [
             logo,
-            ft.Text("Gestor de Laboratorios", size=24, weight=ft.FontWeight.BOLD),
+            ft.Text("BLACKLAB", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, opacity=0.8),
         ],
         spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER
