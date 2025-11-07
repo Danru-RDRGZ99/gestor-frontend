@@ -1,6 +1,7 @@
 import os
 import flet as ft
 import sys
+import base64  # <--- 1. AÑADIDO PARA EL FAVICON
 
 # Configuración para Railway
 port = int(os.environ.get("PORT", 8501))
@@ -33,7 +34,7 @@ try:
 except ImportError as e:
     print(f"❌ Error importando vistas: {e}")
     VIEWS_AVAILABLE = False
-    # Crear placeholders de emergencia
+    # ... (Tu código de placeholders de emergencia) ...
     class EmergencyView(ft.Column):
         def __init__(self, *args, **kwargs):
             super().__init__()
@@ -53,11 +54,13 @@ except ImportError as e:
     captcha_view = type('captcha_view', (), {'CaptchaView': EmergencyView})()
     horarios_admin_view = type('horarios_admin_view', (), {'HorariosAdminView': EmergencyView})()
 
+
 # Importar otros módulos
 try:
     from ui.theme import apply_theme
     print("✅ Tema importado correctamente")
 except ImportError as e:
+    # ... (Tu código de placeholder) ...
     print(f"❌ Error importando tema: {e}")
     def apply_theme(page, theme_mode=None):
         page.theme_mode = theme_mode or ft.ThemeMode.LIGHT
@@ -67,6 +70,7 @@ try:
     from api_client import ApiClient
     print("✅ ApiClient importado correctamente")
 except ImportError as e:
+    # ... (Tu código de placeholder) ...
     print(f"❌ Error importando ApiClient: {e}")
     class ApiClient:
         def __init__(self, page):
@@ -85,6 +89,25 @@ ROUTE_META = {
 NAV_WIDTH = 250
 
 def main(page: ft.Page):
+
+    # <--- INICIO: CÓDIGO PARA FORZAR EL FAVICON ---
+    # (Añadido para solucionar problemas de caché)
+    ICON_PATH = "ui/assets/icon.png"  # Ruta a tu ícono
+    try:
+        if os.path.exists(ICON_PATH):
+            with open(ICON_PATH, "rb") as image_file:
+                icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+                # Crear el Data URI
+                page.favicons = {
+                    "": f"data:image/png;base64,{icon_b64}"
+                }
+                print("✅ Favicon cargado exitosamente (Base64).")
+        else:
+            print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
+    except Exception as e:
+        print(f"❌ Error al cargar el favicon: {e}")
+    # <--- FIN: CÓDIGO PARA FORZAR EL FAVICON ---
+
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
     
@@ -112,6 +135,8 @@ def main(page: ft.Page):
         return allowed_map.get(rol, ["dashboard"])
 
     def on_login_success():
+        """Función central de éxito de login: redirige al dashboard."""
+        print("DEBUG: on_login_success llamado, redirigiendo a /dashboard")
         page.go("/dashboard")
 
     def build_shell(active_key: str, body: ft.Control):
@@ -120,12 +145,9 @@ def main(page: ft.Page):
             page.go("/")
             return ft.View()
 
-        # --- INICIO DE LA CORRECCIÓN 1 ---
-        # 'user_session' ES el diccionario de datos del usuario, no está anidado.
         user_data = user_session 
         allowed = get_allowed_routes(user_data.get("rol", ""))
-        # --- FIN DE LA CORRECCIÓN 1 ---
-
+        
         if active_key not in allowed:
             active_key = allowed[0]
             page.go(f"/{active_key}")
@@ -154,7 +176,6 @@ def main(page: ft.Page):
             ft.IconButton(theme_icon, tooltip="Cambiar tema", on_click=toggle_theme),
             ft.PopupMenuButton(
                 items=[
-                    # 'user_data' ahora es correcto gracias a la corrección 1
                     ft.PopupMenuItem(text=user_data.get("user", "Usuario")), 
                     ft.PopupMenuItem(),
                     ft.PopupMenuItem(text="Ajustes", icon=ft.Icons.SETTINGS, on_click=lambda _: page.go("/ajustes")),
@@ -211,9 +232,12 @@ def main(page: ft.Page):
 
         if not user_session:
             if current_route_key == "register":
-                register_view_instance = register_view.RegisterView(page, api, on_success=lambda: page.go("/"))
+                # <--- MODIFICADO: on_success ahora llama a on_login_success ---
+                register_view_instance = register_view.RegisterView(page, api, on_success=on_login_success)
                 page.views.append(register_view_instance)
+            
             elif current_route_key == "captcha-verify":
+                # (Esto ya estaba correcto, usa on_login_success)
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
@@ -225,19 +249,20 @@ def main(page: ft.Page):
             else:
                 if current_route_key != "":
                     page.go("/")
+                
+                # <--- MODIFICADO: on_success ahora llama a on_login_success ---
+                # (Esto ahora es para Google Login, el login normal se redirige solo)
                 page.views.append(
                     ft.View(
                         "/",
-                        [login_view.LoginView(page, api, on_success=lambda: page.go("/captcha-verify"))],
+                        [login_view.LoginView(page, api, on_success=on_login_success)],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
                 )
         else:
-            # --- INICIO DE LA CORRECCIÓN 2 (La que causaba el crash) ---
-            # Leemos el 'rol' directamente del diccionario user_session
+            # (Todo este bloque 'else' es tu código original, sin cambios)
             user_rol = user_session.get("rol", "")
-            # --- FIN DE LA CORRECCIÓN 2 ---
             
             allowed_routes_for_user = get_allowed_routes(user_rol)
 
@@ -270,10 +295,7 @@ def main(page: ft.Page):
                     import traceback
                     traceback.print_exc()
                     body = ft.Column([
-                        # --- INICIO DE LA CORRECCIÓN ---
-                        # Era ft.colors.ERROR, lo cambié a ft.Colors.ERROR
                         ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.Colors.ERROR),
-                        # --- FIN DE LA CORRECCIÓN ---
                         ft.Text(str(e))
                     ], expand=True)
                     page.views.append(build_shell(current_route_key, body))
@@ -294,5 +316,5 @@ if __name__ == "__main__":
         view=ft.AppView.FLET_APP,
         port=port,
         host="0.0.0.0",
-        assets_dir="ui/assets"
+        assets_dir="ui/assets" # <--- Mantenemos esto para el splash.png
     )
