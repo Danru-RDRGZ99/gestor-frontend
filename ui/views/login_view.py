@@ -1,5 +1,7 @@
 import flet as ft
-import os # Necesario para leer variables de entorno
+import os
+import base64  # <--- Importación necesaria
+
 # --- Imports necesarios ---
 from api_client import ApiClient
 from ui.components.buttons import Primary, Ghost
@@ -8,10 +10,8 @@ from ui.components.cards import Card
 from flet.auth.providers import GoogleOAuthProvider 
 
 # --- CONSTANTES DE GOOGLE ---
-# ¡IMPORTANTE! Asegúrate de que estas variables estén definidas en tu entorno
-# Puedes usar un archivo .env y python-dotenv si lo prefieres
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "322045933748-h6d7muuo3thc9o53lktsu92uba3glin3.apps.googleusercontent.com") # Valor por defecto por si acaso
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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") # Valor por defecto por si acaso
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "322045933748-h6d7muuo3thc9o53lktsu92uba3glin3.apps.googleusercontent.com")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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")
 REDIRECT_URL = os.getenv("GOOGLE_REDIRECT_URL", "http://localhost:8551/oauth_callback")
 
 def LoginView(page: ft.Page, api: ApiClient, on_success):
@@ -33,7 +33,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
     # --- Campos del Formulario (Sin cambios) ---
     user_field = ft.TextField(
         label="Usuario o Correo",
-        prefix_icon=ft.Icons.PERSON, # <-- Correcto aquí
+        prefix_icon=ft.Icons.PERSON,
         autofocus=True,
         text_size=14,
     )
@@ -41,7 +41,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
         label="Contraseña",
         password=True,
         can_reveal_password=True,
-        prefix_icon=ft.Icons.LOCK, # <-- Correcto aquí
+        prefix_icon=ft.Icons.LOCK,
         text_size=14,
         on_submit=lambda e: do_login(), # Llama a la función que va al captcha
     )
@@ -64,26 +64,18 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
         page.go("/captcha-verify")
 
 
-    # --- ¡NUEVA FUNCIÓN CALLBACK DE GOOGLE (para page.on_login)! ---
-    def on_page_login(e: ft.LoginEvent): # Cambié el nombre para evitar confusión
-        """
-        Callback que Flet llama DESPUÉS de page.login().
-        Contiene el resultado del login con Google.
-        """
+    # --- Callback de GOOGLE ---
+    def on_page_login(e: ft.LoginEvent):
         if e.error:
-            # Manejar error si Flet no pudo obtener el token
-            error_desc = e.error_description or e.error # Usa descripción si existe
+            error_desc = e.error_description or e.error
             info.value = f"Error de Google: {error_desc}"
             info.color = ft.Colors.RED_400
             page.update()
             return
 
-        # ¡Éxito! Flet nos da el token de Google. 
-        # El token está DENTRO del objeto 'user' en el evento.
         try:
-            # Accede al token ID a través del objeto 'user' y 'token'
             google_id_token = page.auth.user.token.id_token 
-            print(f"DEBUG: ID Token recibido de Flet: {google_id_token[:30]}...") # Imprime inicio del token
+            print(f"DEBUG: ID Token recibido de Flet: {google_id_token[:30]}...")
         except AttributeError:
             info.value = "Error: No se pudo encontrar el ID Token en la respuesta de Flet."
             info.color = ft.Colors.RED_400
@@ -91,44 +83,37 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
             page.update()
             return
             
-        # Llamamos al método del ApiClient (¡igual que antes!)
         resultado = api.login_with_google(google_id_token)
 
-        # Procesamos la respuesta de NUESTRO backend (¡igual que antes!)
         if resultado and "access_token" in resultado:
             page.session.set("user_session", resultado) 
             on_success() # Llama al on_success (que te redirige)
         else:
-            # Error del backend (ej. token inválido, error de servidor)
             error_detalle = resultado.get("detail", "Error desconocido")
             info.value = f"Error de API: {error_detalle}"
             info.color = ft.Colors.RED_400
             page.update()
 
-    # --- ASIGNAR EL CALLBACK A LA PÁGINA ---
     page.on_login = on_page_login
 
-    # --- ¡PROVEEDOR DE GOOGLE (CON ARGUMENTOS REQUERIDOS)! ---
+    # --- Proveedor de GOOGLE ---
     google_provider = GoogleOAuthProvider(
         client_id=GOOGLE_CLIENT_ID,
         client_secret=GOOGLE_CLIENT_SECRET, 
-        redirect_url=REDIRECT_URL # Asegúrate que esta URL esté en Google Cloud Console       
+        redirect_url=REDIRECT_URL
     )
     
-    # --- Función que llama page.login ---
     def login_button_click(e):
-        # Inicia el flujo de login usando el proveedor
-        page.login(google_provider, scope=["openid", "email", "profile"]) # Añadir scope es buena práctica
+        page.login(google_provider, scope=["openid", "email", "profile"])
 
 
     # --- Acciones y Validación ---
     btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
 
-    # Botón de Login con Google (Ahora es un botón normal que llama a page.login)
-    btn_google_login = ft.ElevatedButton( # O ft.OutlinedButton, etc.
+    btn_google_login = ft.ElevatedButton(
         text="Entrar con Google",
-        icon=ft.Icons.LOGIN, # <-- ¡CORREGIDO!
-        on_click=login_button_click, # Llama a la función que inicia page.login
+        icon=ft.Icons.LOGIN,
+        on_click=login_button_click,
         width=260,
     )
 
@@ -142,25 +127,46 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
     pwd_field.on_change = validate
     validate(None)
 
-    logo = ft.Container(
-        content=ft.Image(
-            src="a.png", # O tu URL
-            # 'COVER' hace que la imagen rellene el contenedor
-            # y se recorte si es necesario.
+    # <--- INICIO DE LOS CAMBIOS PARA EL LOGO BASE64 ---
+    
+    # 1. Definir la ruta a la imagen (desde la raíz del proyecto, donde está main.py)
+    LOGO_PATH = "ui/assets/a.png" 
+    
+    logo_b64 = None
+    try:
+        # 2. Comprobar si el archivo existe y leerlo
+        if os.path.exists(LOGO_PATH):
+            with open(LOGO_PATH, "rb") as image_file:
+                logo_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+        else:
+            print(f"ADVERTENCIA: No se encontró el logo en la ruta: {LOGO_PATH}")
+    except Exception as e:
+        print(f"Error al cargar el logo: {e}")
+
+    # 3. Decidir qué contenido mostrar (imagen o ícono de repuesto)
+    if logo_b64:
+        logo_content = ft.Image(
+            src_base64=logo_b64,  # <--- USAR SRC_BASE64
             fit=ft.ImageFit.COVER 
-        ),
+        )
+    else:
+        # Si la imagen falló, muestra el ícono original como repuesto
+        logo_content = ft.Icon(ft.Icons.SCIENCE, size=34) 
+
+    # 4. Crear el contenedor del logo con el contenido decidido
+    logo = ft.Container(
+        content=logo_content, # <--- Asignar el contenido
         width=56, height=56,
         border_radius=999,
         alignment=ft.alignment.center,
-        # 'ANTI_ALIAS' hace que el borde circular se vea suave
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS, 
-        # Quita el bgcolor si tu logo tiene transparencia
-        # bgcolor=ft.Colors.PRIMARY_CONTAINER, 
     )
+    
+    # <--- FIN DE LOS CAMBIOS PARA EL LOGO ---
 
     header = ft.Column(
         [
-            logo,
+            logo, # <--- El logo ya está listo
             ft.Text("BLACKLAB", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, opacity=0.8),
         ],
@@ -180,7 +186,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
                 [ft.Divider(), ft.Text("O", opacity=0.6), ft.Divider()],
                 alignment=ft.MainAxisAlignment.CENTER, width=260
             ),
-            btn_google_login, # Ahora es el ElevatedButton
+            btn_google_login,
             ft.Container(height=10),
             btn_register
         ],
