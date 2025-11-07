@@ -2,13 +2,15 @@ import flet as ft
 from api_client import ApiClient
 from ui.components.cards import Card
 from ui.components.inputs import TextField
-from ui.components.buttons import Primary, Ghost, Icon
+from ui.components.buttons import Primary, Ghost, Icon, Danger, Tonal # Añadidos Danger y Tonal
 
 def PlantelesView(page: ft.Page, api: ApiClient):
 
+    # --- INICIO DE LA CORRECCIÓN 1 ---
     user_session = page.session.get("user_session") or {}
-    user_data = user_session.get("user", {})
+    user_data = user_session # 'user_data' ES el diccionario de sesión
     is_admin = user_data.get("rol") == "admin"
+    # --- FIN DE LA CORRECCIÓN 1 ---
 
     if not is_admin:
         return ft.Text("Acceso denegado. Solo para administradores.", color="red")
@@ -16,10 +18,8 @@ def PlantelesView(page: ft.Page, api: ApiClient):
     # --- Estado y Controles de UI ---
     state = {"edit_for": None}
 
-    # --- (MODIFICADO) Quitar expand=True ---
     nombre_tf = TextField("Nombre")
     direccion_tf = TextField("Dirección")
-    # --- FIN MODIFICACIÓN ---
 
     info_txt = ft.Text("")
     list_panel = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True) # Give scroll to list panel
@@ -29,12 +29,21 @@ def PlantelesView(page: ft.Page, api: ApiClient):
     def render_list():
         nonlocal planteles_cache
         list_panel.controls.clear()
-        planteles_cache = api.get_planteles() or []
-        if not planteles_cache:
+        
+        # --- INICIO DE LA CORRECCIÓN 5 ---
+        data = api.get_planteles()
+        if isinstance(data, dict) and "error" in data:
+            list_panel.controls.append(ft.Text(f"Error al cargar planteles: {data.get('error')}", color=ft.Colors.ERROR))
+            planteles_cache = []
+        elif not data or not isinstance(data, list):
             list_panel.controls.append(ft.Text("No hay planteles registrados."))
+            planteles_cache = []
         else:
+            planteles_cache = data # Guardar datos válidos
             for p_dict in planteles_cache:
                 list_panel.controls.append(plantel_card(p_dict))
+        # --- FIN DE LA CORRECCIÓN 5 ---
+                
         # Update list_panel if it's already on the page
         if list_panel.page:
             list_panel.update()
@@ -42,43 +51,72 @@ def PlantelesView(page: ft.Page, api: ApiClient):
     def reload_info(msg: str | None = None, update_page: bool = True):
         """Recarga la lista y opcionalmente actualiza un mensaje de información."""
         if msg is not None:
-             info_txt.value = msg
-             if update_page and info_txt.page: info_txt.update()
+            info_txt.value = msg
+            if "Error" in msg:
+                info_txt.color = ft.Colors.ERROR
+            else:
+                info_txt.color = None # Color por defecto
+            
+            if update_page and info_txt.page: info_txt.update()
+        
         render_list() # This updates controls *in memory*
-        # No need to update list_panel here, render_list does it if needed
 
-    # --- Acciones CRUD (ahora usan la API) ---
+    # --- INICIO DE LA CORRECCIÓN 2 ---
     def add_plantel(e):
         if not nombre_tf.value or not direccion_tf.value:
             reload_info("Completa los campos", update_page=True); return
 
-        nuevo = api.add_plantel(nombre_tf.value.strip(), direccion_tf.value.strip())
-        if nuevo:
+        # Empaquetar datos en un diccionario
+        payload = {
+            "nombre": nombre_tf.value.strip(),
+            "direccion": direccion_tf.value.strip()
+        }
+        # Llamar al método correcto del API client
+        nuevo = api.create_plantel(payload) 
+
+        # Comprobar la respuesta de error
+        if nuevo and "error" not in nuevo:
             nombre_tf.value = ""; direccion_tf.value = ""
-            # Update text fields explicitly if needed after clearing
             if nombre_tf.page: nombre_tf.update()
             if direccion_tf.page: direccion_tf.update()
-            reload_info(f"Plantel '{nuevo['nombre']}' guardado", update_page=True)
+            reload_info(f"Plantel '{nuevo.get('nombre')}' guardado", update_page=True)
         else:
-            reload_info("Error al guardar el plantel", update_page=True)
+            error_msg = nuevo.get("error", "Error desconocido") if isinstance(nuevo, dict) else "Error"
+            reload_info(f"Error al guardar: {error_msg}", update_page=True)
+    # --- FIN DE LA CORRECCIÓN 2 ---
 
+    # --- INICIO DE LA CORRECCIÓN 3 ---
     def save_edit(pid: int, n_val: str, d_val: str):
         if not n_val or not d_val:
             reload_info("Los campos no pueden estar vacíos en edición.", update_page=True); return
 
-        actualizado = api.update_plantel(pid, n_val.strip(), d_val.strip())
-        if actualizado:
+        # Empaquetar datos en un diccionario
+        payload = {
+            "nombre": n_val.strip(),
+            "direccion": d_val.strip()
+        }
+        # Llamar al método 'update_plantel'
+        actualizado = api.update_plantel(pid, payload)
+
+        # Comprobar la respuesta de error
+        if actualizado and "error" not in actualizado:
             state["edit_for"] = None
             reload_info("Plantel actualizado", update_page=True)
         else:
-            reload_info("Error al actualizar", update_page=True)
+            error_msg = actualizado.get("error", "Error desconocido") if isinstance(actualizado, dict) else "Error"
+            reload_info(f"Error al actualizar: {error_msg}", update_page=True)
+    # --- FIN DE LA CORRECCIÓN 3 ---
 
+    # --- INICIO DE LA CORRECCIÓN 4 ---
     def try_delete_plantel(pid: int):
         resultado = api.delete_plantel(pid)
-        if resultado is True:
+        # Comprobar la respuesta de éxito de _make_request
+        if resultado and resultado.get("success"):
             reload_info("Plantel eliminado", update_page=True)
         else:
-            reload_info("No se pudo eliminar. Asegúrate de que no tenga laboratorios asociados.", update_page=True)
+            error_msg = resultado.get("error", "No se pudo eliminar") if isinstance(resultado, dict) else "Error"
+            reload_info(f"{error_msg}. Asegúrate de que no tenga laboratorios asociados.", update_page=True)
+    # --- FIN DE LA CORRECCIÓN 4 ---
 
     def open_edit(pid: int):
         state["edit_for"] = None if state["edit_for"] == pid else pid
@@ -89,10 +127,14 @@ def PlantelesView(page: ft.Page, api: ApiClient):
         title = ft.Text(f"{p.get('nombre', '')}", size=16, weight=ft.FontWeight.W_600)
         subtitle = ft.Text(p.get('direccion', '-'), size=12, opacity=0.85)
 
+        # --- INICIO DE LA CORRECCIÓN 6 ---
         btns = ft.Row([
             Icon(ft.Icons.EDIT, "Editar", on_click=lambda e, pid=p['id']: open_edit(pid)),
-            Icon(ft.Icons.DELETE, "Eliminar", on_click=lambda e, pid=p['id']: try_delete_plantel(pid)),
+            Icon(ft.Icons.DELETE, "Eliminar", 
+                 on_click=lambda e, pid=p['id']: try_delete_plantel(pid), 
+                 icon_color=ft.Colors.ERROR), # <-- Icon color añadido
         ], spacing=6)
+        # --- FIN DE LA CORRECCIÓN 6 ---
 
         header = ft.Row([ft.Column([title, subtitle], spacing=2, expand=True), btns])
 
@@ -110,8 +152,7 @@ def PlantelesView(page: ft.Page, api: ApiClient):
 
         return Card(content_column, padding=14)
 
-    # --- (MODIFICADO) Layout de la Vista - Sección Agregar ---
-    # Asignar 'col' a los controles para ResponsiveRow
+    # --- Layout de la Vista - Sección Agregar ---
     nombre_tf.col = {"sm": 12, "md": 5}
     direccion_tf.col = {"sm": 12, "md": 5}
     add_button = Primary("Agregar", on_click=add_plantel, height=44)
@@ -129,12 +170,11 @@ def PlantelesView(page: ft.Page, api: ApiClient):
 
     add_section = Card(
         ft.Column([
-             ft.Text("Agregar Nuevo Plantel", size=16, weight=ft.FontWeight.W_600),
-             add_section_form # Usar el ResponsiveRow
+            ft.Text("Agregar Nuevo Plantel", size=16, weight=ft.FontWeight.W_600),
+            add_section_form # Usar el ResponsiveRow
         ]),
         padding=14
     )
-    # --- FIN MODIFICACIÓN ---
 
 
     # Carga inicial de datos
@@ -146,11 +186,9 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             add_section,
             info_txt,
             ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-            # list_panel needs to be wrapped or have expand=True itself if the main Column doesn't scroll
             ft.Container(content=list_panel, expand=True, padding=ft.padding.only(top=10)) # Wrap list_panel
         ],
         expand=True,
         alignment=ft.MainAxisAlignment.START,
-        # scroll=ft.ScrollMode.ADAPTIVE, # Remove scroll from main Column, give it to list_panel container or list_panel itself
         spacing=15
     )
