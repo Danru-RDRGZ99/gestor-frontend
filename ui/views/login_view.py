@@ -144,11 +144,17 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
 
     # --- Construcción del Layout (Sin cambios, excepto el botón de Google) ---
     logo = ft.Container(
-        content=ft.Icon(ft.Icons.SCIENCE, size=34), # <-- Correcto aquí
+        # --- CAMBIO AQUÍ ---
+        content=ft.Image(
+            src="a.png"  # Flet ya sabe que está en "assets"
+        ),
+        # --- FIN DEL CAMBIO ---
         width=56, height=56,
         bgcolor=ft.Colors.PRIMARY_CONTAINER,
-        border_radius=999, alignment=ft.alignment.center,
+        border_radius=999, 
+        alignment=ft.alignment.center,
     )
+
     header = ft.Column(
         [
             logo,
