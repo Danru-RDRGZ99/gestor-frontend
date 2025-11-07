@@ -1,4 +1,3 @@
-# prestamos_view.py
 from __future__ import annotations
 
 import flet as ft
@@ -21,9 +20,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     Vista completa para la gestión y solicitud de préstamos y recursos.
     Incluye pestañas para usuarios y administradores, filtros y paneles de gestión.
     """
+    # --- INICIO DE LA CORRECCIÓN ---
     user_session = page.session.get("user_session") or {}
-    user_data = user_session.get("user", {})
+    user_data = user_session # <-- ¡Esta es la corrección!
     is_admin = user_data.get("rol") == "admin"
+    # --- FIN DE LA CORRECCIÓN ---
 
     # ---------------------------------
     # Paleta adaptativa (CORREGIDO)
@@ -88,7 +89,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             dd_plantel_filter.options = [ft.dropdown.Option("", "Todos")] + \
                                         [ft.dropdown.Option(str(p['id']), p['nombre']) for p in planteles_cache if p.get('id')]
         else:
-            detail = planteles_data.get("detail", "Error") if isinstance(planteles_data, dict) else "Respuesta inválida"
+            detail = planteles_data.get("error", "Error") if isinstance(planteles_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar planteles: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
 
@@ -97,11 +98,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             labs_cache = labs_data
             # We don't populate lab filter options here, depends on plantel filter
         elif error_loading_data is None: # Only record first error
-            detail = labs_data.get("detail", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
+            detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar laboratorios: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
         else:
-            detail = labs_data.get("detail", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
+            detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             print(f"ERROR PrestamosView: (secondary) Error al cargar laboratorios: {detail}")
 
 
@@ -111,12 +112,12 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             dd_tipo_filter.options = [ft.dropdown.Option("", "Todos")] + \
                                      [ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t]
         elif error_loading_data is None: # Only record first error
-            detail = tipos_data.get("detail", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
+            detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar tipos de recurso: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
         else:
-             detail = tipos_data.get("detail", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
-             print(f"ERROR PrestamosView: (secondary) Error al cargar tipos: {detail}")
+            detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
+            print(f"ERROR PrestamosView: (secondary) Error al cargar tipos: {detail}")
 
 
     except Exception as e:
@@ -209,13 +210,22 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         )
 
         # --- VERIFICACIÓN ---
-        if not isinstance(recursos_data, list):
-            detail = recursos_data.get("detail", "Error") if isinstance(recursos_data, dict) else "Respuesta inválida"
+        if isinstance(recursos_data, dict) and "error" in recursos_data:
+            detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar recursos: {detail}"
             print(f"ERROR render_recursos: {error_msg}")
             error_display.value = error_msg
             if error_display.page: error_display.update()
             if recursos_list_display.page: recursos_list_display.update() # Update to show empty state potentially
+            return
+        
+        if not isinstance(recursos_data, list):
+            detail = "Respuesta inválida del API"
+            error_msg = f"Error al cargar recursos: {detail}"
+            print(f"ERROR render_recursos: {error_msg}")
+            error_display.value = error_msg
+            if error_display.page: error_display.update()
+            if recursos_list_display.page: recursos_list_display.update()
             return
         # --- FIN VERIFICACIÓN ---
 
@@ -224,10 +234,10 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             recursos_list_display.controls.append(ft.Text("No se encontraron recursos con los filtros seleccionados.", color=PAL["muted_text"]))
         else:
             for r in recursos:
-                 if isinstance(r, dict): # Ensure 'r' is a dict
-                     recursos_list_display.controls.append(recurso_tile(r))
-                 else:
-                     print(f"WARN render_recursos: Expected dict for resource, got {type(r)}")
+                if isinstance(r, dict): # Ensure 'r' is a dict
+                    recursos_list_display.controls.append(recurso_tile(r))
+                else:
+                    print(f"WARN render_recursos: Expected dict for resource, got {type(r)}")
 
         if page: page.update()
 
@@ -237,8 +247,17 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         solicitudes_data = (api.get_todos_los_prestamos() if is_admin else api.get_mis_prestamos())
 
         # --- VERIFICACIÓN ---
+        if isinstance(solicitudes_data, dict) and "error" in solicitudes_data:
+            detail = solicitudes_data.get("error", "Error")
+            error_msg = f"Error al cargar solicitudes: {detail}"
+            print(f"ERROR render_solicitudes: {error_msg}")
+            error_display.value = error_msg
+            if error_display.page: error_display.update()
+            if solicitudes_list_display.page: solicitudes_list_display.update()
+            return
+
         if not isinstance(solicitudes_data, list):
-            detail = solicitudes_data.get("detail", "Error") if isinstance(solicitudes_data, dict) else "Respuesta inválida"
+            detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar solicitudes: {detail}"
             print(f"ERROR render_solicitudes: {error_msg}")
             error_display.value = error_msg
@@ -266,8 +285,17 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         recursos_data = api.get_recursos() # Admin ve *todos* los recursos
 
         # --- VERIFICACIÓN ---
+        if isinstance(recursos_data, dict) and "error" in recursos_data:
+            detail = recursos_data.get("error", "Error")
+            error_msg = f"Error al cargar lista de admin: {detail}"
+            print(f"ERROR render_admin_recursos: {error_msg}")
+            error_display.value = error_msg
+            if error_display.page: error_display.update()
+            if recursos_admin_list_display.page: recursos_admin_list_display.update()
+            return
+            
         if not isinstance(recursos_data, list):
-            detail = recursos_data.get("detail", "Error") if isinstance(recursos_data, dict) else "Respuesta inválida"
+            detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar lista de admin: {detail}"
             print(f"ERROR render_admin_recursos: {error_msg}")
             error_display.value = error_msg
@@ -281,13 +309,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             recursos_admin_list_display.controls.append(ft.Text("No hay recursos creados."))
         else:
             for r in recursos:
-                 if isinstance(r, dict): # Ensure 'r' is a dict
-                     recursos_admin_list_display.controls.append(admin_recurso_tile(r))
-                 else:
-                      print(f"WARN render_admin_recursos: Expected dict for resource, got {type(r)}")
+                if isinstance(r, dict): # Ensure 'r' is a dict
+                    recursos_admin_list_display.controls.append(admin_recurso_tile(r))
+                else:
+                    print(f"WARN render_admin_recursos: Expected dict for resource, got {type(r)}")
 
         if recursos_admin_list_display.page:
-             recursos_admin_list_display.update()
+            recursos_admin_list_display.update()
 
     def on_filter_change(e):
         pid_val = dd_plantel_filter.value
@@ -316,24 +344,40 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
         # Volver a renderizar la lista de recursos con los nuevos filtros
         render_recursos()
+    
+    # Manejador específico para el filtro de lab (no resetea nada)
+    def on_lab_filter_change(e):
+        lid_val = dd_lab_filter.value
+        if lid_val and lid_val.isdigit():
+            state["filter_lab_id"] = int(lid_val)
+        else:
+            state["filter_lab_id"] = None
+        
+        # No es necesario actualizar plantel_id, ya está seteado
+        # state["filter_plantel_id"] = ... 
+
+        state["filter_estado"] = dd_estado_filter.value or ""
+        state["filter_tipo"] = dd_tipo_filter.value or ""
+        render_recursos()
+
 
     # Asignar handlers
     dd_plantel_filter.on_change = on_filter_change
-    dd_lab_filter.on_change = on_filter_change # Same handler works fine
-    dd_estado_filter.on_change = on_filter_change
-    dd_tipo_filter.on_change = on_filter_change
+    dd_lab_filter.on_change = on_lab_filter_change # <-- Handler separado
+    dd_estado_filter.on_change = on_lab_filter_change # Puede usar el mismo que lab
+    dd_tipo_filter.on_change = on_lab_filter_change # Puede usar el mismo que lab
 
     # ---------------------------------
     # Handlers de Gestión (Admin) - Sin cambios, excepto llamadas a render
     # ---------------------------------
     def update_loan_status(prestamo_id: int, new_status: str):
         result = api.update_prestamo_estado(prestamo_id, new_status)
-        if result and not isinstance(result, dict) or result.get('id'): # Check if valid response
+        if result and "error" not in result: # Check if valid response
             page.snack_bar = ft.SnackBar(ft.Text(f"Préstamo actualizado a '{new_status}'"), open=True)
             render_solicitudes()
             render_recursos() # El estado del recurso puede haber cambiado
         else:
-            detail = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error"
+            detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             page.snack_bar = ft.SnackBar(ft.Text(f"Error al actualizar estado: {detail}"), open=True)
         if page: page.update()
 
@@ -355,8 +399,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         try:
             lab_id = int(dd_recurso_lab_admin.value)
         except (ValueError, TypeError):
-             page.snack_bar = ft.SnackBar(ft.Text("Selecciona un Laboratorio válido."), open=True)
-             if page: page.update(); return
+            page.snack_bar = ft.SnackBar(ft.Text("Selecciona un Laboratorio válido."), open=True)
+            if page: page.update(); return
 
         tipo = tf_recurso_tipo.value.strip()
         estado = dd_recurso_estado_admin.value
@@ -375,7 +419,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 msg = "Recurso creado"
 
             # Check if API call was successful
-            if result and not isinstance(result, dict) or result.get('id'):
+            if result and "error" not in result:
                 page.snack_bar = ft.SnackBar(ft.Text(msg), open=True)
                 clear_recurso_form()
                 render_admin_recursos()
@@ -388,7 +432,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     dd_tipo_filter.options = [ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache]
                     if dd_tipo_filter.page: dd_tipo_filter.update()
             else:
-                detail = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error"
+                detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
                 page.snack_bar = ft.SnackBar(ft.Text(f"Error al guardar el recurso: {detail}"), open=True)
 
         except Exception as e:
@@ -428,13 +472,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
         result = api.delete_recurso(recurso_id)
 
-        # Check API response (True for success, dict for error)
-        if result is True:
+        # Check API response
+        if result and "success" in result:
             page.snack_bar = ft.SnackBar(ft.Text("Recurso eliminado."), open=True)
             render_admin_recursos()
             render_recursos()
         else:
-            detail = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error"
+            detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             page.snack_bar = ft.SnackBar(ft.Text(f"Error al eliminar: {detail}"), open=True)
         if page: page.update()
 
@@ -590,13 +634,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
         result = api.create_prestamo(prestamo_data)
 
-        if result and not isinstance(result, dict) or result.get('id'):
+        if result and "error" not in result:
             page.snack_bar = ft.SnackBar(ft.Text("Solicitud creada con éxito."), open=True)
             close_solicitud_sheet(None)
             render_recursos()
             render_solicitudes()
         else:
-            detail = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error"
+            detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             page.snack_bar = ft.SnackBar(ft.Text(f"Error al crear la solicitud: {detail}"), open=True)
         if page: page.update()
 
@@ -624,17 +668,17 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # ---------------------------------
     # Helpers y Layout General (Mostly unchanged)
     # ---------------------------------
-    def format_iso_date(date_str: str | None) -> str:
-        # Duplicated function - keep consistent with dashboard
-        if not date_str: return ""
-        try:
-            if isinstance(date_str, str) and date_str.endswith('Z'):
-                date_str = date_str[:-1] + '+00:00'
-            dt = datetime.fromisoformat(str(date_str))
-            return dt.strftime("%Y-%m-%d %H:%M")
-        except (ValueError, TypeError) as e:
-            print(f"WARN format_iso_date: Could not format '{date_str}': {e}")
-            return str(date_str)
+    # def format_iso_date(date_str: str | None) -> str:
+    #     # Duplicated function - keep consistent with dashboard
+    #     if not date_str: return ""
+    #     try:
+    #         if isinstance(date_str, str) and date_str.endswith('Z'):
+    #             date_str = date_str[:-1] + '+00:00'
+    #         dt = datetime.fromisoformat(str(date_str))
+    #         return dt.strftime("%Y-%m-%d %H:%M")
+    #     except (ValueError, TypeError) as e:
+    #         print(f"WARN format_iso_date: Could not format '{date_str}': {e}")
+    #         return str(date_str)
 
 
     def chip_estado(txt: str):
