@@ -17,8 +17,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
     Vista para la gestión de reservas de laboratorios.
     Utiliza el endpoint /laboratorios/{lab_id}/horario para obtener los slots.
     """
+    # --- INICIO DE LA CORRECCIÓN 1 ---
     user_session = page.session.get("user_session") or {}
-    user_data = user_session.get("user", {})
+    user_data = user_session # <-- ¡Esta es la corrección!
+    # --- FIN DE LA CORRECCIÓN 1 ---
 
     # --- Controles de Filtros ---
     dd_plantel = ft.Dropdown(label="Plantel", width=260, options=[])
@@ -43,7 +45,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             planteles_cache = planteles_data
             dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
         else:
-            error_detail = planteles_data.get("detail", "Error") if isinstance(planteles_data, dict) else "Respuesta inesperada"
+            error_detail = planteles_data.get("error", "Error") if isinstance(planteles_data, dict) else "Respuesta inesperada"
             error_loading_data = f"Error al cargar planteles: {error_detail}"
             print(f"ERROR ReservasView (Planteles): {error_loading_data}")
 
@@ -51,7 +53,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             labs_cache = labs_data
             lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
         else:
-            error_detail = labs_data.get("detail", "Error") if isinstance(labs_data, dict) else "Respuesta inesperada"
+            error_detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inesperada"
             if error_loading_data: error_loading_data += f"\nError al cargar laboratorios: {error_detail}"
             else: error_loading_data = f"Error al cargar laboratorios: {error_detail}"
             print(f"ERROR ReservasView (Labs): {error_loading_data}")
@@ -122,19 +124,26 @@ def ReservasView(page: ft.Page, api: ApiClient):
         grid.disabled = True
         page.update(info, grid)
 
-        # Al crear, pasamos el datetime "naive" (local)
-        # La API debe interpretarlo correctamente o convertirlo a UTC si es necesario.
-        result = api.create_reserva(lab_id, user_data["id"], s, f)
+        # --- INICIO DE LA CORRECCIÓN 2 ---
+        # Empaquetamos los datos como espera api_client.create_reserva
+        payload = {
+            "laboratorio_id": lab_id,
+            "usuario_id": user_data.get("id"), # Obtenemos el ID del usuario de la sesión
+            "inicio": s.isoformat(), # Enviamos como string ISO
+            "fin": f.isoformat()
+        }
+        result = api.create_reserva(payload)
+        # --- FIN DE LA CORRECCIÓN 2 ---
 
         grid.disabled = False
         info.color = None
 
-        if result and result.get("id"):
+        if result and "error" not in result:
             info.value = "Reserva creada con éxito."
             state["confirm_for"] = None
             render()
         else:
-            error_detail = result.get("detail") if isinstance(result, dict) else "Error desconocido"
+            error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
             page.update(info, grid)
@@ -145,18 +154,20 @@ def ReservasView(page: ft.Page, api: ApiClient):
         grid.disabled = True
         page.update(info, grid)
 
-        result = api.cancel_reserva(rid)
+        # --- INICIO DE LA CORRECCIÓN 3 ---
+        # El método en api_client se llama 'delete_reserva'
+        result = api.delete_reserva(rid)
+        # --- FIN DE LA CORRECCIÓN 3 ---
 
         grid.disabled = False
         info.color = None
         state["confirm_for"] = None
 
-        if isinstance(result, dict) and result.get('id'):
+        if result and "success" in result: # delete_reserva devuelve {"success": True}
             info.value = "Reserva cancelada."
             render()
         else:
-            error_detail = result.get("detail") if isinstance(result, dict) else str(result)
-            if error_detail is None: error_detail = "Error desconocido"
+            error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
             page.update(info, grid)
@@ -219,8 +230,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if found_res_data:
                 rid = found_res_data.get('id')
                 user_info = found_res_data.get('usuario', {}) 
-                reserving_user_id = user_info.get('id')      
-                nombre = user_info.get('nombre', 'N/A')      
+                reserving_user_id = user_info.get('id')
+                nombre = user_info.get('nombre', 'N/A')
 
                 current_user_id = user_data.get("id")
                 current_user_rol = user_data.get("rol")
@@ -250,6 +261,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
             # --- CASO 2: Slot Disponible ---
             elif k_tipo in ["disponible", "libre"]:
+                # Esta línea (340 en el archivo original) ahora funciona gracias a la CORRECCIÓN 1
                 is_allowed_to_create = user_data.get("rol") in ["admin", "docente"]
                 reserve_button = Primary(label,
                                          on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
@@ -260,7 +272,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
             # --- CASO 3: Slot No Habilitado ---
             else:
-                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50));
+                tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50));
 
         day_column = ft.Column([title, ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False)], spacing=10)
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
@@ -277,13 +289,20 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         lid = int(dd_lab.value)
         days_to_display = five_weekdays_from(window["start"])
-        end_dt_range_api = days_to_display[-1] + timedelta(days=1)
+        end_dt_range_api = days_to_display[-1] + timedelta(days=1) # El final es exclusivo
 
         # 1. Obtener Horario
         horario_result = api.get_horario_laboratorio(lid, days_to_display[0], days_to_display[-1])
-        if not isinstance(horario_result, dict):
-            error_detail = horario_result.get("detail") if isinstance(horario_result, dict) else "Error desconocido"
+        if isinstance(horario_result, dict) and "error" in horario_result:
+            error_detail = horario_result.get("error", "Error desconocido")
             info.value = f"Error al cargar horario: {error_detail}"
+            info.color = ft.Colors.ERROR
+            print(f"ERROR render_grid (horario): {info.value}")
+            if grid.page and info.page: info.update()
+            return
+        
+        if not isinstance(horario_result, dict):
+            info.value = f"Error al cargar horario: Respuesta inesperada del API ({type(horario_result)})"
             info.color = ft.Colors.ERROR
             print(f"ERROR render_grid (horario): {info.value}")
             if grid.page and info.page: info.update()
@@ -295,7 +314,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if isinstance(api_result, list):
             all_reservas = api_result
         else:
-            error_detail = api_result.get("detail") if isinstance(api_result, dict) else "Error desconocido"
+            error_detail = api_result.get("error", "Error desconocido") if isinstance(api_result, dict) else "Error"
             info.value = f"Error al cargar reservas: {error_detail}"
             info.color = ft.Colors.ERROR
             print(f"ERROR render_grid (reservas): {info.value}")
@@ -356,15 +375,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
     if planteles_cache:
         first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
         if first_plantel_id_str:
-             dd_plantel.value = first_plantel_id_str
-             on_change_plantel(SimpleControlEvent(control=dd_plantel)) # Llama para cargar labs y renderizar
+            dd_plantel.value = first_plantel_id_str
+            on_change_plantel(SimpleControlEvent(control=dd_plantel)) # Llama para cargar labs y renderizar
         else:
-             info.value = "El primer plantel no tiene un ID válido."
-             info.color = ft.Colors.ERROR
-             days = five_weekdays_from(window["start"])
-             head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · (Sin Laboratorio)"
-             if info.page: info.update()
-             if head_label.page: head_label.update()
+            info.value = "El primer plantel no tiene un ID válido."
+            info.color = ft.Colors.ERROR
+            days = five_weekdays_from(window["start"])
+            head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · (Sin Laboratorio)"
+            if info.page: info.update()
+            if head_label.page: head_label.update()
 
     else:
         info.value = "No hay planteles configurados."
