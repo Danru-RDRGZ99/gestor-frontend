@@ -173,10 +173,14 @@ def main(page: ft.Page):
         user_data = user_session 
         allowed = get_allowed_routes(user_data.get("rol", ""))
         
-        # <--- INICIO: LÓGICA DE DETECCIÓN MÓVIL ---
-        is_mobile = page.window_width is not None and page.window_width < MOBILE_BREAKPOINT
-        print(f"Construyendo shell. Ancho: {page.window_width}. Es móvil: {is_mobile}")
-        # <--- FIN: LÓGICA DE DETECCIÓN MÓVIL ---
+        # <--- INICIO: LÓGICA DE DETECCIÓN MÓVIL (CORREGIDA) ---
+        # Usamos page.width en lugar de page.window_width
+        is_mobile = False # Default to desktop
+        if page.width: # Check if page.width has a value
+            is_mobile = page.width < MOBILE_BREAKPOINT
+        
+        print(f"Construyendo shell. Ancho: {page.width}. Es móvil: {is_mobile}")
+        # <--- FIN: LÓGICA DE DETECCIÓN MÓVIL (CORREGIDA) ---
         
         if active_key not in allowed:
             active_key = allowed[0]
@@ -352,7 +356,7 @@ def main(page: ft.Page):
         Vuelve a cargar la ruta actual para que 'build_shell'
         pueda redibujar la navegación correcta (lateral o inferior).
         """
-        print(f"Nuevo tamaño detectado: {page.window_width}")
+        print(f"Nuevo tamaño detectado: {page.width}") # <-- También cambiado a page.width
         page.go(page.route)
     # <--- FIN: MANEJADOR DE CAMBIO DE TAMAÑO ---
     
