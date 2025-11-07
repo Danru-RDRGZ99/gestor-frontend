@@ -88,11 +88,14 @@ NAV_WIDTH = 250
 def main(page: ft.Page):
 
     # <--- ¡CORRECCIÓN 1: ASIGNAR FAVICONS A 'page' AQUÍ! ---
-    # 'favicons' es una propiedad de 'page', no un argumento de 'ft.app()'
-    # Usamos la variable 'favicons_dict' que cargamos globalmente.
     if favicons_dict:
         page.favicons = favicons_dict
-    # <--- FIN DE LA CORRECCIÓN 1 ---
+        
+    # <--- ¡CORRECCIÓN 2: ASIGNAR SPLASH A 'page' AQUÍ! ---
+    # 'splash' también es una propiedad de 'page', no un argumento de 'ft.app()'
+    if splash_b64_data_uri:
+        page.splash = ft.Image(src_base64=splash_b64_data_uri)
+    # <--- FIN DE LAS CORRECCIONES ---
 
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
@@ -305,7 +308,7 @@ SPLASH_PATH = "ui/assets/splash.png"
 
 # 2. Preparar variables
 favicons_dict = {}
-splash_b64_data_uri = None
+splash_b64_data_uri = None # <--- CORRECCIÓN: CAMBIADO A SOLO EL 'data URI'
 
 # 3. Cargar Favicon (Ícono de la App)
 try:
@@ -326,15 +329,13 @@ try:
     if os.path.exists(SPLASH_PATH):
         with open(SPLASH_PATH, "rb") as image_file:
             splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}"
+            # Guardamos solo el string del 'data URI'
+            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
             print("✅ Pantalla de carga (splash.png) cargada en Base64.")
     else:
         print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
 except Exception as e:
     print(f"❌ Error al cargar la pantalla de carga: {e}")
-
-# <--- FIN: LÓGICA DE CARGA DE ASSETS ---
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
@@ -344,13 +345,5 @@ if __name__ == "__main__":
         view=ft.AppView.FLET_APP,
         port=port,
         host="0.0.0.0",
-        
-        # <--- ¡CORRECCIÓN 2: ARGUMENTOS DE APP CORREGIDOS! ---
-        # 'splash' es el argumento correcto para la pantalla de carga
-        splash=splash_b64_data_uri,
-        
-        # 'favicons' se eliminó de aquí (se asigna a 'page' arriba)
-        
-        # Mantenemos 'assets_dir' por si alguna otra vista lo necesita
         assets_dir="ui/assets" 
     )
