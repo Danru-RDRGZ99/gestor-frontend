@@ -88,7 +88,7 @@ def main(page: ft.Page):
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
     
-    page.title = "Gestor de Laboratorios"
+    page.title = "BLACKLAB"
     page.padding = 0
     page.window_min_width = 1100
     page.window_min_height = 680
