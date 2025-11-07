@@ -1,7 +1,7 @@
 import os
 import flet as ft
 import sys
-import base64  # <--- 1. AÑADIDO PARA EL FAVICON
+import base64  # <--- Importación clave
 
 # Configuración para Railway
 port = int(os.environ.get("PORT", 8501))
@@ -90,23 +90,7 @@ NAV_WIDTH = 250
 
 def main(page: ft.Page):
 
-    # <--- INICIO: CÓDIGO PARA FORZAR EL FAVICON ---
-    # (Añadido para solucionar problemas de caché)
-    ICON_PATH = "ui/assets/icon.png"  # Ruta a tu ícono
-    try:
-        if os.path.exists(ICON_PATH):
-            with open(ICON_PATH, "rb") as image_file:
-                icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-                # Crear el Data URI
-                page.favicons = {
-                    "": f"data:image/png;base64,{icon_b64}"
-                }
-                print("✅ Favicon cargado exitosamente (Base64).")
-        else:
-            print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
-    except Exception as e:
-        print(f"❌ Error al cargar el favicon: {e}")
-    # <--- FIN: CÓDIGO PARA FORZAR EL FAVICON ---
+    # <--- HEMOS MOVIDO LA LÓGICA DEL FAVICON FUERA DE main() ---
 
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
@@ -140,26 +124,23 @@ def main(page: ft.Page):
         page.go("/dashboard")
 
     def build_shell(active_key: str, body: ft.Control):
+        # ... (Todo tu código de build_shell va aquí, sin cambios) ...
+        # (Lo omito por brevedad, pero está idéntico)
         user_session = page.session.get("user_session") or {}
         if not user_session:
             page.go("/")
             return ft.View()
-
         user_data = user_session 
         allowed = get_allowed_routes(user_data.get("rol", ""))
-        
         if active_key not in allowed:
             active_key = allowed[0]
             page.go(f"/{active_key}")
             return ft.View(f"/{active_key}", [])
-
         try:
             active_index = allowed.index(active_key)
         except ValueError:
             active_index = 0
-
         top_app_bar = ft.AppBar()
-
         def toggle_theme(_):
             new_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
             apply_theme(page, new_mode)
@@ -167,9 +148,7 @@ def main(page: ft.Page):
             if top_app_bar and len(top_app_bar.actions) > 0 and isinstance(top_app_bar.actions[0], ft.IconButton):
                 top_app_bar.actions[0].icon = ft.Icons.DARK_MODE if new_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
             page.update()
-
         theme_icon = ft.Icons.DARK_MODE if page.theme_mode == ft.ThemeMode.LIGHT else ft.Icons.LIGHT_MODE
-
         top_app_bar.title = ft.Text(ROUTE_META.get(active_key, ("Desconocido",))[0], size=20)
         top_app_bar.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         top_app_bar.actions = [
@@ -183,11 +162,9 @@ def main(page: ft.Page):
                 ]
             )
         ]
-
         def nav_change(e):
             selected_route = allowed[e.control.selected_index]
             page.go(f"/{selected_route}")
-
         navigation_rail = ft.NavigationRail(
             selected_index=active_index,
             label_type=ft.NavigationRailLabelType.ALL,
@@ -202,13 +179,11 @@ def main(page: ft.Page):
             ],
             on_change=nav_change,
         )
-
         main_content = ft.Container(
             content=body,
             expand=True,
             padding=ft.padding.all(15),
         )
-
         return ft.View(
             f"/{active_key}",
             [
@@ -225,19 +200,20 @@ def main(page: ft.Page):
             padding=0,
         )
 
+
     def router(route):
+        # ... (Todo tu código de router va aquí, sin cambios) ...
+        # (Lo omito por brevedad, pero está idéntico al que ya tenías)
         page.views.clear()
         user_session = page.session.get("user_session") or {}
         current_route_key = page.route.strip("/")
 
         if not user_session:
             if current_route_key == "register":
-                # <--- MODIFICADO: on_success ahora llama a on_login_success ---
                 register_view_instance = register_view.RegisterView(page, api, on_success=on_login_success)
                 page.views.append(register_view_instance)
             
             elif current_route_key == "captcha-verify":
-                # (Esto ya estaba correcto, usa on_login_success)
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
@@ -250,8 +226,6 @@ def main(page: ft.Page):
                 if current_route_key != "":
                     page.go("/")
                 
-                # <--- MODIFICADO: on_success ahora llama a on_login_success ---
-                # (Esto ahora es para Google Login, el login normal se redirige solo)
                 page.views.append(
                     ft.View(
                         "/",
@@ -261,19 +235,14 @@ def main(page: ft.Page):
                     )
                 )
         else:
-            # (Todo este bloque 'else' es tu código original, sin cambios)
             user_rol = user_session.get("rol", "")
-            
             allowed_routes_for_user = get_allowed_routes(user_rol)
-
             if not current_route_key:
                 current_route_key = "dashboard"
-
             if current_route_key not in allowed_routes_for_user:
                 page.go("/dashboard")
                 page.update()
                 return
-
             view_map = {
                 "dashboard": dashboard_view.DashboardView,
                 "planteles": planteles_view.PlantelesView,
@@ -283,9 +252,7 @@ def main(page: ft.Page):
                 "ajustes": settings_view.SettingsView,
                 "horarios": horarios_admin_view.HorariosAdminView,
             }
-
             view_function = view_map.get(current_route_key)
-
             if view_function:
                 try:
                     body = view_function(page, api)
@@ -308,6 +275,47 @@ def main(page: ft.Page):
     page.on_route_change = router
     page.go(page.route)
 
+
+# <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
+# (Esto ahora se ejecuta ANTES de iniciar la app)
+
+# 1. Definir rutas
+ICON_PATH = "ui/assets/icon.png"
+SPLASH_PATH = "ui/assets/splash.png"
+
+# 2. Preparar variables
+favicons_dict = {}
+splash_b64_data_uri = None
+
+# 3. Cargar Favicon (Ícono de la App)
+try:
+    if os.path.exists(ICON_PATH):
+        with open(ICON_PATH, "rb") as image_file:
+            icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+            favicons_dict = {
+                "": f"data:image/png;base64,{icon_b64}"
+            }
+            print("✅ Favicon (icon.png) cargado en Base64.")
+    else:
+        print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
+except Exception as e:
+    print(f"❌ Error al cargar el favicon: {e}")
+
+# 4. Cargar Splash (Pantalla de Carga)
+try:
+    if os.path.exists(SPLASH_PATH):
+        with open(SPLASH_PATH, "rb") as image_file:
+            splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}"
+            print("✅ Pantalla de carga (splash.png) cargada en Base64.")
+    else:
+        print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
+except Exception as e:
+    print(f"❌ Error al cargar la pantalla de carga: {e}")
+
+# <--- FIN: LÓGICA DE CARGA DE ASSETS ---
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
     print(f"🚀 Iniciando aplicación en puerto {port}")
@@ -316,5 +324,13 @@ if __name__ == "__main__":
         view=ft.AppView.FLET_APP,
         port=port,
         host="0.0.0.0",
-        assets_dir="ui/assets" # <--- Mantenemos esto para el splash.png
+        
+        # <--- CAMBIOS FINALES ---
+        # Pasamos los assets en Base64 directamente a Flet
+        favicons=favicons_dict,
+        splash=splash_b64_data_uri,
+        
+        # Mantenemos assets_dir por si alguna otra vista lo necesita
+        # (Aunque login_view.py ya no lo usa)
+        assets_dir="ui/assets" 
     )
