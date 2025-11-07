@@ -329,7 +329,7 @@ try:
     if os.path.exists(SPLASH_PATH):
         with open(SPLASH_PATH, "rb") as image_file:
             splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            # Guardamos solo el string del 'data URI'
+            # Guardamos solo el string del 'data URIa'
             splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
             print("✅ Pantalla de carga (splash.png) cargada en Base64.")
     else:
