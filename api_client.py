@@ -148,11 +148,11 @@ class ApiClient:
     # --- INICIO: MÉTODO AÑADIDO (para Dashboard) ---
     def get_mis_reservas(self):
         """Obtiene las reservas del usuario actual (requiere token)."""
-        # Endpoint deducido, similar a get_mis_prestamos
-        # --- CORRECCIÓN ---
-        # El endpoint /reservas/mis-solicitudes no existe y choca con /reservas/{lab_id}
-        # Probamos con el endpoint estándar /reservas/me
-        return self._make_request("GET", "/reservas/me")
+        # --- CORRECCIÓN 2 ---
+        # Ni "/me" ni "/mis-solicitudes" funcionan por un bug de rutas en el backend.
+        # Probamos con el endpoint raíz "/reservas", que debería filtrar
+        # automáticamente por el usuario autenticado.
+        return self._make_request("GET", "/reservas")
     # --- FIN: MÉTODO AÑADIDO ---
 
     # --- Métodos para Préstamos / Recursos (de prestamos_view.py) ---
