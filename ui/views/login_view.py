@@ -1,152 +1,197 @@
 import flet as ft
+import os # Necesario para leer variables de entorno
+# --- Imports necesarios ---
 from api_client import ApiClient
-from ui.components.buttons import Primary, Secondary, TextButton
-from ui.components.inputs import TextField
+from ui.components.buttons import Primary, Ghost
+from ui.components.cards import Card
+# --- Import Proveedor ---
+from flet.auth.providers import GoogleOAuthProvider 
 
-def LoginView(page: ft.Page, api: ApiClient):
-    # --- Estado para mostrar/ocultar contraseña y CAPTCHA ---
-    password_visible = ft.Ref[ft.IconButton]()
-    captcha_row_visible = ft.Ref[ft.Row]()
-    captcha_img = ft.Ref[ft.Image]()
-    
-    # --- Referencias a los campos de entrada ---
-    username_field = TextField("Usuario o Correo")
-    password_field = TextField("Contraseña", password=True, can_reveal_password=True)
-    captcha_field = TextField("CAPTCHA", width=150)
+# --- CONSTANTES DE GOOGLE ---
+# ¡IMPORTANTE! Asegúrate de que estas variables estén definidas en tu entorno
+# Puedes usar un archivo .env y python-dotenv si lo prefieres
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "322045933748-h6d7muuo3thc9o53lktsu92uba3glin3.apps.googleusercontent.com") # Valor por defecto por si acaso
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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") # Valor por defecto por si acaso
+REDIRECT_URL = os.getenv("GOOGLE_REDIRECT_URL", "http://localhost:8551/oauth_callback")
 
-    # --- Mensaje de error/información ---
-    info_text = ft.Text("", color=ft.colors.RED_500, size=12)
+def LoginView(page: ft.Page, api: ApiClient, on_success):
 
-    # --- Handlers de eventos ---
-    def reload_captcha():
-        # Llama a la API para obtener una nueva imagen de CAPTCHA
-        captcha_b64 = api.get_captcha_image()
-        if captcha_b64:
-            captcha_img.current.src_base64 = captcha_b64
-            captcha_img.current.update()
-            captcha_field.current.value = ""
-            captcha_field.current.update()
+    # --- Verificar configuración ---
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+         return ft.View(
+             "/login",
+             [ft.Text("Error: Faltan GOOGLE_CLIENT_ID o GOOGLE_CLIENT_SECRET en las variables de entorno.")]
+         )
+
+    # --- Estado y Mensajes ---
+    info = ft.Text("", color=ft.Colors.RED_400, size=12)
+    flash = page.session.get("flash")
+    if flash:
+        info.value = flash
+        page.session.remove("flash")
+
+    # --- Campos del Formulario (Sin cambios) ---
+    user_field = ft.TextField(
+        label="Usuario o Correo",
+        prefix_icon=ft.Icons.PERSON, # <-- Correcto aquí
+        autofocus=True,
+        text_size=14,
+    )
+    pwd_field = ft.TextField(
+        label="Contraseña",
+        password=True,
+        can_reveal_password=True,
+        prefix_icon=ft.Icons.LOCK, # <-- Correcto aquí
+        text_size=14,
+        on_submit=lambda e: do_login(), # Llama a la función que va al captcha
+    )
+
+    def do_login():
+        """Guarda credenciales y redirige a la vista de CAPTCHA."""
+        username = user_field.value.strip()
+        password = pwd_field.value or ""
+
+        if not username or not password:
+            info.value = "Por favor, completa ambos campos."
+            info.color = ft.Colors.RED_400
+            page.update()
+            return
+
+        page.session.set("login_attempt", {
+            "username": username,
+            "password": password
+        })
+        page.go("/captcha-verify")
+
+
+    # --- ¡NUEVA FUNCIÓN CALLBACK DE GOOGLE (para page.on_login)! ---
+    def on_page_login(e: ft.LoginEvent): # Cambié el nombre para evitar confusión
+        """
+        Callback que Flet llama DESPUÉS de page.login().
+        Contiene el resultado del login con Google.
+        """
+        if e.error:
+            # Manejar error si Flet no pudo obtener el token
+            error_desc = e.error_description or e.error # Usa descripción si existe
+            info.value = f"Error de Google: {error_desc}"
+            info.color = ft.Colors.RED_400
+            page.update()
+            return
+
+        # ¡Éxito! Flet nos da el token de Google. 
+        # El token está DENTRO del objeto 'user' en el evento.
+        try:
+            # Accede al token ID a través del objeto 'user' y 'token'
+            google_id_token = page.auth.user.token.id_token 
+            print(f"DEBUG: ID Token recibido de Flet: {google_id_token[:30]}...") # Imprime inicio del token
+        except AttributeError:
+            info.value = "Error: No se pudo encontrar el ID Token en la respuesta de Flet."
+            info.color = ft.Colors.RED_400
+            print("ERROR: page.auth.user.token.id_token no encontrado en LoginEvent.")
+            page.update()
+            return
+            
+        # Llamamos al método del ApiClient (¡igual que antes!)
+        resultado = api.login_with_google(google_id_token)
+
+        # Procesamos la respuesta de NUESTRO backend (¡igual que antes!)
+        if resultado and "access_token" in resultado:
+            page.session.set("user_session", resultado)
+            on_success() # Llama al on_success (que te redirige)
         else:
-            info_text.value = "Error al cargar CAPTCHA."
+            # Error del backend (ej. token inválido, error de servidor)
+            error_detalle = resultado.get("detail", "Error desconocido")
+            info.value = f"Error de API: {error_detalle}"
+            info.color = ft.Colors.RED_400
             page.update()
 
-    def do_login(e):
-        info_text.value = "" # Limpiar mensaje previo
+    # --- ASIGNAR EL CALLBACK A LA PÁGINA ---
+    page.on_login = on_page_login
 
-        if not username_field.value or not password_field.value:
-            info_text.value = "Por favor, ingresa usuario y contraseña."
-            page.update()
-            return
-
-        # Si el CAPTCHA no es visible, lo mostramos primero
-        if not captcha_row_visible.current.visible:
-            captcha_row_visible.current.visible = True
-            reload_captcha() # Cargar el primer CAPTCHA
-            page.update()
-            return
-        
-        # Si ya está visible, intentamos el login con CAPTCHA
-        if not captcha_field.value:
-            info_text.value = "Por favor, ingresa el texto del CAPTCHA."
-            page.update()
-            return
-
-        response = api.login(
-            username_field.value,
-            password_field.value,
-            captcha_field.value
-        )
-
-        if response and "access_token" in response:
-            page.session.set("user_session", response.get("user"))
-            page.go("/dashboard")
-        else:
-            error_message = response.get("error", "Error de inicio de sesión. Verifica tus credenciales y el CAPTCHA.")
-            info_text.value = error_message
-            reload_captcha() # Recargar CAPTCHA en caso de error
-            page.update()
+    # --- ¡PROVEEDOR DE GOOGLE (CON ARGUMENTOS REQUERIDOS)! ---
+    google_provider = GoogleOAuthProvider(
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET, 
+        redirect_url=REDIRECT_URL # Asegúrate que esta URL esté en Google Cloud Console       
+    )
     
-    def do_login_with_google(e):
-        # Esta es una simulación. En una app real, necesitarías:
-        # 1. Un cliente OAuth de Google configurado en tu frontend.
-        # 2. Abrir una ventana/pestaña para la autenticación de Google.
-        # 3. Recibir el ID Token de Google después de que el usuario se autentique.
-        # 4. Enviar ese ID Token a tu backend para verificación.
-        # 5. Si el backend valida el token y retorna un token de sesión/JWT propio,
-        #    entonces proceder con el login en tu aplicación.
+    # --- Función que llama page.login ---
+    def login_button_click(e):
+        # Inicia el flujo de login usando el proveedor
+        page.login(google_provider, scope=["openid", "email", "profile"]) # Añadir scope es buena práctica
 
-        # Por ahora, simplemente muestra un mensaje.
-        print("Intentando iniciar sesión con Google (simulado)...")
-        info_text.value = "Funcionalidad de Google Login en desarrollo."
+
+    # --- Acciones y Validación ---
+    btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
+
+    # Botón de Login con Google (Ahora es un botón normal que llama a page.login)
+    btn_google_login = ft.ElevatedButton( # O ft.OutlinedButton, etc.
+        text="Entrar con Google",
+        icon=ft.Icons.LOGIN, # <-- ¡CORREGIDO!
+        on_click=login_button_click, # Llama a la función que inicia page.login
+        width=260,
+    )
+
+    btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
+
+    def validate(_):
+        btn_login.disabled = not (user_field.value.strip() and pwd_field.value)
         page.update()
-        # Aquí iría la lógica real de inicio de sesión con Google
 
-    def go_to_register(e):
-        page.go("/register")
+    user_field.on_change = validate
+    pwd_field.on_change = validate
+    validate(None)
 
-    # --- Layout de la vista ---
-    return ft.View(
-        "/login",
+    # --- Construcción del Layout (Sin cambios, excepto el botón de Google) ---
+    logo = ft.Container(
+        content=ft.Icon(ft.Icons.SCIENCE, size=34), # <-- Correcto aquí
+        width=56, height=56,
+        bgcolor=ft.Colors.PRIMARY_CONTAINER,
+        border_radius=999, alignment=ft.alignment.center,
+    )
+    header = ft.Column(
         [
-            ft.AppBar(title=ft.Text("Login"), bgcolor=page.theme.primary_color),
-            ft.Container(
-                content=ft.Column(
-                    [
-                        # --- INICIO DE LA MODIFICACIÓN ---
-                        ft.Image(
-                            src="/assets/a.png",  # Ruta de tu imagen (asume que está en la carpeta 'assets')
-                            width=100,
-                            height=100,
-                            fit=ft.ImageFit.CONTAIN,
-                        ),
-                        ft.Text(
-                            "Black Lab", # Título cambiado
-                            size=24,
-                            weight=ft.FontWeight.BOLD,
-                        ),
-                        # --- FIN DE LA MODIFICACIÓN ---
-                        ft.Text("Inicia sesión para gestionar reservas y recursos"),
-                        
-                        ft.Container(height=20), # Espaciador
-                        
-                        username_field,
-                        password_field,
-                        
-                        # CAPTCHA (inicialmente oculto)
-                        ft.Row(
-                            [
-                                ft.Column([
-                                    ft.Container(height=5), # Espaciador
-                                    ft.Text("Ingresa el texto de la imagen:", size=12),
-                                    ft.Image(ref=captcha_img, width=150, height=50, fit=ft.ImageFit.CONTAIN),
-                                    TextButton("Recargar CAPTCHA", on_click=lambda e: reload_captcha())
-                                ]),
-                                captcha_field,
-                            ],
-                            visible=False,
-                            ref=captcha_row_visible,
-                            spacing=10,
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        
-                        info_text, # Para mensajes de error o información
-                        
-                        ft.Container(height=20), # Espaciador
-                        
-                        Primary("Entrar", on_click=do_login, expand=True),
-                        ft.Text("O", text_align=ft.TextAlign.CENTER, width=page.width),
-                        Secondary("➡️ Entrar con Google", on_click=do_login_with_google, expand=True),
-                        TextButton("Registrarse", on_click=go_to_register, expand=True)
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=15,
-                    width=350, # Ancho fijo para el formulario
-                ),
-                alignment=ft.alignment.center,
-                expand=True,
-            )
+            logo,
+            ft.Text("Gestor de Laboratorios", size=24, weight=ft.FontWeight.BOLD),
+            ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, opacity=0.8),
         ],
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        vertical_alignment=ft.MainAxisAlignment.CENTER,
+        spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    form = ft.Column(
+        controls=[
+            header,
+            ft.Divider(opacity=0.2),
+            user_field,
+            pwd_field,
+            info,
+            ft.Container(height=4),
+            btn_login,
+            ft.Row(
+                [ft.Divider(), ft.Text("O", opacity=0.6), ft.Divider()],
+                alignment=ft.MainAxisAlignment.CENTER, width=260
+            ),
+            btn_google_login, # Ahora es el ElevatedButton
+            ft.Container(height=10),
+            btn_register
+        ],
+        spacing=10,
+        tight=True,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    card_container = ft.Container(
+        content=Card(form, padding=22),
+        width=440,
+        border_radius=16,
+        shadow=ft.BoxShadow(
+            blur_radius=16, spread_radius=1,
+            color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
+        ),
+    )
+
+    return ft.Container(
+        expand=True,
+        content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        padding=20,
     )
