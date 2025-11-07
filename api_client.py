@@ -1,6 +1,8 @@
 import os
 import requests
 import flet as ft
+# --- AÑADIDO: Importar 'date' para type hinting ---
+from datetime import date
 
 class ApiClient:
     def __init__(self, page: ft.Page):
@@ -109,8 +111,17 @@ class ApiClient:
         return self._make_request("DELETE", f"/laboratorios/{lab_id}")
     
     def get_reservas(self):
+        """(Obsoleto? - El backend espera /reservas/{lab_id})"""
         return self._make_request("GET", "/reservas")
     
+    def get_reservas_por_lab(self, lab_id: int, start_dt: date, end_dt: date):
+        """Obtiene reservas para un lab_id y rango de fechas."""
+        params = {
+            "start_dt": str(start_dt),
+            "end_dt": str(end_dt)
+        }
+        return self._make_request("GET", f"/reservas/{lab_id}", params=params)
+
     def create_reserva(self, data):
         return self._make_request("POST", "/reservas", json=data)
     
@@ -119,6 +130,20 @@ class ApiClient:
     
     def delete_reserva(self, reserva_id):
         return self._make_request("DELETE", f"/reservas/{reserva_id}")
+
+    # --- INICIO DE LA CORRECCIÓN ---
+    def get_horario_laboratorio(self, lab_id: int, fecha_inicio: date, fecha_fin: date):
+        """
+        Obtiene los slots de horario disponible para un lab en un rango de fechas.
+        (NUEVO MÉTODO PARA RESERVAS_VIEW)
+        """
+        params = {
+            "fecha_inicio": str(fecha_inicio), # str() convierte date a "YYYY-MM-DD"
+            "fecha_fin": str(fecha_fin)
+        }
+        # Llama al endpoint correcto del backend
+        return self._make_request("GET", f"/laboratorios/{lab_id}/horario", params=params)
+    # --- FIN DE LA CORRECCIÓN ---
     
     def get_mis_prestamos(self):
         """Obtiene los préstamos del usuario actual (requiere token)"""
