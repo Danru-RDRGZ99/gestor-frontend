@@ -140,43 +140,49 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         if result and "error" not in result:
             info.value = "Reserva creada con éxito."
+            info.color = ft.Colors.GREEN_500 # Color de éxito
             state["confirm_for"] = None
-            render()
+            render() # Recargamos
         else:
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
             page.update(info, grid)
 
+    # --- ¡INICIO DE LA CORRECCIÓN FINAL! ---
     def do_cancel_reservation(rid: int):
         info.value = "Cancelando reserva, por favor espera..."
         info.color = ft.Colors.AMBER_700
         grid.disabled = True
         page.update(info, grid)
 
-        # --- INICIO DE LA CORRECCIÓN 3 ---
         # El método en api_client se llama 'delete_reserva'
+        # (pero en realidad llama a PUT /reservas/{id}/cancelar)
         result = api.delete_reserva(rid)
-        # --- FIN DE LA CORRECCIÓN 3 ---
 
         grid.disabled = False
         info.color = None
         state["confirm_for"] = None
 
-        if result and "success" in result: # delete_reserva devuelve {"success": True}
-            info.value = "Reserva cancelada."
-            render()
+        # Si la respuesta NO tiene un 'error', entonces fue un éxito.
+        # El API devuelve el objeto de la reserva cancelada (con código 200).
+        if result and "error" not in result:
+            info.value = "Reserva cancelada exitosamente."
+            info.color = ft.Colors.GREEN_500 # Color de éxito
+            render() # Recargamos el calendario
         else:
-            error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
+            # Si SÍ tiene un 'error', o 'result' está vacío
+            error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
             page.update(info, grid)
+    # --- ¡FIN DE LA CORRECCIÓN FINAL! ---
 
     def ask_inline_cancel(rid: int, etiqueta: str):
         state["confirm_for"] = rid
         info.value = f"Confirmar cancelación para {etiqueta}"
         info.color = ft.Colors.AMBER_700
-        render()
+        render() # Volvemos a renderizar para mostrar los botones de confirmación
 
     # --- Renderizado del Calendario ---
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
@@ -188,7 +194,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             try:
                 start_str = r.get('inicio')
                 if start_str:
-                    # --- CORRECCIÓN ZONA HORARIA (Reservas) ---
                     # 1. Parsear la fecha UTC (con 'Z') a un objeto 'aware'
                     dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
                     # 2. Convertir de UTC a la zona horaria local del sistema
@@ -203,7 +208,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         for slot in slots_calculados:
             try:
-                # --- CORRECCIÓN ZONA HORARIA (Horario) ---
                 s_str = slot.get('inicio')
                 f_str = slot.get('fin')
                 
@@ -261,7 +265,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
             # --- CASO 2: Slot Disponible ---
             elif k_tipo in ["disponible", "libre"]:
-                # Esta línea (340 en el archivo original) ahora funciona gracias a la CORRECCIÓN 1
                 is_allowed_to_create = user_data.get("rol") in ["admin", "docente"]
                 reserve_button = Primary(label,
                                          on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
@@ -285,6 +288,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             info.value = "Selecciona un plantel y un laboratorio válido para ver la disponibilidad."
             info.color = ft.Colors.AMBER_700
             if grid.page: grid.update()
+            if info.page: info.update() # Asegúrate de actualizar info también
             return
 
         lid = int(dd_lab.value)
@@ -349,11 +353,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     def render():
         grid.disabled = False
-        info.value = ""
-        info.color = None
+        # Limpiar info solo si no estamos en modo confirmación
+        if state["confirm_for"] is None:
+            info.value = ""
+            info.color = None
+        
         days = five_weekdays_from(window["start"])
         lab_name = lab_map.get(dd_lab.value, "(Selecciona Lab)")
         head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
+        
         if head_label.page: head_label.update()
         if info.page: info.update()
         render_grid()
