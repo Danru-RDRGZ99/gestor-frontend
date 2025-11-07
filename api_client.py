@@ -33,13 +33,15 @@ class ApiClient:
             print(f"📡 Request: {method} {url} - Status: {response.status_code}")
             
             # --- MANEJO DE RESPUESTAS MEJORADO ---
-            if response.status_code == 200:
+            
+            # <--- ¡CORRECCIÓN 1: ACEPTAR 200 y 201! ---
+            if response.status_code in [200, 201]: # 200 (OK) y 201 (Created) son éxito
                 return response.json() # Éxito
             
             if response.status_code == 204: # Para DELETE exitoso
                 return {"success": True} 
 
-            # Si no es 200 o 204, es un error
+            # Si no es 200, 201 o 204, es un error
             print(f"❌ Error {response.status_code}: {response.text}")
             try:
                 error_json = response.json()
@@ -70,7 +72,7 @@ class ApiClient:
     def login(self, username, password, captcha):
         """Login de usuario (con CAPTCHA). Llama al endpoint /token."""
         response_data = self._make_request("POST", "/token", 
-                                       json={"username": username, "password": password, "captcha": captcha})
+                                        json={"username": username, "password": password, "captcha": captcha})
         
         if response_data and "access_token" in response_data:
             token_val = f"Bearer {response_data.get('access_token')}"
@@ -82,7 +84,7 @@ class ApiClient:
     def login_with_google(self, google_id_token: str):
         """Login con Google. Llama al endpoint /auth/google-token."""
         response_data = self._make_request("POST", "/auth/google-token",
-                                       json={"idToken": google_id_token})
+                                        json={"idToken": google_id_token})
         
         if response_data and "access_token" in response_data:
             token_val = f"Bearer {response_data.get('access_token')}"
@@ -126,14 +128,18 @@ class ApiClient:
         return self._make_request("GET", f"/reservas/{lab_id}", params=params)
     
     def create_reserva(self, data):
+        # El código 201 (Created) será manejado como éxito por _make_request
         return self._make_request("POST", "/reservas", json=data)
     
     def update_reserva(self, reserva_id, data):
         return self._make_request("PUT", f"/reservas/{reserva_id}", json=data)
     
+    # <--- ¡CORRECCIÓN 2: ARREGLAR DELETE! ---
     def delete_reserva(self, reserva_id):
-        return self._make_request("DELETE", f"/reservas/{reserva_id}")
-
+        """Cancela una reserva. Llama al endpoint PUT /reservas/{id}/cancelar."""
+        # El backend usa PUT y un endpoint especial, no DELETE
+        return self._make_request("PUT", f"/reservas/{reserva_id}/cancelar")
+    
     def get_horario_laboratorio(self, lab_id: int, start_dt: date, end_dt: date):
         """
         Calcula el horario disponible para un laboratorio en un rango de fechas.
@@ -148,11 +154,12 @@ class ApiClient:
     # --- INICIO: MÉTODO AÑADIDO (para Dashboard) ---
     def get_mis_reservas(self):
         """Obtiene las reservas del usuario actual (requiere token)."""
-        # --- CORRECCIÓN 3 ---
-        # GET /reservas da error 405.
-        # Probamos con el endpoint anidado bajo el usuario actual.
-        return self._make_request("GET", "/usuarios/me/reservas")
+        # --- CORRECCIÓN 4 (Definitiva) ---
+        # El endpoint no existía en el backend. Lo añadiremos como
+        # "/reservas/mis-solicitudes" y lo llamaremos aquí.
+        return self._make_request("GET", "/reservas/mis-solicitudes")
     # --- FIN: MÉTODO AÑADIDO ---
+
 
     # --- Métodos para Préstamos / Recursos (de prestamos_view.py) ---
     
@@ -165,11 +172,11 @@ class ApiClient:
         return self._make_request("GET", "/admin/prestamos")
 
     def create_prestamo(self, data: dict):
+        # El código 201 (Created) será manejado como éxito por _make_request
         return self._make_request("POST", "/prestamos", json=data)
 
     def update_prestamo_estado(self, prestamo_id: int, new_status: str):
         """Actualiza el estado de un préstamo (admin)"""
-        # El backend espera el estado en el body, no como query param
         return self._make_request("PUT", f"/admin/prestamos/{prestamo_id}/estado?nuevo_estado={new_status}")
     
     def get_recursos(self, plantel_id: int = None, lab_id: int = None, estado: str = "", tipo: str = ""):
