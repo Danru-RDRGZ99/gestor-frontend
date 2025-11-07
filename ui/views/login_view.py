@@ -150,17 +150,13 @@ def LoginView(page: ft.Page, api: ApiClient, on_success):
             fit=ft.ImageFit.COVER 
         )
     else:
-        # Si la imagen falló, muestra el ícono original como repuesto
         logo_content = ft.Icon(ft.Icons.SCIENCE, size=34) 
 
-    # 4. Crear el contenedor del logo con el contenido decidido
     logo = ft.Container(
-        content=logo_content, # <--- Asignar el contenido
-        width=56, height=56,
-        border_radius=999,
-        alignment=ft.alignment.center,
-        clip_behavior=ft.ClipBehavior.ANTI_ALIAS, 
-    )
+    content=logo_content, 
+    width=56, height=56,
+    alignment=ft.alignment.center,
+)
     
     # <--- FIN DE LOS CAMBIOS PARA EL LOGO ---
 
