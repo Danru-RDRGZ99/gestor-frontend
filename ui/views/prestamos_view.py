@@ -68,13 +68,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # --- Controles de Filtros y Listas ---
     dd_plantel_filter = ft.Dropdown(
         label="Plantel", 
-        options=[ft.dropdown.Option("", "Todos")], 
-        height=45
+        options=[ft.dropdown.Option("", "Todos")]
     )
     dd_lab_filter = ft.Dropdown(
         label="Laboratorio", 
-        options=[ft.dropdown.Option("", "Todos")], 
-        height=45
+        options=[ft.dropdown.Option("", "Todos")]
     )
     dd_estado_filter = ft.Dropdown(
         label="Disponibilidad",
@@ -83,13 +81,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.dropdown.Option("disponible", "Disponible"),
             ft.dropdown.Option("prestado", "Prestado"),
             ft.dropdown.Option("mantenimiento", "Mantenimiento"),
-        ],
-        height=45
+        ]
     )
     dd_tipo_filter = ft.Dropdown(
         label="Tipo", 
-        options=[ft.dropdown.Option("", "Todos")], 
-        height=45
+        options=[ft.dropdown.Option("", "Todos")]
     )
 
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
@@ -167,8 +163,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.dropdown.Option("disponible", "Disponible"),
             ft.dropdown.Option("mantenimiento", "Mantenimiento"),
         ],
-        value="disponible",
-        height=45
+        value="disponible"
     )
 
     # Agrupar laboratorios por plantel para el dropdown de admin
@@ -190,8 +185,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     dd_recurso_lab_admin = ft.Dropdown(
         label="Laboratorio de Origen", 
-        options=lab_options_admin,
-        height=45
+        options=lab_options_admin
     )
 
     btn_recurso_save = Primary("Agregar Recurso", on_click=lambda e: save_recurso(), height=40)
@@ -699,13 +693,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # FORMULARIO MÓVIL PARA ADMIN
     # ========================================================================
     if is_mobile:
-        tf_recurso_tipo.height = 45
-        tf_recurso_detalles.height = 45
-        dd_recurso_estado_admin.height = 45
-        dd_recurso_lab_admin.height = 45
-        btn_recurso_save.height = 40
-        btn_recurso_cancel.height = 40
-
+        # Para móvil, ajustamos solo los TextField si es necesario
         form_card = Card(
             ft.Container(
                 ft.Column(
