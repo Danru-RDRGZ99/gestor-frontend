@@ -104,23 +104,48 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
         spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
     
-    card_container = ft.Container(
-        content=Card(form, padding=22),
-        width=440,
-        border_radius=16,
-        shadow=ft.BoxShadow(
-            blur_radius=16, spread_radius=1,
-            color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
-        ),
-    )
+    # --- INICIO DE LA MODIFICACIÓN MÓVIL ---
+    
+    # Detectamos si la plataforma es móvil (Android o iOS)
+    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+
+    if is_mobile:
+        # Versión Móvil: Ancho completo, menos padding, sin sombra
+        card_container = ft.Container(
+            content=Card(form, padding=18), # Padding de tarjeta reducido
+            width=None, # Para que ocupe el ancho disponible (limitado por el padding del View)
+            border_radius=16,
+            shadow=None # Sin sombra en móvil
+        )
+        # Padding de la vista reducido para móvil
+        view_padding = ft.padding.symmetric(horizontal=12, vertical=20)
+    else:
+        # Versión Desktop (la que ya tenías)
+        card_container = ft.Container(
+            content=Card(form, padding=22),
+            width=440,
+            border_radius=16,
+            shadow=ft.BoxShadow(
+                blur_radius=16, spread_radius=1,
+                color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
+            ),
+        )
+        # Padding original de la vista
+        view_padding = 20
+
+    # --- FIN DE LA MODIFICACIÓN MÓVIL ---
 
     return ft.View(
         "/register",
         [
             ft.Container(
                 expand=True,
-                content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=20,
+                content=ft.Row(
+                    [card_container], 
+                    alignment=ft.MainAxisAlignment.CENTER, 
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                padding=view_padding, # Usamos el padding adaptativo
             )
         ]
     )
