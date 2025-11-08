@@ -238,7 +238,7 @@ def main(page: ft.Page):
 
             page_layout = ft.Column(
                 controls=[
-                    top_app_bar,
+                    # top_app_bar SE MOVIÓ AL appbar DE ft.View
                     main_content,
                     bottom_bar_container
                 ],
@@ -251,6 +251,7 @@ def main(page: ft.Page):
                 [
                     page_layout
                 ],
+                appbar=top_app_bar,  # <--- CORRECCIÓN AQUÍ
                 padding=0,
                 spacing=0
             )
@@ -301,7 +302,7 @@ def main(page: ft.Page):
             return ft.View(
                 f"/{active_key}",
                 [
-                    top_app_bar,
+                    # top_app_bar SE MOVIÓ AL appbar DE ft.View
                     ft.Row(
                         [
                             nav_container,
@@ -311,6 +312,7 @@ def main(page: ft.Page):
                         spacing=0 
                     ),
                 ],
+                appbar=top_app_bar, # <--- CORRECCIÓN AQUÍ
                 padding=0,
             )
 
@@ -328,7 +330,8 @@ def main(page: ft.Page):
             if "Timeout" in str(e):
                 print(f"WARN: Timeout en client_storage.set. {e}")
             else:
-                raise e
+                # No relanzar la excepción, solo registrarla
+                print(f"Error en client_storage.set: {e}")
 
         if not user_session:
             if current_route_key == "register":
