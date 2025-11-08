@@ -10,7 +10,7 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
     """
     Vista de registro de nuevos usuarios.
     """
-    info = ft.Text("", color=ft.Colors.RED_400, size=12, text_align=ft.TextAlign.CENTER)
+    info = ft.Text("", color=ft.Colors.RED_400, size=12)
 
     # --- Campos del Formulario ---
     nombre_field = ft.TextField(label="Nombre Completo", autofocus=True, text_size=14)
@@ -98,34 +98,20 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
             nombre_field, correo_field, user_field, rol_dd,
             pwd_field, confirm_pwd_field,
             info, ft.Container(height=4),
-            Primary(
-                "Registrarse", 
-                on_click=do_register, 
-                height=46 
-                # <--- CAMBIO: Se elimina 'width=260'
-            ),
-            Ghost(
-                "Volver al Login", 
-                on_click=lambda e: page.go("/"), 
-                height=40
-                # <--- CAMBIO: Se elimina 'width=260'
-            )
+            Primary("Registrarse", on_click=do_register, width=260, height=46),
+            Ghost("Volver al Login", on_click=lambda e: page.go("/"), width=260, height=40)
         ],
-        spacing=14, tight=True, 
-        horizontal_alignment=ft.CrossAxisAlignment.STRETCH # <--- CAMBIO
+        spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
     
-    # --- INICIO MODIFICACIÓN RESPONSIVE ---
     card_container = ft.Container(
         content=Card(form, padding=22),
-        # width=440, <--- CAMBIO: Se elimina 'width' fijo
+        width=440,
         border_radius=16,
         shadow=ft.BoxShadow(
             blur_radius=16, spread_radius=1,
             color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
         ),
-        # <--- CAMBIO: Se añade 'col' para ResponsiveRow
-        col={"xs": 12, "sm": 10, "md": 8, "lg": 6, "xl": 4} 
     )
 
     return ft.View(
@@ -133,14 +119,8 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
         [
             ft.Container(
                 expand=True,
-                content=ft.ResponsiveRow( # <--- CAMBIO: De ft.Row a ft.ResponsiveRow
-                    [card_container], 
-                    alignment=ft.MainAxisAlignment.CENTER, 
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER
-                ),
+                content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 padding=20,
-                scroll=ft.ScrollMode.AUTO # <--- CAMBIO: Se añade scroll para el formulario largo
             )
         ]
     )
-    # --- FIN MODIFICACIÓN RESPONSIVE ---
