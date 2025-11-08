@@ -20,6 +20,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     """
     Vista completa para la gestión y solicitud de préstamos y recursos.
     Incluye pestañas para usuarios y administradores, filtros y paneles de gestión.
+    Esta versión contiene adaptaciones para móvil y escritorio en el mismo archivo.
     """
     # --- INICIO DE LA CORRECCIÓN ---
     user_session = page.session.get("user_session") or {}
@@ -42,8 +43,22 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     PAL = get_palette() # Call it once
 
     # ---------------------------------
-    # Estado y controles de la UI
+    # Device detection (desktop vs mobile)
     # ---------------------------------
+    def detect_mobile() -> bool:
+        try:
+            width = page.window_width
+        except Exception:
+            width = None
+        # If width is not available, fallback to platform check
+        platform = getattr(page, "platform", None)
+        if platform:
+            platform = platform.lower()
+        is_mobile_platform = platform in ("android", "ios")
+        if width is None:
+            return is_mobile_platform
+        return (width is not None and width < 700) or is_mobile_platform
+
     state = {
         "filter_plantel_id": None,
         "filter_lab_id": None,
@@ -52,7 +67,17 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "active_tab": 0,
         "solicitar_recurso_id": None,
         "editing_recurso_id": None, # Para el form de admin
+        "is_mobile": detect_mobile(),
     }
+
+    # Keep UI responsive to resize events
+    def _on_resize(e):
+        new_mobile = detect_mobile()
+        if new_mobile != state["is_mobile"]:
+            state["is_mobile"] = new_mobile
+            # trigger rerender/refresh layout
+            if page: page.update()
+    page.on_resize = _on_resize
 
     # --- Controles de Filtros y Listas ---
     dd_plantel_filter = ft.Dropdown(label="Plantel", options=[ft.dropdown.Option("", "Todos")], width=220)
@@ -738,9 +763,27 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # Render inicial (tab 0)
     render_recursos()
 
+    # ---------------------------------
+    # Layouts: desktop and mobile (same logic, different composition)
+    # ---------------------------------
     filtros_card = Card(
         ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
     )
+
+    # Mobile-friendly compact filters card
+    def filtros_card_mobile():
+        # On mobile we use stacked dropdowns with full width for touch
+        return Card(
+            ft.Column(
+                [
+                    ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ft.Row([dd_plantel_filter, dd_lab_filter], wrap=True, spacing=8),
+                    ft.Row([dd_estado_filter, dd_tipo_filter], wrap=True, spacing=8),
+                ],
+                spacing=8
+            ),
+            padding=12
+        )
 
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos", # Changed label
@@ -785,13 +828,52 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         expand=1
     )
 
-    # Main layout
-    return ft.Column(
-        [
-            ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
-            error_display, # Show global errors here
-            filtros_card,
-            tabs, # Tabs take remaining space
-        ],
-        expand=True, spacing=18
-    )
+    # --- Mobile specific: condensed header + floating action for "Agregar" (if admin) ---
+    def mobile_layout():
+        # Use bigger spacing and stacked layout
+        header = ft.Row(
+            [
+                ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
+                ft.Container() # spacer
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+        )
+
+        # For mobile, place tabs below filters
+        content = ft.Column(
+            [
+                header,
+                error_display,
+                filtros_card_mobile(),
+                tabs
+            ],
+            expand=True,
+            spacing=12
+        )
+
+        # Optional: floating action area for admins to quickly add recurso
+        if state["is_mobile"] and is_admin:
+            fab = ft.Container(
+                ft.Row([Primary("Agregar Recurso", on_click=lambda e: (setattr(btn_recurso_save, "text", "Agregar Recurso"), page.update()))]),
+                alignment=ft.Alignment.BOTTOM_RIGHT,
+                padding=ft.padding.only(top=8)
+            )
+            return ft.Stack([content, fab])
+        return content
+
+    def desktop_layout():
+        return ft.Column(
+            [
+                ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
+                error_display, # Show global errors here
+                filtros_card,
+                tabs, # Tabs take remaining space
+            ],
+            expand=True, spacing=18
+        )
+
+    # Finalmente, retornar layout basado en detección
+    if state["is_mobile"]:
+        return mobile_layout()
+    else:
+        return desktop_layout()
