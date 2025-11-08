@@ -286,11 +286,14 @@ def main(page: ft.Page):
                 width=NAV_WIDTH 
             )
             
+            # --- INICIO DE LA CORRECCIÓN ---
             nav_container = ft.Container(
                 content=nav_panel_content,
                 width=NAV_WIDTH, 
+                # bgcolor=ft.Colors.BACKGROUND, # <--- LÍNEA ELIMINADA
                 animate=ft.animation.Animation(300, "easeOutCubic"), 
             )
+            # --- FIN DE LA CORRECCIÓN ---
 
             def toggle_nav_slide(e):
                 if nav_container.width == NAV_WIDTH:
@@ -300,7 +303,7 @@ def main(page: ft.Page):
                 page.update()
 
             top_app_bar.leading = ft.IconButton(
-                icon=ft.Icons.MENU,
+                icon=ft.icons.MENU,
                 tooltip="Menú",
                 on_click=toggle_nav_slide 
             )
@@ -311,7 +314,7 @@ def main(page: ft.Page):
                     top_app_bar,
                     ft.Row(
                         [
-                            nav_container,
+                            nav_container, # <--- Usar el contenedor animado
                             main_content,
                         ],
                         expand=True,
@@ -418,14 +421,21 @@ def main(page: ft.Page):
     # Nueva función para manejar el cambio de tamaño
     def handle_resize(e):
         # Comprobar si el *modo* (móvil/escritorio) ha cambiado
-        is_now_mobile = page.width < MOBILE_BREAKPOINT
-        was_mobile = page.client_storage.get("is_mobile")
-        
-        if is_now_mobile != was_mobile:
-            # Si el modo cambió, volver a ejecutar el router
-            # Esto reconstruirá la vista con el layout correcto (menú lateral o inferior)
-            print(f"RESIZE: Cambiando a modo {'MÓVIL' if is_now_mobile else 'ESCRITORIO'}")
-            router(page.route)
+        try:
+            # Obtener el ancho de la página, usar un valor grande por defecto si es None
+            current_width = page.width if page.width is not None else 1024
+            is_now_mobile = current_width < MOBILE_BREAKPOINT
+            
+            # Obtener el estado anterior
+            was_mobile = page.client_storage.get("is_mobile")
+            
+            if is_now_mobile != was_mobile:
+                # Si el modo cambió, volver a ejecutar el router
+                # Esto reconstruirá la vista con el layout correcto (menú lateral o inferior)
+                print(f"RESIZE: Cambiando a modo {'MÓVIL' if is_now_mobile else 'ESCRITORIO'} (Ancho: {current_width})")
+                router(page.route)
+        except Exception as ex:
+            print(f"Error en handle_resize: {ex}")
     
     page.on_resize = handle_resize
     # --- FIN CAMBIO RESPONSIVO ---
