@@ -289,7 +289,6 @@ def main(page: ft.Page):
             nav_container = ft.Container(
                 content=nav_panel_content,
                 width=NAV_WIDTH, 
-                bgcolor=ft.Colors.BACKGROUND, # <--- CORRECCIÓN: 'Colors' a 'colors'
                 animate=ft.animation.Animation(300, "easeOutCubic"), 
             )
 
