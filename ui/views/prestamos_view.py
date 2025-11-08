@@ -829,16 +829,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     # --- Mobile specific: condensed header + floating action for "Agregar" (if admin) ---
     def mobile_layout():
-        # Use bigger spacing and stacked layout
         header = ft.Row(
             [
                 ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
-                ft.Container() # spacer
+                ft.Container()  # spacer
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN
         )
 
-        # For mobile, place tabs below filters
         content = ft.Column(
             [
                 header,
@@ -850,15 +848,16 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             spacing=12
         )
 
-        # Optional: floating action area for admins to quickly add recurso
         if state["is_mobile"] and is_admin:
             fab = ft.Container(
-                ft.Row([Primary("Agregar Recurso", on_click=lambda e: (setattr(btn_recurso_save, "text", "Agregar Recurso"), page.update()))]),
+                Primary("Agregar Recurso", on_click=lambda e: (setattr(state, "active_tab", 2), page.update())),
+                width=160,
+                height=48,
                 alignment=ft.alignment.bottom_right,
                 margin=ft.margin.only(right=16, bottom=16)
             )
-
             return ft.Stack([content, fab])
+
         return content
 
     def desktop_layout():
