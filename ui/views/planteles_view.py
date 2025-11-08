@@ -172,35 +172,54 @@ def PlantelesView(page: ft.Page, api: ApiClient):
     # Tarjeta MÓVIL (compacta y vertical)
     # -----------------------------------------------------
     def plantel_card_mobile(p: dict) -> ft.Control:
-        title = ft.Text(p.get("nombre", ""), size=18, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(p.get("direccion", "-"), size=12, opacity=0.85)
+        title = ft.Text(
+            p.get("nombre", ""),
+            size=15,
+            weight=ft.FontWeight.W_600
+        )
 
-        # Botones más grandes y tocables
+        subtitle = ft.Text(
+            p.get("direccion", "-"),
+            size=11,
+            opacity=0.85
+        )
+
         btn_row = ft.Row(
             [
-                Primary("Editar", on_click=lambda e, pid=p['id']: open_edit(pid), expand=True),
-                Danger("Eliminar", on_click=lambda e, pid=p['id']: try_delete_plantel(pid), expand=True),
+                Primary(
+                    "Editar",
+                    on_click=lambda e, pid=p['id']: open_edit(pid),
+                    height=36,
+                    expand=True
+                ),
+                Danger(
+                    "Eliminar",
+                    on_click=lambda e, pid=p['id']: try_delete_plantel(pid),
+                    height=36,
+                    expand=True
+                ),
             ],
-            spacing=10
+            spacing=6
         )
 
         content_column = ft.Column(
             [title, subtitle, btn_row],
-            spacing=10,
+            spacing=6,
             key=f"plantel_{p['id']}"
         )
 
-        # Panel de edición móvil
         if state["edit_for"] == p["id"]:
             n_edit = TextField("Nombre", value=p['nombre'])
             d_edit = TextField("Dirección", value=p['direccion'])
 
             actions = ft.Column(
                 [
-                    Primary("Guardar", on_click=lambda e, pid=p['id']: save_edit(pid, n_edit.value, d_edit.value)),
-                    Ghost("Cancelar", on_click=lambda e, pid=p['id']: open_edit(pid)),
+                    Primary("Guardar", height=36,
+                            on_click=lambda e, pid=p['id']: save_edit(pid, n_edit.value, d_edit.value)),
+                    Ghost("Cancelar", height=36,
+                          on_click=lambda e, pid=p['id']: open_edit(pid)),
                 ],
-                spacing=8
+                spacing=6
             )
 
             content_column.controls.append(
@@ -211,25 +230,42 @@ def PlantelesView(page: ft.Page, api: ApiClient):
                         d_edit,
                         actions
                     ],
-                    spacing=8
+                    spacing=6
                 )
             )
 
-        return Card(content_column, padding=14)
+        return Card(
+            content_column,
+            padding=8,
+            border_radius=10
+        )
 
     # -----------------------------------------------------
-    # Formulario: versión móvil o web según tamaño
+    # Formulario compacto móvil o web
     # -----------------------------------------------------
 
     if is_mobile:
         add_section_form = ft.Column(
             [
-                nombre_tf,
-                direccion_tf,
-                Primary("Agregar", on_click=add_plantel, height=44),
+                TextField("Nombre", height=45),
+                TextField("Dirección", height=45),
+                Primary("Agregar", on_click=add_plantel, height=40),
             ],
-            spacing=10
+            spacing=6
         )
+
+        add_section = Card(
+            ft.Column(
+                [
+                    ft.Text("Agregar Nuevo Plantel", size=14, weight=ft.FontWeight.W_600),
+                    add_section_form
+                ],
+                spacing=6
+            ),
+            padding=10,
+            border_radius=10
+        )
+
     else:
         nombre_tf.col = {"sm": 12, "md": 5}
         direccion_tf.col = {"sm": 12, "md": 5}
@@ -247,13 +283,13 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             spacing=12
         )
 
-    add_section = Card(
-        ft.Column([
-            ft.Text("Agregar Nuevo Plantel", size=16, weight=ft.FontWeight.W_600),
-            add_section_form
-        ]),
-        padding=14
-    )
+        add_section = Card(
+            ft.Column([
+                ft.Text("Agregar Nuevo Plantel", size=16, weight=ft.FontWeight.W_600),
+                add_section_form
+            ]),
+            padding=14
+        )
 
     # Cargar datos
     render_list()
