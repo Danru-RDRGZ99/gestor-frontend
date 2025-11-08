@@ -192,15 +192,11 @@ def main(page: ft.Page):
         ]
 
         def nav_change(e):
-            selected_route = allowed[e.control.selected_index]
-            page.go(f"/{selected_route}")
-            
-        nav_destinations_rail = [
-            ft.NavigationRailDestination(
-                icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
-                label=ROUTE_META.get(key, ("Error",))[0]
-            ) for key in allowed
-        ]
+            selected_route_key = e.control.data[e.control.selected_index]
+            page.go(f"/{selected_route_key}")
+            if is_mobile: 
+                page.drawer.open = False
+                page.drawer.update()
         
         main_content = ft.Container(
             content=body,
@@ -209,17 +205,44 @@ def main(page: ft.Page):
         )
 
         if is_mobile:
-            top_app_bar.leading = None 
+            
+            def open_drawer(e):
+                page.drawer.open = True
+                page.drawer.update()
+
+            top_app_bar.leading = ft.IconButton(
+                icon=ft.Icons.MENU,
+                tooltip="Menú",
+                on_click=open_drawer
+            )
+            
+            mobile_nav_keys = [key for key in allowed if key != "ajustes"]
+            
+            mobile_active_index = None
+            if active_key in mobile_nav_keys:
+                mobile_active_index = mobile_nav_keys.index(active_key)
+
+            page_drawer = ft.NavigationDrawer(
+                selected_index=active_index,
+                on_change=nav_change,
+                controls=[
+                    ft.NavigationDrawerDestination(
+                        icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
+                        label=ROUTE_META.get(key, ("Error",))[0]
+                    ) for key in allowed
+                ]
+            )
             
             bottom_nav = ft.NavigationBar(
-                selected_index=active_index,
+                selected_index=mobile_active_index,
                 on_change=nav_change,
                 label_behavior=ft.NavigationBarLabelBehavior.ONLY_SHOW_SELECTED,
                 destinations=[
                     ft.NavigationRailDestination(
+                        data=key,
                         icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1], 
                         label=ROUTE_META.get(key, ("Error",))[0]
-                    ) for key in allowed
+                    ) for key in mobile_nav_keys
                 ]
             )
             
@@ -229,6 +252,7 @@ def main(page: ft.Page):
                     top_app_bar,
                     main_content,
                 ],
+                drawer=page_drawer,
                 navigation_bar=bottom_nav,
                 padding=0,
             )
@@ -240,7 +264,13 @@ def main(page: ft.Page):
                 min_width=100,
                 min_extended_width=NAV_WIDTH,
                 extended=True,
-                destinations=nav_destinations_rail,
+                destinations=[
+                    ft.NavigationRailDestination(
+                        data=key,
+                        icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
+                        label=ROUTE_META.get(key, ("Error",))[0]
+                    ) for key in allowed
+                ],
                 on_change=nav_change,
                 expand=True
             )
