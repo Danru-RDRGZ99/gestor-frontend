@@ -853,10 +853,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         # Optional: floating action area for admins to quickly add recurso
         if state["is_mobile"] and is_admin:
             fab = ft.Container(
-                ft.Row([Primary("Agregar Recurso", on_click=lambda e: (setattr(btn_recurso_save, "text", "Agregar Recurso"), page.update()))]),
-                alignment=ft.Alignment.BOTTOM_RIGHT,
-                padding=ft.padding.only(top=8)
+                ft.Row([Primary("Agregar Recurso", on_click=lambda e: ...)]),
+                alignment=ft.Alignment.BOTTOM_CENTER,
+                margin=ft.margin.only(right=16, bottom=16)
             )
+
             return ft.Stack([content, fab])
         return content
 
