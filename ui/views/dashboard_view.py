@@ -190,6 +190,15 @@ def DashboardView(page: ft.Page, api: ApiClient):
 
     # --- Contenido dinámico según el rol ---
     main_column = ft.Column(spacing=20)
+    
+    # --- INICIO DE LA MODIFICACIÓN 1 ---
+    # Asignamos las propiedades 'col' a la columna principal
+    # Móvil (xs): 12/12 (ancho completo)
+    # Tablet (md): 10/12
+    # Escritorio (lg): 8/12
+    # Escritorio Ancho (xl): 6/12
+    main_column.col = {"xs": 12, "md": 10, "lg": 8, "xl": 6}
+    # --- FIN DE LA MODIFICACIÓN 1 ---
 
     # Añadir el display de errores global
     main_column.controls.append(error_display)
@@ -237,11 +246,17 @@ def DashboardView(page: ft.Page, api: ApiClient):
     if page:
         page.pubsub.subscribe(on_theme_change)
 
+    # --- INICIO DE LA MODIFICACIÓN 2 ---
+    # Envolvemos el contenido en una Columna con scroll,
+    # que contiene una ResponsiveRow para centrar el contenido.
     return ft.Column(
         [
-            main_column,
+            ft.ResponsiveRow(
+                [main_column],
+                alignment=ft.MainAxisAlignment.CENTER
+            )
         ],
         expand=True,
-        spacing=18,
         scroll=ft.ScrollMode.AUTO,
     )
+    # --- FIN DE LA MODIFICACIÓN 2 ---
