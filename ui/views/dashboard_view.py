@@ -239,7 +239,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
 
     return ft.Column(
         [
-            ft.Text("Dashboard", size=22, weight=ft.FontWeight.BOLD),
             main_column,
         ],
         expand=True,
