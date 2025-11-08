@@ -28,7 +28,20 @@ def DashboardView(page: ft.Page, api: ApiClient):
     PAL = get_palette()
     
     is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
-    view_padding = ft.padding.symmetric(horizontal=12, vertical=15) if is_mobile else ft.padding.symmetric(horizontal=24, vertical=20)
+    # Ajustamos el padding: un poco más de padding superior en desktop, o solo horizontal en móvil
+    # Para que se pegue arriba, el padding superior debe ser más pequeño, o definido por separado.
+    # Aquí vamos a definir un padding general que funcione bien para el caso de "arriba".
+    # Padding horizontal siempre, y un poco de padding vertical.
+    view_horizontal_padding = 12 if is_mobile else 24
+    view_vertical_padding = 15 if is_mobile else 20
+    
+    # Definimos el padding específicamente para el contenedor que envuelve el ResponsiveRow
+    outer_container_padding = ft.padding.only(
+        top=view_vertical_padding, 
+        left=view_horizontal_padding, 
+        right=view_horizontal_padding
+    )
+
 
     def SectionHeader(icon, title):
         return ft.Row([
@@ -216,19 +229,25 @@ def DashboardView(page: ft.Page, api: ApiClient):
     if page:
         page.pubsub.subscribe(on_theme_change)
 
-    main_view_column = ft.Column(
+    # La columna principal que contiene el ResponsiveRow.
+    # Eliminamos 'vertical_alignment' para que el contenido fluya desde arriba.
+    # El scroll se mantiene en esta columna.
+    main_content_area = ft.Column(
         [
+            # Este ResponsiveRow contiene el main_column, que tiene el contenido real del dashboard.
             ft.ResponsiveRow(
                 [main_column],
-                alignment=ft.MainAxisAlignment.CENTER
+                alignment=ft.MainAxisAlignment.CENTER, # Centra horizontalmente el main_column
+                vertical_alignment=ft.CrossAxisAlignment.START # <-- CAMBIO CLAVE: Alinea el contenido arriba
             )
         ],
         expand=True,
         scroll=ft.ScrollMode.AUTO,
     )
 
+    # El Container final aplica el padding exterior a toda el área de contenido.
     return ft.Container(
-        content=main_view_column,
+        content=main_content_area,
         expand=True,
-        padding=view_padding
+        padding=outer_container_padding # Usamos el padding superior y lateral
     )
