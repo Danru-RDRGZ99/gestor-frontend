@@ -11,7 +11,9 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "322045933748-h6d7muuo3thc9o53l
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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")
 REDIRECT_URL = os.getenv("GOOGLE_REDIRECT_URL", "http://localhost:8551/oauth_callback")
 
+# --- INICIO DE LA CORRECCIÓN 1: Aceptar 'is_mobile' ---
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
+# --- FIN DE LA CORRECCIÓN 1 ---
 
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
          return ft.View(
@@ -77,6 +79,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             
         resultado = api.login_with_google(google_id_token)
 
+        # --- CORRECCIÓN: Guardar 'resultado.get("user")' en la sesión ---
         if resultado and "access_token" in resultado:
             page.session.set("user_session", resultado.get("user")) 
             on_success() 
@@ -174,6 +177,9 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
 
+    # --- INICIO DE LA CORRECCIÓN 2: Lógica Responsiva ---
+
+    # 1. Definir la tarjeta (versión escritorio por defecto)
     card_container = ft.Container(
         content=Card(form, padding=22),
         width=440,
@@ -184,18 +190,22 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         ),
     )
 
+    # 2. Definir el contenedor principal (versión escritorio por defecto)
     main_container = ft.Container(
         expand=True,
         content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.MainAxisAlignment.CENTER),
         padding=20,
     )
 
+    # 3. Modificar si es móvil
     if is_mobile:
-        card_container.width = None
-        card_container.shadow = None
+        card_container.width = None # Ocupa todo el ancho
+        card_container.shadow = None # Sin sombra
         card_container.border_radius = 0
-        main_container.padding = 0
-        main_container.vertical_alignment = ft.MainAxisAlignment.START
+        main_container.padding = 0 # Sin padding exterior
+        main_container.vertical_alignment = ft.MainAxisAlignment.START # Alinear arriba
         main_container.alignment = ft.alignment.top_center
 
+    # 4. Devolver el contenedor principal configurado
     return main_container
+    # --- FIN DE LA CORRECCIÓN 2 ---
