@@ -342,7 +342,10 @@ def main(page: ft.Page):
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
-                        [captcha_view.CaptchaView(page, api, on_login_success)],
+                        # --- INICIO DE LA CORRECCIÓN ---
+                        # Le pasamos la variable 'is_mobile' que definimos arriba
+                        [captcha_view.CaptchaView(page, api, on_login_success, is_mobile)],
+                        # --- FIN DE LA CORRECCIÓN ---
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
