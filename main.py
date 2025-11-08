@@ -242,7 +242,7 @@ def main(page: ft.Page):
             bottom_tabs = ft.Tabs(
                 selected_index=mobile_active_index,
                 on_change=nav_change,
-                tabs_scrollable=True,
+                scrollable=True,
                 expand=True,
                 tabs=[
                     ft.Tab(
