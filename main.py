@@ -215,7 +215,7 @@ def main(page: ft.Page):
                 selected_index=active_index,
                 on_change=nav_change,
                 destinations=[
-                    ft.NavigationDestination(
+                    ft.NavigationRailDestination(
                         icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1], 
                         label=ROUTE_META.get(key, ("Error",))[0]
                     ) for key in allowed
@@ -403,4 +403,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         assets_dir="ui/assets" 
     )
-    #a
