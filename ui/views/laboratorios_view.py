@@ -76,6 +76,7 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
             Danger("Eliminar", on_click=confirm_delete_click),
         ],
     )
+
     if delete_dialog not in page.overlay:
         page.overlay.append(delete_dialog)
 
@@ -177,10 +178,12 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
 
             list_panel.controls.append(card)
 
-        list_panel.update()
+        # ✅ SAFE UPDATE (NO falla si aún no está montado)
+        if list_panel.page:
+            list_panel.update()
 
     # ===========================
-    # CARD WEB (normal)
+    # CARD WEB
     # ===========================
     def laboratorio_card_web(lab, plantel_nombre):
         title = ft.Text(lab.nombre, size=16, weight=ft.FontWeight.W_600)
@@ -207,7 +210,7 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
         return Card(header, padding=14)
 
     # ===========================
-    # CARD MÓVIL (compacta)
+    # CARD MÓVIL
     # ===========================
     def laboratorio_card_mobile(lab, plantel_nombre):
 
@@ -237,15 +240,9 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
     # FORMULARIO WEB Y MÓVIL
     # ===========================
     if is_mobile:
-        # Campos móviles compactos
-        nombre_m = TextField("Nombre", height=45)
-        ubicacion_m = TextField("Ubicación", height=45)
-        capacidad_m = TextField("Capacidad", height=45)
-
-        # Vincular valores
-        nombre = nombre_m
-        ubicacion = ubicacion_m
-        capacidad = capacidad_m
+        nombre = TextField("Nombre", height=45)
+        ubicacion = TextField("Ubicación", height=45)
+        capacidad = TextField("Capacidad", height=45)
         dd_plantel_add.height = 45
 
         form_card = Card(
@@ -286,16 +283,10 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
         form_card = Card(form_controls, padding=14)
 
     # ===========================
-    # Cargar lista
-    # ===========================
-    render_list()
-
-    # ===========================
-    # RETORNO FINAL
+    # LAYOUT FINAL — SE DEFINE PRIMERO
     # ===========================
     if is_mobile:
-        # ✅ Scroll completo para evitar que el teclado tape contenido
-        return ft.ListView(
+        layout = ft.ListView(
             controls=[
                 ft.Text("Laboratorios", size=20, weight=ft.FontWeight.BOLD),
                 form_card,
@@ -307,16 +298,20 @@ def LaboratoriosView(page: ft.Page, api: ApiClient):
             spacing=12,
             padding=10
         )
+    else:
+        layout = ft.Column(
+            [
+                ft.Text("Laboratorios", size=20, weight=ft.FontWeight.BOLD),
+                form_card,
+                info,
+                ft.Divider(),
+                ft.Container(list_panel, expand=True, padding=ft.padding.only(top=10)),
+            ],
+            expand=True,
+            spacing=10
+        )
 
-    # ✅ Web normal
-    return ft.Column(
-        [
-            ft.Text("Laboratorios", size=20, weight=ft.FontWeight.BOLD),
-            form_card,
-            info,
-            ft.Divider(),
-            ft.Container(list_panel, expand=True, padding=ft.padding.only(top=10)),
-        ],
-        expand=True,
-        spacing=10
-    )
+    # ✅ AHORA ES SEGURO RENDERIZAR (YA EXISTE EN EL ÁRBOL)
+    render_list()
+
+    return layout
