@@ -301,7 +301,7 @@ def main(page: ft.Page):
                 page.update()
 
             top_app_bar.leading = ft.IconButton(
-                icon=ft.icons.MENU,
+                icon=ft.Icons.MENU,
                 tooltip="Menú",
                 on_click=toggle_nav_slide 
             )
