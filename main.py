@@ -214,7 +214,7 @@ def main(page: ft.Page):
             bottom_nav = ft.NavigationBar(
                 selected_index=active_index,
                 on_change=nav_change,
-                label_behavior=ft.NavigationDestinationLabelBehavior.ONLY_SHOW_SELECTED,
+                label_behavior=ft.NavigationBarLabelBehavior.ONLY_SHOW_SELECTED,
                 destinations=[
                     ft.NavigationRailDestination(
                         icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1], 
