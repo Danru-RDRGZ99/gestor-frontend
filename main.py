@@ -97,7 +97,7 @@ SPLASH_PATH = "ui/assets/splash.png"
 
 # 2. Preparar variables
 favicons_dict = {}
-splash_b64_data_uri = None # <--- CORRECCIÓN: CAMBIADO A SOLO EL 'data URI'
+splash_b64_data_uri = None
 
 # 3. Cargar Favicon (Ícono de la App)
 try:
@@ -118,7 +118,6 @@ try:
     if os.path.exists(SPLASH_PATH):
         with open(SPLASH_PATH, "rb") as image_file:
             splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            # Guardamos solo el string del 'data URIa'
             splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
             print("✅ Pantalla de carga (splash.png) cargada en Base64.")
     else:
@@ -130,24 +129,22 @@ except Exception as e:
 
 def main(page: ft.Page):
 
-    # <--- ¡CORRECCIÓN 1: ASIGNAR FAVICONS A 'page' AQUÍ! ---
     if favicons_dict:
         page.favicons = favicons_dict
         
-    # <--- ¡CORRECCIÓN 2: ASIGNAR SPLASH A 'page' AQUÍ! ---
-    # 'splash' también es una propiedad de 'page', no un argumento de 'ft.app()'
     if splash_b64_data_uri:
         page.splash = ft.Image(src_base64=splash_b64_data_uri)
-    # <--- FIN DE LAS CORRECCIONES ---
 
     # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
     
     page.title = "BLACKLAB"
     page.padding = 0
+    
     # --- INICIO CAMBIO RESPONSIVO ---
-    # page.window_min_width = 1100 # <--- ELIMINADO para permitir resizing
-    # page.window_min_height = 680 # <--- ELIMINADO
+    # Eliminamos el tamaño mínimo de ventana
+    # page.window_min_width = 1100 
+    # page.window_min_height = 680
     # --- FIN CAMBIO RESPONSIVO ---
 
     apply_theme(page)
@@ -286,14 +283,12 @@ def main(page: ft.Page):
                 width=NAV_WIDTH 
             )
             
-            # --- INICIO DE LA CORRECCIÓN ---
             nav_container = ft.Container(
                 content=nav_panel_content,
                 width=NAV_WIDTH, 
-                # bgcolor=ft.Colors.BACKGROUND, # <--- LÍNEA ELIMINADA
-                animate=ft.animation.Animation(300, "easeOutCubic"), 
+                # Eliminamos bgcolor para que tome el del tema
+                animate=ft.Animation(duration=300, curve=ft.AnimationCurve.EASE_OUT_CUBIC), 
             )
-            # --- FIN DE LA CORRECCIÓN ---
 
             def toggle_nav_slide(e):
                 if nav_container.width == NAV_WIDTH:
@@ -303,7 +298,7 @@ def main(page: ft.Page):
                 page.update()
 
             top_app_bar.leading = ft.IconButton(
-                icon=ft.icons.MENU,
+                icon=ft.Icons.MENU,
                 tooltip="Menú",
                 on_click=toggle_nav_slide 
             )
@@ -332,7 +327,9 @@ def main(page: ft.Page):
         
         # --- INICIO CAMBIO RESPONSIVO ---
         # Determinar si estamos en móvil ANTES de construir la vista
-        is_mobile = page.width < MOBILE_BREAKPOINT
+        # Usamos 1024 como default si page.width aún es None al inicio
+        current_width = page.width if page.width is not None else 1024
+        is_mobile = current_width < MOBILE_BREAKPOINT
         page.client_storage.set("is_mobile", is_mobile)
         # --- FIN CAMBIO RESPONSIVO ---
 
@@ -435,7 +432,11 @@ def main(page: ft.Page):
                 print(f"RESIZE: Cambiando a modo {'MÓVIL' if is_now_mobile else 'ESCRITORIO'} (Ancho: {current_width})")
                 router(page.route)
         except Exception as ex:
-            print(f"Error en handle_resize: {ex}")
+            # Añadimos manejo de errores para el Timeout
+            if "Timeout" in str(ex):
+                print(f"WARN: Timeout en client_storage, reintentando resize. ({ex})")
+            else:
+                print(f"Error en handle_resize: {ex}")
     
     page.on_resize = handle_resize
     # --- FIN CAMBIO RESPONSIVO ---
