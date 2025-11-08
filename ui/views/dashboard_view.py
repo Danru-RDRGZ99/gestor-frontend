@@ -27,20 +27,20 @@ def DashboardView(page: ft.Page, api: ApiClient):
 
     PAL = get_palette()
     
-    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
-    # Ajustamos el padding: un poco más de padding superior en desktop, o solo horizontal en móvil
-    # Para que se pegue arriba, el padding superior debe ser más pequeño, o definido por separado.
-    # Aquí vamos a definir un padding general que funcione bien para el caso de "arriba".
-    # Padding horizontal siempre, y un poco de padding vertical.
-    view_horizontal_padding = 12 if is_mobile else 24
-    view_vertical_padding = 15 if is_mobile else 20
+    # --- INICIO DE LA LÓGICA CONDICIONAL ---
     
-    # Definimos el padding específicamente para el contenedor que envuelve el ResponsiveRow
-    outer_container_padding = ft.padding.only(
-        top=view_vertical_padding, 
-        left=view_horizontal_padding, 
-        right=view_horizontal_padding
-    )
+    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+
+    if is_mobile:
+        # Configuración Móvil (Pegado arriba)
+        view_padding = ft.padding.only(top=15, left=12, right=12)
+        view_vertical_alignment = ft.MainAxisAlignment.START
+    else:
+        # Configuración PC (Centrado)
+        view_padding = ft.padding.symmetric(horizontal=24, vertical=20)
+        view_vertical_alignment = ft.MainAxisAlignment.CENTER
+        
+    # --- FIN DE LA LÓGICA CONDICIONAL ---
 
 
     def SectionHeader(icon, title):
@@ -50,6 +50,9 @@ def DashboardView(page: ft.Page, api: ApiClient):
         ])
 
     def ItemCard(child: ft.Control):
+        # NOTA: Si quieres que las tarjetas NO tengan sombra en móvil,
+        # tendrías que modificar tu componente 'Card' para aceptar un argumento 'shadow'
+        # y pasarlo así: Card(child, padding=12, radius=10, shadow=None if is_mobile else "default")
         return Card(child, padding=12, radius=10)
 
     def chip_estado(txt: str):
@@ -187,7 +190,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
     saludo = ft.Text(f"Hola, {user_data.get('nombre', user_data.get('user', ''))}.", size=14, color=PAL["text_secondary"])
 
     main_column = ft.Column(spacing=20)
-    
     main_column.col = {"xs": 12, "md": 10, "lg": 8, "xl": 6}
 
     main_column.controls.append(error_display)
@@ -229,25 +231,29 @@ def DashboardView(page: ft.Page, api: ApiClient):
     if page:
         page.pubsub.subscribe(on_theme_change)
 
-    # La columna principal que contiene el ResponsiveRow.
-    # Eliminamos 'vertical_alignment' para que el contenido fluya desde arriba.
-    # El scroll se mantiene en esta columna.
-    main_content_area = ft.Column(
-        [
-            # Este ResponsiveRow contiene el main_column, que tiene el contenido real del dashboard.
-            ft.ResponsiveRow(
-                [main_column],
-                alignment=ft.MainAxisAlignment.CENTER, # Centra horizontalmente el main_column
-                vertical_alignment=ft.CrossAxisAlignment.START # <-- CAMBIO CLAVE: Alinea el contenido arriba
-            )
-        ],
-        expand=True,
-        scroll=ft.ScrollMode.AUTO,
+
+    # El contenido (las tarjetas) se definen en el ResponsiveRow
+    responsive_content = ft.ResponsiveRow(
+        [main_column],
+        alignment=ft.MainAxisAlignment.CENTER
     )
 
-    # El Container final aplica el padding exterior a toda el área de contenido.
-    return ft.Container(
-        content=main_content_area,
+    # La columna principal de la vista:
+    # - Se expande para llenar el contenedor
+    # - Permite scroll
+    # - Centra el contenido horizontalmente
+    # - USA LA ALINEACIÓN VERTICAL CONDICIONAL
+    main_view_column = ft.Column(
+        [responsive_content],
         expand=True,
-        padding=outer_container_padding # Usamos el padding superior y lateral
+        scroll=ft.ScrollMode.AUTO,
+        alignment=view_vertical_alignment, # <-- CAMBIO CLAVE
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    # El contenedor final aplica el padding condicional
+    return ft.Container(
+        content=main_view_column,
+        expand=True,
+        padding=view_padding # <-- CAMBIO CLAVE
     )
