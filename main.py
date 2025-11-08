@@ -85,6 +85,46 @@ ROUTE_META = {
 }
 NAV_WIDTH = 250
 
+# <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
+# (Se ejecuta ANTES de iniciar la app para evitar la caché)
+
+# 1. Definir rutas
+ICON_PATH = "ui/assets/icon.png"
+SPLASH_PATH = "ui/assets/splash.png"
+
+# 2. Preparar variables
+favicons_dict = {}
+splash_b64_data_uri = None # <--- CORRECCIÓN: CAMBIADO A SOLO EL 'data URI'
+
+# 3. Cargar Favicon (Ícono de la App)
+try:
+    if os.path.exists(ICON_PATH):
+        with open(ICON_PATH, "rb") as image_file:
+            icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+            favicons_dict = {
+                "": f"data:image/png;base64,{icon_b64}"
+            }
+            print("✅ Favicon (icon.png) cargado en Base64.")
+    else:
+        print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
+except Exception as e:
+    print(f"❌ Error al cargar el favicon: {e}")
+
+# 4. Cargar Splash (Pantalla de Carga)
+try:
+    if os.path.exists(SPLASH_PATH):
+        with open(SPLASH_PATH, "rb") as image_file:
+            splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
+            # Guardamos solo el string del 'data URIa'
+            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
+            print("✅ Pantalla de carga (splash.png) cargada en Base64.")
+    else:
+        print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
+except Exception as e:
+    print(f"❌ Error al cargar la pantalla de carga: {e}")
+# --- FIN: LÓGICA DE CARGA DE ASSETS ---
+
+
 def main(page: ft.Page):
 
     # <--- ¡CORRECCIÓN 1: ASIGNAR FAVICONS A 'page' AQUÍ! ---
@@ -148,6 +188,20 @@ def main(page: ft.Page):
             active_index = 0
 
         top_app_bar = ft.AppBar()
+
+        # --- INICIO DE LA MODIFICACIÓN (Añadir Menú Hamburguesa) ---
+        
+        def toggle_nav_rail(e):
+            """Expande o contrae el menú lateral"""
+            navigation_rail.extended = not navigation_rail.extended
+            page.update()
+
+        top_app_bar.leading = ft.IconButton(
+            icon=ft.Icons.MENU,
+            tooltip="Menú",
+            on_click=toggle_nav_rail
+        )
+        # --- FIN DE LA MODIFICACIÓN ---
 
         def toggle_theme(_):
             new_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
@@ -298,44 +352,6 @@ def main(page: ft.Page):
     page.on_route_change = router
     page.go(page.route)
 
-
-# <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
-# (Se ejecuta ANTES de iniciar la app para evitar la caché)
-
-# 1. Definir rutas
-ICON_PATH = "ui/assets/icon.png"
-SPLASH_PATH = "ui/assets/splash.png"
-
-# 2. Preparar variables
-favicons_dict = {}
-splash_b64_data_uri = None # <--- CORRECCIÓN: CAMBIADO A SOLO EL 'data URI'
-
-# 3. Cargar Favicon (Ícono de la App)
-try:
-    if os.path.exists(ICON_PATH):
-        with open(ICON_PATH, "rb") as image_file:
-            icon_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            favicons_dict = {
-                "": f"data:image/png;base64,{icon_b64}"
-            }
-            print("✅ Favicon (icon.png) cargado en Base64.")
-    else:
-        print(f"❌ ADVERTENCIA: No se encontró icon.png en {ICON_PATH}")
-except Exception as e:
-    print(f"❌ Error al cargar el favicon: {e}")
-
-# 4. Cargar Splash (Pantalla de Carga)
-try:
-    if os.path.exists(SPLASH_PATH):
-        with open(SPLASH_PATH, "rb") as image_file:
-            splash_b64 = base64.b64encode(image_file.read()).decode('utf-8')
-            # Guardamos solo el string del 'data URIa'
-            splash_b64_data_uri = f"data:image/png;base64,{splash_b64}" 
-            print("✅ Pantalla de carga (splash.png) cargada en Base64.")
-    else:
-        print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
-except Exception as e:
-    print(f"❌ Error al cargar la pantalla de carga: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8501))
