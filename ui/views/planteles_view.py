@@ -7,7 +7,7 @@ from ui.components.buttons import Primary, Ghost, Icon, Danger, Tonal
 
 def PlantelesView(page: ft.Page, api: ApiClient):
 
-    # Detectar si es móvil
+    # Detectar si es móvil (responsive real)
     is_mobile = page.width < 600
 
     # --- Autorización ---
@@ -18,18 +18,18 @@ def PlantelesView(page: ft.Page, api: ApiClient):
     if not is_admin:
         return ft.Text("Acceso denegado. Solo para administradores.", color="red")
 
-    # --- Estado y UI ---
+    # --- Estado y controles ---
     state = {"edit_for": None}
 
     nombre_tf = TextField("Nombre")
     direccion_tf = TextField("Dirección")
     info_txt = ft.Text("")
-    list_panel = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    list_panel = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
 
     planteles_cache = []
 
     # ------------------------------
-    # Renderizado general de la lista
+    # Renderizado lista
     # ------------------------------
     def render_list():
         nonlocal planteles_cache
@@ -45,17 +45,17 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             planteles_cache = []
         else:
             planteles_cache = data
-            for p_dict in planteles_cache:
+            for p in planteles_cache:
                 if is_mobile:
-                    list_panel.controls.append(plantel_card_mobile(p_dict))
+                    list_panel.controls.append(plantel_card_mobile(p))
                 else:
-                    list_panel.controls.append(plantel_card(p_dict))
+                    list_panel.controls.append(plantel_card(p))
 
         if list_panel.page:
             list_panel.update()
 
     # ------------------------------
-    # Manejo de mensajes y recargas
+    # Mensajes y recarga
     # ------------------------------
     def reload_info(msg: str | None = None, update_page: bool = True):
         if msg is not None:
@@ -63,11 +63,10 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             info_txt.color = ft.Colors.ERROR if "Error" in msg else None
             if update_page and info_txt.page:
                 info_txt.update()
-
         render_list()
 
     # ------------------------------
-    # Crear Plantel
+    # Crear plantel
     # ------------------------------
     def add_plantel(e):
         if not nombre_tf.value or not direccion_tf.value:
@@ -98,7 +97,7 @@ def PlantelesView(page: ft.Page, api: ApiClient):
     # ------------------------------
     def save_edit(pid: int, n_val: str, d_val: str):
         if not n_val or not d_val:
-            reload_info("Los campos no pueden estar vacíos en edición.", update_page=True)
+            reload_info("Los campos no pueden estar vacíos", update_page=True)
             return
 
         payload = {"nombre": n_val.strip(), "direccion": d_val.strip()}
@@ -121,152 +120,112 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             reload_info("Plantel eliminado", update_page=True)
         else:
             error_msg = resultado.get("error", "No se pudo eliminar") if isinstance(resultado, dict) else "Error"
-            reload_info(f"{error_msg}. Asegúrate de que no tenga laboratorios asociados.", update_page=True)
+            reload_info(f"{error_msg}. Verifica laboratorios asociados.", update_page=True)
 
     # ------------------------------
-    # Abrir/cerrar edición
+    # Activar edición
     # ------------------------------
     def open_edit(pid: int):
         state["edit_for"] = None if state["edit_for"] == pid else pid
-        reload_info(msg="", update_page=True)
+        reload_info("", update_page=True)
 
     # -----------------------------------------------------
-    # Tarjeta WEB (tu diseño original)
+    # CARD WEB (original)
     # -----------------------------------------------------
-    def plantel_card(p: dict) -> ft.Control:
-        title = ft.Text(f"{p.get('nombre', '')}", size=16, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(p.get('direccion', '-'), size=12, opacity=0.85)
+    def plantel_card(p: dict):
+        title = ft.Text(p.get("nombre", ""), size=16, weight=ft.FontWeight.W_600)
+        subtitle = ft.Text(p.get("direccion", "-"), size=12, opacity=0.85)
 
         btns = ft.Row([
             Icon(ft.Icons.EDIT, "Editar", on_click=lambda e, pid=p['id']: open_edit(pid)),
             Icon(ft.Icons.DELETE, "Eliminar",
                  on_click=lambda e, pid=p['id']: try_delete_plantel(pid),
-                 icon_color=ft.Colors.ERROR),
+                 icon_color=ft.Colors.ERROR)
         ], spacing=6)
 
-        header = ft.Row([ft.Column([title, subtitle], spacing=2, expand=True), btns])
+        content = ft.Column([ft.Row([ft.Column([title, subtitle], expand=True), btns])], spacing=10)
 
-        content_column = ft.Column([header], spacing=10, key=f"plantel_{p['id']}")
-
-        if state["edit_for"] == p['id']:
-            n_edit = TextField("Nombre", value=p['nombre'], expand=True)
-            d_edit = TextField("Dirección", value=p['direccion'], expand=True)
+        if state["edit_for"] == p["id"]:
+            n_edit = TextField("Nombre", value=p["nombre"])
+            d_edit = TextField("Dirección", value=p["direccion"])
 
             actions = ft.Row([
-                Primary("Guardar", on_click=lambda e, pid=p['id']: save_edit(pid, n_edit.value, d_edit.value), width=130),
-                Ghost("Cancelar", on_click=lambda e, pid=p['id']: open_edit(pid), width=120),
+                Primary("Guardar", on_click=lambda e: save_edit(p["id"], n_edit.value, d_edit.value)),
+                Ghost("Cancelar", on_click=lambda e: open_edit(p["id"]))
             ])
 
-            content_column.controls.append(
+            content.controls.append(
                 ft.Column([
-                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+                    ft.Divider(),
                     n_edit,
                     d_edit,
                     actions
                 ], spacing=8)
             )
 
-        return Card(content_column, padding=14)
+        return Card(content, padding=14)
 
     # -----------------------------------------------------
-    # Tarjeta MÓVIL (compacta y vertical)
+    # CARD MÓVIL OPTIMIZADA
     # -----------------------------------------------------
-    def plantel_card_mobile(p: dict) -> ft.Control:
-        title = ft.Text(
-            p.get("nombre", ""),
-            size=15,
-            weight=ft.FontWeight.W_600
-        )
+    def plantel_card_mobile(p: dict):
+        title = ft.Text(p.get("nombre", ""), size=15, weight=ft.FontWeight.W_600)
+        subtitle = ft.Text(p.get("direccion", "-"), size=11, opacity=0.85)
 
-        subtitle = ft.Text(
-            p.get("direccion", "-"),
-            size=11,
-            opacity=0.85
-        )
-
-        btn_row = ft.Row(
+        btns = ft.Row(
             [
-                Primary(
-                    "Editar",
-                    on_click=lambda e, pid=p['id']: open_edit(pid),
-                    height=36,
-                    expand=True
-                ),
-                Danger(
-                    "Eliminar",
-                    on_click=lambda e, pid=p['id']: try_delete_plantel(pid),
-                    height=36,
-                    expand=True
-                ),
+                Primary("Editar", height=36, expand=True,
+                        on_click=lambda e: open_edit(p["id"])),
+                Danger("Eliminar", height=36, expand=True,
+                       on_click=lambda e: try_delete_plantel(p["id"]))
             ],
             spacing=6
         )
 
-        content_column = ft.Column(
-            [title, subtitle, btn_row],
-            spacing=6,
-            key=f"plantel_{p['id']}"
-        )
+        content = ft.Column([title, subtitle, btns], spacing=6)
 
         if state["edit_for"] == p["id"]:
-            n_edit = TextField("Nombre", value=p['nombre'])
-            d_edit = TextField("Dirección", value=p['direccion'])
+            n_edit = TextField("Nombre", value=p["nombre"])
+            d_edit = TextField("Dirección", value=p["direccion"])
 
-            actions = ft.Column(
-                [
-                    Primary("Guardar", height=36,
-                            on_click=lambda e, pid=p['id']: save_edit(pid, n_edit.value, d_edit.value)),
-                    Ghost("Cancelar", height=36,
-                          on_click=lambda e, pid=p['id']: open_edit(pid)),
-                ],
-                spacing=6
+            actions = ft.Column([
+                Primary("Guardar", height=36, on_click=lambda e: save_edit(p["id"], n_edit.value, d_edit.value)),
+                Ghost("Cancelar", height=36, on_click=lambda e: open_edit(p["id"]))
+            ], spacing=6)
+
+            content.controls.append(
+                ft.Column([
+                    ft.Divider(),
+                    n_edit,
+                    d_edit,
+                    actions
+                ], spacing=6)
             )
 
-            content_column.controls.append(
-                ft.Column(
-                    [
-                        ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-                        n_edit,
-                        d_edit,
-                        actions
-                    ],
-                    spacing=6
-                )
-            )
-
-        # ✅ Border radius movido a Container para evitar error
         return Card(
-            ft.Container(
-                content_column,
-                border_radius=10
-            ),
+            ft.Container(content, border_radius=10),
             padding=8
         )
 
     # -----------------------------------------------------
-    # Formulario compacto móvil o web
+    # FORMULARIO NEW PLANTEL
     # -----------------------------------------------------
-
     if is_mobile:
         add_section_form = ft.Column(
             [
                 TextField("Nombre", height=45),
                 TextField("Dirección", height=45),
-                Primary("Agregar", on_click=add_plantel, height=40),
+                Primary("Agregar", on_click=add_plantel, height=40)
             ],
             spacing=6
         )
 
-        # ✅ Border radius movido a Container
         add_section = Card(
             ft.Container(
-                ft.Column(
-                    [
-                        ft.Text("Agregar Nuevo Plantel", size=14, weight=ft.FontWeight.W_600),
-                        add_section_form
-                    ],
-                    spacing=6
-                ),
+                ft.Column([
+                    ft.Text("Agregar Nuevo Plantel", size=14, weight=ft.FontWeight.W_600),
+                    add_section_form
+                ], spacing=6),
                 border_radius=10
             ),
             padding=10
@@ -283,9 +242,8 @@ def PlantelesView(page: ft.Page, api: ApiClient):
                 ft.Container(
                     Primary("Agregar", on_click=add_plantel, height=44),
                     col={"sm": 12, "md": 2}
-                ),
+                )
             ],
-            vertical_alignment=ft.CrossAxisAlignment.END,
             spacing=12
         )
 
@@ -297,20 +255,39 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             padding=14
         )
 
-    # Cargar datos
+    # ------------------------------
+    # CARGAR LISTA
+    # ------------------------------
     render_list()
 
     title_size = 20 if is_mobile else 22
 
+    # -----------------------------------------------------
+    # ✅ RETORNO FINAL — SCROLL GLOBAL EN MÓVIL
+    # -----------------------------------------------------
+    if is_mobile:
+        return ft.ListView(
+            controls=[
+                ft.Text("Gestión de Planteles", size=title_size, weight=ft.FontWeight.BOLD),
+                add_section,
+                info_txt,
+                ft.Divider(),
+                list_panel
+            ],
+            expand=True,
+            spacing=12,
+            padding=10
+        )
+
+    # ✅ Version web normal
     return ft.Column(
         [
             ft.Text("Gestión de Planteles", size=title_size, weight=ft.FontWeight.BOLD),
             add_section,
             info_txt,
-            ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-            ft.Container(content=list_panel, expand=True, padding=ft.padding.only(top=10))
+            ft.Divider(),
+            ft.Container(list_panel, expand=True, padding=ft.padding.only(top=10))
         ],
         expand=True,
-        alignment=ft.MainAxisAlignment.START,
         spacing=15
     )
