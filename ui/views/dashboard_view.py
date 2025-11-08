@@ -32,6 +32,18 @@ def DashboardView(page: ft.Page, api: ApiClient):
         }
 
     PAL = get_palette()
+    
+    # --- INICIO DE LA MODIFICACIÓN MÓVIL (Plataforma) ---
+    
+    # Detectamos si la plataforma es móvil (Android o iOS)
+    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+
+    # Padding para la vista principal: más ajustado en móvil, más aire en desktop
+    # El ResponsiveRow ya centra el contenido, esto es solo el espacio exterior.
+    view_padding = ft.padding.symmetric(horizontal=12, vertical=15) if is_mobile else ft.padding.symmetric(horizontal=24, vertical=20)
+
+    # --- FIN DE LA MODIFICACIÓN MÓVIL ---
+
 
     # --- Helpers de UI ---
     def SectionHeader(icon, title):
@@ -43,6 +55,9 @@ def DashboardView(page: ft.Page, api: ApiClient):
     def ItemCard(child: ft.Control):
         # The custom Card component handles its own styling (padding, radius)
         # We removed bgcolor from here
+        # NOTA: Si quisieras quitar sombras en móvil, tendrías que pasar 'shadow=None' aquí
+        # asumiendo que tu 'Card' customizada acepta ese parámetro.
+        # Por ejemplo: shadow = None if is_mobile else "default_shadow"
         return Card(child, padding=12, radius=10)
 
     def chip_estado(txt: str):
@@ -209,6 +224,9 @@ def DashboardView(page: ft.Page, api: ApiClient):
         welcome_content.append(ft.Text(f"Rol actual: {role.capitalize()}", color=PAL["text_secondary"]))
     else:
         welcome_content.append(ft.Text("Bienvenido. Usa el menú de la izquierda.", color=PAL["text_secondary"]))
+    
+    # NOTA: Aquí también podrías aplicar la sombra condicional
+    # main_column.controls.append(Card(ft.Column(welcome_content), shadow=card_shadow))
     main_column.controls.append(Card(ft.Column(welcome_content)))
 
 
@@ -249,6 +267,7 @@ def DashboardView(page: ft.Page, api: ApiClient):
     # --- INICIO DE LA MODIFICACIÓN 2 ---
     # Envolvemos el contenido en una Columna con scroll,
     # que contiene una ResponsiveRow para centrar el contenido.
+    # AÑADIMOS EL 'view_padding' ADAPTATIVO
     return ft.Column(
         [
             ft.ResponsiveRow(
@@ -258,5 +277,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
         ],
         expand=True,
         scroll=ft.ScrollMode.AUTO,
+        padding=view_padding # <-- ÚNICO CAMBIO REAL
     )
     # --- FIN DE LA MODIFICACIÓN 2 ---
