@@ -236,12 +236,20 @@ def main(page: ft.Page):
                 padding=ft.padding.only(top=5),
             )
 
+            page_layout = ft.Column(
+                controls=[
+                    top_app_bar,
+                    main_content,
+                    bottom_bar_container
+                ],
+                expand=True,
+                spacing=0
+            )
+
             return ft.View(
                 f"/{active_key}",
                 [
-                    top_app_bar,
-                    main_content,
-                    bottom_bar_container,
+                    page_layout
                 ],
                 padding=0,
                 spacing=0
@@ -343,7 +351,7 @@ def main(page: ft.Page):
                 page.views.append(
                     ft.View(
                         "/",
-                        [login_view.LoginView(page, api, on_success=on_login_success)],
+                        [login_view.LoginView(page, api, on_success=on_login_success, is_mobile=is_mobile)],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         vertical_alignment=ft.MainAxisAlignment.CENTER,
                     )
