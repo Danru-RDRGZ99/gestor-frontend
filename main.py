@@ -191,9 +191,11 @@ def main(page: ft.Page):
             )
         ]
 
+        mobile_nav_keys = [key for key in allowed if key != "ajustes"]
+
         def nav_change(e):
-            selected_tab = e.control.tabs[e.control.selected_index]
-            selected_route_key = selected_tab.data
+            selected_index = e.control.selected_index
+            selected_route_key = mobile_nav_keys[selected_index]
             page.go(f"/{selected_route_key}")
             if is_mobile: 
                 page.drawer.open = False
@@ -221,8 +223,6 @@ def main(page: ft.Page):
                 on_click=open_drawer
             )
             
-            mobile_nav_keys = [key for key in allowed if key != "ajustes"]
-            
             mobile_active_index = 0
             if active_key in mobile_nav_keys:
                 mobile_active_index = mobile_nav_keys.index(active_key)
@@ -246,7 +246,6 @@ def main(page: ft.Page):
                 expand=True,
                 tabs=[
                     ft.Tab(
-                        data=key,
                         icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
                         text=ROUTE_META.get(key, ("Error",))[0]
                     ) for key in mobile_nav_keys
