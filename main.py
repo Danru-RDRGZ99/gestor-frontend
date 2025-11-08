@@ -197,9 +197,6 @@ def main(page: ft.Page):
             selected_index = e.control.selected_index
             selected_route_key = mobile_nav_keys[selected_index]
             page.go(f"/{selected_route_key}")
-            if is_mobile: 
-                page.drawer.open = False
-                page.drawer.update()
         
         def rail_nav_change(e):
             selected_route_key = e.control.destinations[e.control.selected_index].data
@@ -213,31 +210,11 @@ def main(page: ft.Page):
 
         if is_mobile:
             
-            def open_drawer(e):
-                page.drawer.open = True
-                page.drawer.update()
-
-            top_app_bar.leading = ft.IconButton(
-                icon=ft.Icons.MENU,
-                tooltip="Menú",
-                on_click=open_drawer
-            )
+            top_app_bar.leading = None
             
             mobile_active_index = 0
             if active_key in mobile_nav_keys:
                 mobile_active_index = mobile_nav_keys.index(active_key)
-
-            page_drawer = ft.NavigationDrawer(
-                selected_index=active_index,
-                on_change=rail_nav_change, 
-                controls=[
-                    ft.NavigationDrawerDestination(
-                        data=key,
-                        icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
-                        label=ROUTE_META.get(key, ("Error",))[0]
-                    ) for key in allowed
-                ]
-            )
             
             bottom_tabs = ft.Tabs(
                 selected_index=mobile_active_index,
@@ -264,10 +241,10 @@ def main(page: ft.Page):
                 [
                     top_app_bar,
                     main_content,
+                    bottom_bar_container,
                 ],
-                drawer=page_drawer,
-                navigation_bar=bottom_bar_container,
                 padding=0,
+                spacing=0
             )
             
         else:
