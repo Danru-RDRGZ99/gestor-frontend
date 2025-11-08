@@ -152,7 +152,7 @@ def PlantelesView(page: ft.Page, api: ApiClient):
                     ),
                     # Botones de Acción
                     ft.IconButton(
-                        icon=ft.icons.EDIT_OUTLINED,
+                        icon=ft.Icons.EDIT_OUTLINED,
                         on_click=lambda e, p=plantel: editar_plantel(p),
                         tooltip="Editar"
                     ),
