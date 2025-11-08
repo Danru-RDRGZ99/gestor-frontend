@@ -195,7 +195,7 @@ def main(page: ft.Page):
             selected_route = allowed[e.control.selected_index]
             page.go(f"/{selected_route}")
             
-        nav_destinations = [
+        nav_destinations_rail = [
             ft.NavigationRailDestination(
                 icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
                 label=ROUTE_META.get(key, ("Error",))[0]
@@ -211,14 +211,14 @@ def main(page: ft.Page):
         if is_mobile:
             top_app_bar.leading = None 
             
-            bottom_nav = ft.BottomNavigationBar(
+            bottom_nav = ft.NavigationBar(
                 selected_index=active_index,
                 on_change=nav_change,
                 destinations=[
                     ft.NavigationDestination(
-                        icon=dest.icon, 
-                        label=dest.label
-                    ) for dest in nav_destinations
+                        icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1], 
+                        label=ROUTE_META.get(key, ("Error",))[0]
+                    ) for key in allowed
                 ]
             )
             
@@ -239,7 +239,7 @@ def main(page: ft.Page):
                 min_width=100,
                 min_extended_width=NAV_WIDTH,
                 extended=True,
-                destinations=nav_destinations,
+                destinations=nav_destinations_rail,
                 on_change=nav_change,
                 expand=True
             )
@@ -292,7 +292,14 @@ def main(page: ft.Page):
         
         current_width = page.width if page.width is not None else 1024
         is_mobile = current_width < MOBILE_BREAKPOINT
-        page.client_storage.set("is_mobile", is_mobile)
+        
+        try:
+            page.client_storage.set("is_mobile", is_mobile)
+        except Exception as e:
+            if "Timeout" in str(e):
+                print(f"WARN: Timeout en client_storage.set. {e}")
+            else:
+                raise e
 
         if not user_session:
             if current_route_key == "register":
@@ -376,7 +383,7 @@ def main(page: ft.Page):
                 router(page.route)
         except Exception as ex:
             if "Timeout" in str(ex):
-                print(f"WARN: Timeout en client_storage, reintentando resize. ({ex})")
+                print(f"WARN: Timeout en client_storage.get. ({ex})")
             else:
                 print(f"Error en handle_resize: {ex}")
     
