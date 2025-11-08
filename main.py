@@ -84,6 +84,9 @@ ROUTE_META = {
     "horarios": ("Horarios Admin", ft.Icons.SCHEDULE),
 }
 NAV_WIDTH = 250
+# --- INICIO CAMBIO RESPONSIVO ---
+MOBILE_BREAKPOINT = 768 # Píxeles para cambiar a vista móvil
+# --- FIN CAMBIO RESPONSIVO ---
 
 # <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
 # (Se ejecuta ANTES de iniciar la app para evitar la caché)
@@ -142,8 +145,10 @@ def main(page: ft.Page):
     
     page.title = "BLACKLAB"
     page.padding = 0
-    page.window_min_width = 1100
-    page.window_min_height = 680
+    # --- INICIO CAMBIO RESPONSIVO ---
+    # page.window_min_width = 1100 # <--- ELIMINADO para permitir resizing
+    # page.window_min_height = 680 # <--- ELIMINADO
+    # --- FIN CAMBIO RESPONSIVO ---
 
     apply_theme(page)
 
@@ -168,7 +173,10 @@ def main(page: ft.Page):
         print("DEBUG: on_login_success llamado, redirigiendo a /dashboard")
         page.go("/dashboard")
 
-    def build_shell(active_key: str, body: ft.Control):
+    # --- INICIO CAMBIO RESPONSIVO ---
+    # El 'Shell' ahora decide si mostrar layout de PC o Móvil
+    def build_shell(active_key: str, body: ft.Control, is_mobile: bool):
+    # --- FIN CAMBIO RESPONSIVO ---
         user_session = page.session.get("user_session") or {}
         if not user_session:
             page.go("/")
@@ -216,83 +224,115 @@ def main(page: ft.Page):
         def nav_change(e):
             selected_route = allowed[e.control.selected_index]
             page.go(f"/{selected_route}")
-
-        navigation_rail = ft.NavigationRail(
-            selected_index=active_index,
-            label_type=ft.NavigationRailLabelType.ALL,
-            min_width=100,
-            min_extended_width=NAV_WIDTH,
-            extended=True, # El menú siempre está extendido por dentro
-            destinations=[
-                ft.NavigationRailDestination(
-                    icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
-                    label=ROUTE_META.get(key, ("Error",))[0]
-                ) for key in allowed
-            ],
-            on_change=nav_change,
-        )
-
-        # --- INICIO DE LA MODIFICACIÓN (Slide-out) ---
-
-        # 1. Envolver el NavigationRail y el Divider en un Contenedor
-        nav_panel_content = ft.Column(
-            [navigation_rail, ft.VerticalDivider(width=1)],
-            spacing=0,
-            # Asegura que la columna no se colapse
-            width=NAV_WIDTH 
-        )
+            
+        # --- INICIO CAMBIO RESPONSIVO ---
+        # Definir los destinos una sola vez
+        nav_destinations = [
+            ft.NavigationRailDestination(
+                icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
+                label=ROUTE_META.get(key, ("Error",))[0]
+            ) for key in allowed
+        ]
         
-        nav_container = ft.Container(
-            content=nav_panel_content,
-            width=NAV_WIDTH, # Ancho inicial (250)
-            bgcolor=ft.Colors.BACKGROUND, # Color de fondo para que no sea transparente
-            animate=ft.animation.Animation(300, "easeOutCubic"), # Animación de slide
-        )
-
-        # 2. Crear la *nueva* función que anima el ancho del contenedor
-        def toggle_nav_slide(e):
-            """Muestra u oculta totalmente el menú lateral."""
-            if nav_container.width == NAV_WIDTH:
-                nav_container.width = 0
-            else:
-                nav_container.width = NAV_WIDTH
-            page.update()
-
-        # 3. Asignar la *nueva* función al botón de hamburguesa
-        top_app_bar.leading = ft.IconButton(
-            icon=ft.icons.MENU,
-            tooltip="Menú",
-            on_click=toggle_nav_slide # Asignar la nueva función
-        )
-        # --- FIN DE LA MODIFICACIÓN ---
-
         main_content = ft.Container(
             content=body,
             expand=True,
-            padding=ft.padding.all(15),
+            # Reducir padding en móvil
+            padding=ft.padding.all(10 if is_mobile else 15), 
         )
 
-        return ft.View(
-            f"/{active_key}",
-            [
-                top_app_bar,
-                ft.Row(
-                    [
-                        nav_container, # <--- Usar el contenedor animado
-                        # El VerticalDivider ya está *dentro* del contenedor
-                        main_content,
-                    ],
-                    expand=True,
-                    spacing=0 # Importante para que no haya huecos
-                ),
-            ],
-            padding=0,
-        )
+        if is_mobile:
+            # --- VISTA MÓVIL ---
+            # No usamos el botón de hamburguesa, el menú está abajo
+            top_app_bar.leading = None 
+            
+            bottom_nav = ft.BottomNavigationBar(
+                selected_index=active_index,
+                on_change=nav_change,
+                destinations=[
+                    ft.NavigationDestination(
+                        icon=dest.icon, 
+                        label=dest.label
+                    ) for dest in nav_destinations
+                ]
+            )
+            
+            return ft.View(
+                f"/{active_key}",
+                [
+                    top_app_bar,
+                    main_content, # El contenido principal ocupa todo
+                ],
+                navigation_bar=bottom_nav, # Menú en la parte inferior
+                padding=0,
+            )
+            
+        else:
+            # --- VISTA ESCRITORIO ---
+            # (Usamos el código de slide-out que ya teníamos)
+            navigation_rail = ft.NavigationRail(
+                selected_index=active_index,
+                label_type=ft.NavigationRailLabelType.ALL,
+                min_width=100,
+                min_extended_width=NAV_WIDTH,
+                extended=True, # El menú siempre está extendido por dentro
+                destinations=nav_destinations, # Usar los destinos
+                on_change=nav_change,
+            )
+
+            nav_panel_content = ft.Column(
+                [navigation_rail, ft.VerticalDivider(width=1)],
+                spacing=0,
+                width=NAV_WIDTH 
+            )
+            
+            nav_container = ft.Container(
+                content=nav_panel_content,
+                width=NAV_WIDTH, 
+                bgcolor=ft.Colors.BACKGROUND, 
+                animate=ft.animation.Animation(300, "easeOutCubic"), 
+            )
+
+            def toggle_nav_slide(e):
+                if nav_container.width == NAV_WIDTH:
+                    nav_container.width = 0
+                else:
+                    nav_container.width = NAV_WIDTH
+                page.update()
+
+            top_app_bar.leading = ft.IconButton(
+                icon=ft.icons.MENU,
+                tooltip="Menú",
+                on_click=toggle_nav_slide 
+            )
+
+            return ft.View(
+                f"/{active_key}",
+                [
+                    top_app_bar,
+                    ft.Row(
+                        [
+                            nav_container,
+                            main_content,
+                        ],
+                        expand=True,
+                        spacing=0 
+                    ),
+                ],
+                padding=0,
+            )
+        # --- FIN CAMBIO RESPONSIVO ---
 
     def router(route):
         page.views.clear()
         user_session = page.session.get("user_session") or {}
         current_route_key = page.route.strip("/")
+        
+        # --- INICIO CAMBIO RESPONSIVO ---
+        # Determinar si estamos en móvil ANTES de construir la vista
+        is_mobile = page.width < MOBILE_BREAKPOINT
+        page.client_storage.set("is_mobile", is_mobile)
+        # --- FIN CAMBIO RESPONSIVO ---
 
         if not user_session:
             if current_route_key == "register":
@@ -315,8 +355,6 @@ def main(page: ft.Page):
                     page.go("/")
                 
                 # Flujo de Login:
-                # - on_success (Google) va a on_login_success (-> /dashboard)
-                # - Login normal va a /captcha-verify (manejado en login_view.py)
                 page.views.append(
                     ft.View(
                         "/",
@@ -354,7 +392,10 @@ def main(page: ft.Page):
             if view_function:
                 try:
                     body = view_function(page, api)
-                    page.views.append(build_shell(current_route_key, body))
+                    # --- INICIO CAMBIO RESPONSIVO ---
+                    # Pasar 'is_mobile' al construir el shell
+                    page.views.append(build_shell(current_route_key, body, is_mobile))
+                    # --- FIN CAMBIO RESPONSIVO ---
                 except Exception as e:
                     print(f"Error building view for '{current_route_key}': {e}")
                     import traceback
@@ -363,12 +404,32 @@ def main(page: ft.Page):
                         ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.Colors.ERROR),
                         ft.Text(str(e))
                     ], expand=True)
-                    page.views.append(build_shell(current_route_key, body))
+                    # --- INICIO CAMBIO RESPONSIVO ---
+                    page.views.append(build_shell(current_route_key, body, is_mobile))
+                    # --- FIN CAMBIO RESPONSIVO ---
             else:
                 body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.Colors.ERROR)
-                page.views.append(build_shell(current_route_key, body))
+                # --- INICIO CAMBIO RESPONSIVO ---
+                page.views.append(build_shell(current_route_key, body, is_mobile))
+                # --- FIN CAMBIO RESPONSIVO ---
 
         page.update()
+
+    # --- INICIO CAMBIO RESPONSIVO ---
+    # Nueva función para manejar el cambio de tamaño
+    def handle_resize(e):
+        # Comprobar si el *modo* (móvil/escritorio) ha cambiado
+        is_now_mobile = page.width < MOBILE_BREAKPOINT
+        was_mobile = page.client_storage.get("is_mobile")
+        
+        if is_now_mobile != was_mobile:
+            # Si el modo cambió, volver a ejecutar el router
+            # Esto reconstruirá la vista con el layout correcto (menú lateral o inferior)
+            print(f"RESIZE: Cambiando a modo {'MÓVIL' if is_now_mobile else 'ESCRITORIO'}")
+            router(page.route)
+    
+    page.on_resize = handle_resize
+    # --- FIN CAMBIO RESPONSIVO ---
 
     page.on_route_change = router
     page.go(page.route)
