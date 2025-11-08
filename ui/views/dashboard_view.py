@@ -26,22 +26,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
         }
 
     PAL = get_palette()
-    
-    # --- INICIO DE LA LÓGICA CONDICIONAL ---
-    
-    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
-
-    if is_mobile:
-        # Configuración Móvil (Pegado arriba)
-        view_padding = ft.padding.only(top=15, left=12, right=12)
-        view_vertical_alignment = ft.MainAxisAlignment.START
-    else:
-        # Configuración PC (Centrado)
-        view_padding = ft.padding.symmetric(horizontal=24, vertical=20)
-        view_vertical_alignment = ft.MainAxisAlignment.CENTER
-        
-    # --- FIN DE LA LÓGICA CONDICIONAL ---
-
 
     def SectionHeader(icon, title):
         return ft.Row([
@@ -50,9 +34,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
         ])
 
     def ItemCard(child: ft.Control):
-        # NOTA: Si quieres que las tarjetas NO tengan sombra en móvil,
-        # tendrías que modificar tu componente 'Card' para aceptar un argumento 'shadow'
-        # y pasarlo así: Card(child, padding=12, radius=10, shadow=None if is_mobile else "default")
         return Card(child, padding=12, radius=10)
 
     def chip_estado(txt: str):
@@ -111,20 +92,16 @@ def DashboardView(page: ft.Page, api: ApiClient):
                 if not isinstance(p, dict):
                         print(f"WARN: Expected dict for préstamo, got {type(p)}: {p}")
                         continue
-
                 prestamo_id = p.get('id', 'N/A')
                 recurso_id = p.get('recurso', {}).get('id', 'N/A')
                 created_at = p.get('created_at')
                 fin = p.get('fin')
                 estado = p.get('estado', '-')
-
                 title = ft.Text(f"Préstamo #{prestamo_id} · Recurso #{recurso_id}", size=15, weight=ft.FontWeight.W_600)
                 timeline = ft.Text(f"Pedido: {format_iso_date(created_at)} · Devolución plan: {format_iso_date(fin)}", size=11, color=PAL["text_secondary"])
-
                 left = ft.Column([title, timeline], spacing=2, expand=True)
                 right = chip_estado(estado)
                 mis_prestamos_list.controls.append(ItemCard(ft.Row([left, right], vertical_alignment=ft.CrossAxisAlignment.CENTER)))
-
         if mis_prestamos_list.page: mis_prestamos_list.update()
 
 
@@ -171,20 +148,16 @@ def DashboardView(page: ft.Page, api: ApiClient):
                 if not isinstance(r, dict):
                     print(f"WARN: Expected dict for reserva, got {type(r)}: {r}")
                     continue
-
                 reserva_id = r.get('id', 'N/A')
                 lab_id = r.get('laboratorio_id', 'N/A')
                 inicio = r.get('inicio')
                 fin = r.get('fin')
                 estado = r.get('estado', '-')
-
                 title = ft.Text(f"Reserva #{reserva_id} · Laboratorio #{lab_id}", size=15, weight=ft.FontWeight.W_600)
                 timeline = ft.Text(f"Desde: {format_iso_date(inicio)} · Hasta: {format_iso_date(fin)}", size=12, color=PAL["text_secondary"])
-
                 left = ft.Column([title, timeline], spacing=2, expand=True)
                 right = chip_estado(estado)
                 mis_reservas_list.controls.append(ItemCard(ft.Row([left, right], vertical_alignment=ft.CrossAxisAlignment.CENTER)))
-
         if mis_reservas_list.page: mis_reservas_list.update()
 
     saludo = ft.Text(f"Hola, {user_data.get('nombre', user_data.get('user', ''))}.", size=14, color=PAL["text_secondary"])
@@ -231,29 +204,56 @@ def DashboardView(page: ft.Page, api: ApiClient):
     if page:
         page.pubsub.subscribe(on_theme_change)
 
-
-    # El contenido (las tarjetas) se definen en el ResponsiveRow
+    # --- INICIO DE LA MODIFICACIÓN RESPONSIVA ---
+    
     responsive_content = ft.ResponsiveRow(
         [main_column],
         alignment=ft.MainAxisAlignment.CENTER
     )
 
-    # La columna principal de la vista:
-    # - Se expande para llenar el contenedor
-    # - Permite scroll
-    # - Centra el contenido horizontalmente
-    # - USA LA ALINEACIÓN VERTICAL CONDICIONAL
     main_view_column = ft.Column(
         [responsive_content],
         expand=True,
         scroll=ft.ScrollMode.AUTO,
-        alignment=view_vertical_alignment, # <-- CAMBIO CLAVE
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        # La alineación vertical y horizontal se establecerá en on_page_resize
     )
 
-    # El contenedor final aplica el padding condicional
-    return ft.Container(
+    root_container = ft.Container(
         content=main_view_column,
         expand=True,
-        padding=view_padding # <-- CAMBIO CLAVE
+        # El padding se establecerá en on_page_resize
     )
+
+    def on_page_resize(e):
+        """Ajusta el layout basado en el ancho de la página."""
+        MOBILE_BREAKPOINT = 768 # Breakpoint para layout móvil
+        
+        # Obtenemos el ancho de la página
+        page_width = page.width or 1000 # Usamos 1000 como default si page.width es None
+        
+        if page_width < MOBILE_BREAKPOINT:
+            # --- Layout Móvil ---
+            main_view_column.alignment = ft.MainAxisAlignment.START
+            main_view_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+            root_container.padding = ft.padding.only(top=15, left=12, right=12, bottom=15)
+        else:
+            # --- Layout PC (Centrado) ---
+            main_view_column.alignment = ft.MainAxisAlignment.CENTER
+            main_view_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+            root_container.padding = ft.padding.symmetric(horizontal=24, vertical=20)
+        
+        # Actualizamos los controles que cambiaron
+        try:
+            if root_container.page:
+                root_container.update()
+        except Exception as update_error:
+            print(f"Error actualizando layout: {update_error}")
+
+    # Registramos la función para que se llame CADA VEZ que la ventana cambie de tamaño
+    page.on_resize = on_page_resize
+    
+    # Llamamos la función una vez al inicio para establecer el layout correcto
+    on_page_resize(None)
+
+    return root_container
+    # --- FIN DE LA MODIFICACIÓN RESPONSIVA ---
