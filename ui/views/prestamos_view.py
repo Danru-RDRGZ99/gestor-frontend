@@ -540,7 +540,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         page.overlay.append(delete_dialog)
 
     # ========================================================================
-    # TILES MÓVILES (NUEVOS)
+    # TILES MÓVILES (CORREGIDOS)
     # ========================================================================
 
     def recurso_tile_mobile(r: dict):
@@ -576,9 +576,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     subtitle,
                     btn
                 ], spacing=8),
-                border_radius=10
             ),
-            padding=10
+            padding=12
         )
 
     def solicitud_tile_mobile(s: dict):
@@ -635,9 +634,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         return Card(
             ft.Container(
                 ft.Column(content, spacing=6),
-                border_radius=10
             ),
-            padding=10
+            padding=12
         )
 
     def admin_recurso_tile_mobile(r: dict):
@@ -671,9 +669,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     subtitle,
                     actions
                 ], spacing=8),
-                border_radius=10
             ),
-            padding=10
+            padding=12
         )
 
     # ========================================================================
@@ -880,42 +877,69 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     render_recursos()
 
     # ========================================================================
-    # LAYOUT MÓVIL (NUEVO - estilo laboratorios)
+    # LAYOUT MÓVIL (CORREGIDO)
     # ========================================================================
 
     def filtros_card_mobile():
+        # Configurar controles para móvil
+        dd_plantel_filter_mobile = ft.Dropdown(
+            label="Plantel", 
+            options=[ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(str(p['id']), p['nombre']) for p in planteles_cache if p.get('id')],
+            height=45,
+            expand=True
+        )
+        dd_lab_filter_mobile = ft.Dropdown(
+            label="Laboratorio", 
+            options=[ft.dropdown.Option("", "Todos")],
+            height=45,
+            expand=True
+        )
+        dd_estado_filter_mobile = ft.Dropdown(
+            label="Disponibilidad",
+            options=[
+                ft.dropdown.Option("", "Todos"),
+                ft.dropdown.Option("disponible", "Disponible"),
+                ft.dropdown.Option("prestado", "Prestado"),
+                ft.dropdown.Option("mantenimiento", "Mantenimiento"),
+            ],
+            height=45,
+            expand=True
+        )
+        dd_tipo_filter_mobile = ft.Dropdown(
+            label="Tipo", 
+            options=[ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t],
+            height=45,
+            expand=True
+        )
+
+        # Asignar handlers
+        dd_plantel_filter_mobile.on_change = on_filter_change
+        dd_lab_filter_mobile.on_change = on_lab_filter_change
+        dd_estado_filter_mobile.on_change = on_lab_filter_change
+        dd_tipo_filter_mobile.on_change = on_lab_filter_change
+
+        # Guardar referencias para actualización
+        state["dd_plantel_mobile"] = dd_plantel_filter_mobile
+        state["dd_lab_mobile"] = dd_lab_filter_mobile
+        state["dd_estado_mobile"] = dd_estado_filter_mobile
+        state["dd_tipo_mobile"] = dd_tipo_filter_mobile
+
         return Card(
             ft.Container(
                 ft.Column(
                     [
                         ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], 
                               alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        dd_plantel_filter,
-                        dd_lab_filter,
-                        dd_estado_filter,
-                        dd_tipo_filter,
+                        dd_plantel_filter_mobile,
+                        dd_lab_filter_mobile,
+                        dd_estado_filter_mobile,
+                        dd_tipo_filter_mobile,
                     ],
                     spacing=8
                 ),
-                border_radius=10,
             ),
-            padding=10
+            padding=12
         )
-
-    # Ajustar controles para móvil
-    if state["is_mobile"]:
-        dd_plantel_filter.height = 45
-        dd_lab_filter.height = 45
-        dd_estado_filter.height = 45
-        dd_tipo_filter.height = 45
-        dd_plantel_filter.width = None
-        dd_lab_filter.width = None
-        dd_estado_filter.width = None
-        dd_tipo_filter.width = None
-        dd_plantel_filter.expand = True
-        dd_lab_filter.expand = True
-        dd_estado_filter.expand = True
-        dd_tipo_filter.expand = True
 
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
