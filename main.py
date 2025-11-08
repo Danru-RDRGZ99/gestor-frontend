@@ -189,20 +189,6 @@ def main(page: ft.Page):
 
         top_app_bar = ft.AppBar()
 
-        # --- INICIO DE LA MODIFICACIÓN (Añadir Menú Hamburguesa) ---
-        
-        def toggle_nav_rail(e):
-            """Expande o contrae el menú lateral"""
-            navigation_rail.extended = not navigation_rail.extended
-            page.update()
-
-        top_app_bar.leading = ft.IconButton(
-            icon=ft.Icons.MENU,
-            tooltip="Menú",
-            on_click=toggle_nav_rail
-        )
-        # --- FIN DE LA MODIFICACIÓN ---
-
         def toggle_theme(_):
             new_mode = ft.ThemeMode.LIGHT if page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
             apply_theme(page, new_mode)
@@ -236,7 +222,7 @@ def main(page: ft.Page):
             label_type=ft.NavigationRailLabelType.ALL,
             min_width=100,
             min_extended_width=NAV_WIDTH,
-            extended=True,
+            extended=True, # El menú siempre está extendido por dentro
             destinations=[
                 ft.NavigationRailDestination(
                     icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
@@ -245,6 +231,40 @@ def main(page: ft.Page):
             ],
             on_change=nav_change,
         )
+
+        # --- INICIO DE LA MODIFICACIÓN (Slide-out) ---
+
+        # 1. Envolver el NavigationRail y el Divider en un Contenedor
+        nav_panel_content = ft.Column(
+            [navigation_rail, ft.VerticalDivider(width=1)],
+            spacing=0,
+            # Asegura que la columna no se colapse
+            width=NAV_WIDTH 
+        )
+        
+        nav_container = ft.Container(
+            content=nav_panel_content,
+            width=NAV_WIDTH, # Ancho inicial (250)
+            bgcolor=ft.Colors.BACKGROUND, # Color de fondo para que no sea transparente
+            animate=ft.animation.Animation(300, "easeOutCubic"), # Animación de slide
+        )
+
+        # 2. Crear la *nueva* función que anima el ancho del contenedor
+        def toggle_nav_slide(e):
+            """Muestra u oculta totalmente el menú lateral."""
+            if nav_container.width == NAV_WIDTH:
+                nav_container.width = 0
+            else:
+                nav_container.width = NAV_WIDTH
+            page.update()
+
+        # 3. Asignar la *nueva* función al botón de hamburguesa
+        top_app_bar.leading = ft.IconButton(
+            icon=ft.icons.MENU,
+            tooltip="Menú",
+            on_click=toggle_nav_slide # Asignar la nueva función
+        )
+        # --- FIN DE LA MODIFICACIÓN ---
 
         main_content = ft.Container(
             content=body,
@@ -258,11 +278,12 @@ def main(page: ft.Page):
                 top_app_bar,
                 ft.Row(
                     [
-                        navigation_rail,
-                        ft.VerticalDivider(width=1),
+                        nav_container, # <--- Usar el contenedor animado
+                        # El VerticalDivider ya está *dentro* del contenedor
                         main_content,
                     ],
                     expand=True,
+                    spacing=0 # Importante para que no haya huecos
                 ),
             ],
             padding=0,
