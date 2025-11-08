@@ -3,22 +3,23 @@ from api_client import ApiClient
 from ui.components.buttons import Primary, Ghost
 from ui.components.cards import Card
 
-# --- INICIO DE LA CORRECCIÓN 1: Aceptar 'is_mobile' ---
-def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
-# --- FIN DE LA CORRECCIÓN 1 ---
-    
+def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     # --- Estado y Mensajes ---
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
 
     # --- Widgets de CAPTCHA ---
+    
+    # Usamos src_base64
     captcha_image = ft.Image(
+        # La fuente se cargará con la función refresh_captcha
         src_base64=None, 
         height=70,
         fit=ft.ImageFit.CONTAIN,
-        col=8,
+        col=8, # Ocupa 8 de 12 columnas
     )
     
     def refresh_captcha(e):
+        # Usamos el nuevo método del API Client
         img_base64 = api.get_captcha_image() 
         
         if img_base64:
@@ -32,7 +33,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         icon=ft.Icons.REFRESH,
         on_click=refresh_captcha,
         tooltip="Refrescar imagen",
-        col=4,
+        col=4, # Ocupa 4 de 12 columnas
     )
     
     captcha_field = ft.TextField(
@@ -40,12 +41,13 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         autofocus=True,
         prefix_icon=ft.Icons.ABC,
         text_size=14,
-        on_submit=lambda e: do_verify(),
+        on_submit=lambda e: do_verify(), # Permite enviar con Enter
         text_align=ft.TextAlign.CENTER,
         capitalization=ft.TextCapitalization.CHARACTERS,
     )
 
     def do_verify():
+        # 1. Obtenemos las credenciales guardadas
         login_attempt = page.session.get("login_attempt")
         
         if not login_attempt:
@@ -64,26 +66,40 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             page.update()
             return
         
+        # 2. Ahora sí, llamamos a la API con todo
         response_data = api.login(username, password, captcha)
         
+        # 3. Manejamos la respuesta
         if not response_data:
             info.value = "Error de conexión o API no disponible."
             info.color = ft.Colors.RED_400
+
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Comprobamos si la llave 'error' existe en la respuesta
         elif "error" in response_data: 
-            info.value = response_data.get("error", "Error desconocido")
+            info.value = response_data.get("error", "Error desconocido") # Muestra el error
             info.color = ft.Colors.RED_400
-        else: 
+        # --- FIN DE LA CORRECCIÓN ---
+
+        else: # ¡Éxito!
             page.session.remove("login_attempt")
+            
+            # --- CORRECCIÓN EXTRA ---
+            # Guardamos solo el objeto 'user' que viene dentro de la respuesta
             user_data = response_data.get("user")
             page.session.set("user_session", user_data)
             print(f"LOGIN Y CAPTCHA EXITOSO, SESIÓN GUARDADA: {user_data}")
+            # --- FIN CORRECCIÓN EXTRA ---
+            
             on_success()
             return 
 
+        # Si falló (ej. captcha incorrecto), refrescamos la imagen
         refresh_captcha(None)
         captcha_field.value = ""
         page.update()
 
+    # --- Acciones y Validación ---
     btn_verify = Primary("Verificar", on_click=lambda e: do_verify(), width=260, height=46)
     btn_cancel = Ghost("Cancelar", on_click=lambda e: page.go("/"), width=260, height=40)
 
@@ -92,7 +108,9 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         page.update()
 
     captcha_field.on_change = validate
-    validate(None)
+    validate(None) # Llamada inicial
+
+    # Carga inicial del CAPTCHA al mostrar la vista
     refresh_captcha(None)
 
     # --- Construcción del Layout ---
@@ -121,9 +139,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
     
-    # --- INICIO DE LA CORRECCIÓN 2: Lógica Responsiva (copiada de LoginView) ---
-
-    # 1. Definir la tarjeta (versión escritorio por defecto)
     card_container = ft.Container(
         content=Card(form, padding=22),
         width=440,
@@ -134,32 +149,8 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         ),
     )
 
-    # 2. Definir el contenedor principal (versión escritorio por defecto)
-    #    OJO: Usamos ft.MainAxisAlignment.CENTER para el vertical_alignment del Row
-    main_container = ft.Container(
+    return ft.Container(
         expand=True,
-        content=ft.Row(
-            [card_container], 
-            alignment=ft.MainAxisAlignment.CENTER, 
-            vertical_alignment=ft.MainAxisAlignment.CENTER # Centrado en PC
-        ),
+        content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         padding=20,
     )
-
-    # 3. Modificar si es móvil
-    if is_mobile:
-        card_container.width = None # Ocupa todo el ancho
-        card_container.shadow = None # Sin sombra
-        card_container.border_radius = 0 # Sin bordes (para que llene la pantalla)
-        
-        main_container.padding = 0 # Sin padding exterior
-        
-        # Alinear el contenedor principal arriba (para que el Row se pegue arriba)
-        main_container.alignment = ft.alignment.top_center 
-        
-        # Alinear el Row interno arriba (para que la tarjeta se pegue arriba)
-        main_container.content.vertical_alignment = ft.MainAxisAlignment.START 
-
-    # 4. Devolver el contenedor principal configurado
-    return main_container
-    # --- FIN DE LA CORRECCIÓN 2 ---
