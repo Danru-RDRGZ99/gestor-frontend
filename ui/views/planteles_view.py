@@ -234,10 +234,13 @@ def PlantelesView(page: ft.Page, api: ApiClient):
                 )
             )
 
+        # ✅ Border radius movido a Container para evitar error
         return Card(
-            content_column,
-            padding=8,
-            border_radius=10
+            ft.Container(
+                content_column,
+                border_radius=10
+            ),
+            padding=8
         )
 
     # -----------------------------------------------------
@@ -254,16 +257,19 @@ def PlantelesView(page: ft.Page, api: ApiClient):
             spacing=6
         )
 
+        # ✅ Border radius movido a Container
         add_section = Card(
-            ft.Column(
-                [
-                    ft.Text("Agregar Nuevo Plantel", size=14, weight=ft.FontWeight.W_600),
-                    add_section_form
-                ],
-                spacing=6
+            ft.Container(
+                ft.Column(
+                    [
+                        ft.Text("Agregar Nuevo Plantel", size=14, weight=ft.FontWeight.W_600),
+                        add_section_form
+                    ],
+                    spacing=6
+                ),
+                border_radius=10
             ),
-            padding=10,
-            border_radius=10
+            padding=10
         )
 
     else:
