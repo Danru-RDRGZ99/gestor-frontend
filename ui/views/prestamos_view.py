@@ -877,21 +877,19 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     render_recursos()
 
     # ========================================================================
-    # LAYOUT MÓVIL (CORREGIDO)
+    # LAYOUT MÓVIL (CORREGIDO - SIN PARÁMETRO HEIGHT)
     # ========================================================================
 
     def filtros_card_mobile():
-        # Configurar controles para móvil
+        # Configurar controles para móvil - SIN parámetro height
         dd_plantel_filter_mobile = ft.Dropdown(
             label="Plantel", 
             options=[ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(str(p['id']), p['nombre']) for p in planteles_cache if p.get('id')],
-            height=45,
             expand=True
         )
         dd_lab_filter_mobile = ft.Dropdown(
             label="Laboratorio", 
             options=[ft.dropdown.Option("", "Todos")],
-            height=45,
             expand=True
         )
         dd_estado_filter_mobile = ft.Dropdown(
@@ -902,13 +900,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 ft.dropdown.Option("prestado", "Prestado"),
                 ft.dropdown.Option("mantenimiento", "Mantenimiento"),
             ],
-            height=45,
             expand=True
         )
         dd_tipo_filter_mobile = ft.Dropdown(
             label="Tipo", 
             options=[ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t],
-            height=45,
             expand=True
         )
 
@@ -917,12 +913,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         dd_lab_filter_mobile.on_change = on_lab_filter_change
         dd_estado_filter_mobile.on_change = on_lab_filter_change
         dd_tipo_filter_mobile.on_change = on_lab_filter_change
-
-        # Guardar referencias para actualización
-        state["dd_plantel_mobile"] = dd_plantel_filter_mobile
-        state["dd_lab_mobile"] = dd_lab_filter_mobile
-        state["dd_estado_mobile"] = dd_estado_filter_mobile
-        state["dd_tipo_mobile"] = dd_tipo_filter_mobile
 
         return Card(
             ft.Container(
