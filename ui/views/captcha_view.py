@@ -9,9 +9,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
 
     # --- Widgets de CAPTCHA ---
     
-    # Usamos src_base64
     captcha_image = ft.Image(
-        # La fuente se cargará con la función refresh_captcha
         src_base64=None, 
         height=70,
         fit=ft.ImageFit.CONTAIN,
@@ -19,7 +17,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     )
     
     def refresh_captcha(e):
-        # Usamos el nuevo método del API Client
         img_base64 = api.get_captcha_image() 
         
         if img_base64:
@@ -47,7 +44,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     )
 
     def do_verify():
-        # 1. Obtenemos las credenciales guardadas
         login_attempt = page.session.get("login_attempt")
         
         if not login_attempt:
@@ -66,35 +62,24 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
             page.update()
             return
         
-        # 2. Ahora sí, llamamos a la API con todo
         response_data = api.login(username, password, captcha)
         
-        # 3. Manejamos la respuesta
         if not response_data:
             info.value = "Error de conexión o API no disponible."
             info.color = ft.Colors.RED_400
 
-        # --- INICIO DE LA CORRECCIÓN ---
-        # Comprobamos si la llave 'error' existe en la respuesta
         elif "error" in response_data: 
-            info.value = response_data.get("error", "Error desconocido") # Muestra el error
+            info.value = response_data.get("error", "Error desconocido")
             info.color = ft.Colors.RED_400
-        # --- FIN DE LA CORRECCIÓN ---
 
         else: # ¡Éxito!
             page.session.remove("login_attempt")
-            
-            # --- CORRECCIÓN EXTRA ---
-            # Guardamos solo el objeto 'user' que viene dentro de la respuesta
             user_data = response_data.get("user")
             page.session.set("user_session", user_data)
             print(f"LOGIN Y CAPTCHA EXITOSO, SESIÓN GUARDADA: {user_data}")
-            # --- FIN CORRECCIÓN EXTRA ---
-            
             on_success()
             return 
 
-        # Si falló (ej. captcha incorrecto), refrescamos la imagen
         refresh_captcha(None)
         captcha_field.value = ""
         page.update()
@@ -110,7 +95,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     captcha_field.on_change = validate
     validate(None) # Llamada inicial
 
-    # Carga inicial del CAPTCHA al mostrar la vista
     refresh_captcha(None)
 
     # --- Construcción del Layout ---
@@ -139,68 +123,63 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
     
-    # --- INICIO DE LA MODIFICACIÓN RESPONSIVA ---
+    # --- INICIO DE LA CORRECCIÓN (MÉTODO page.platform) ---
     
-    # 1. Definimos la tarjeta interna
-    inner_card = Card(form)
-    
-    # 2. Definimos el contenedor de la tarjeta (el que tiene sombra y ancho)
-    card_container = ft.Container(
-        content=inner_card,
-        border_radius=16,
-        # 'width' y 'shadow' se establecerán dinámicamente
-    )
+    # Detectamos si la plataforma es móvil (Android o iOS)
+    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
 
-    # 3. Definimos la fila que centra la tarjeta
-    view_row = ft.Row(
-        [card_container],
-        alignment=ft.MainAxisAlignment.CENTER,
-        # 'vertical_alignment' se establecerá dinámicamente
-    )
-
-    # 4. Definimos el contenedor raíz de la vista
-    root_container = ft.Container(
-        content=view_row,
-        expand=True,
-        # 'padding' se establecerá dinámicamente
-    )
-    
-    # 5. Guardamos la sombra original para reutilizarla
-    original_shadow = ft.BoxShadow(
-        blur_radius=16, spread_radius=1,
-        color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
-    )
-
-    # 6. Definimos la función de redimensionamiento
-    def on_page_resize(e):
-        MOBILE_BREAKPOINT = 768
-        page_width = page.width or 1000
-
-        if page_width < MOBILE_BREAKPOINT:
-            # --- Layout Móvil ---
-            inner_card.padding = 18                 # Padding de la tarjeta reducido
-            card_container.width = None             # Ancho completo (se expande)
-            card_container.shadow = None            # Sin sombra
-            view_row.vertical_alignment = ft.CrossAxisAlignment.START # Alinear arriba
-            root_container.padding = ft.padding.only(top=15, left=12, right=12, bottom=15) # Padding de vista reducido
-        else:
-            # --- Layout PC (Original) ---
-            inner_card.padding = 22                 # Padding original
-            card_container.width = 440              # Ancho fijo
-            card_container.shadow = original_shadow # Sombra original
-            view_row.vertical_alignment = ft.CrossAxisAlignment.CENTER # Alinear al centro
-            root_container.padding = 20             # Padding original
+    if is_mobile:
+        # --- Layout Móvil ---
+        inner_card = Card(form, padding=18)
         
-        try:
-            if root_container.page:
-                root_container.update()
-        except Exception as update_error:
-            print(f"Error updating CaptchaView layout: {update_error}")
-
-    # 7. Registrar y llamar
-    page.on_resize = on_page_resize
-    on_page_resize(None) # Llamada inicial
-
-    # 8. Retornar el contenedor raíz
+        card_container = ft.Container(
+            content=inner_card,
+            width=None, # Ancho completo
+            border_radius=16,
+            shadow=None # Sin sombra
+        )
+        
+        view_row = ft.Row(
+            [card_container], 
+            alignment=ft.MainAxisAlignment.CENTER, 
+            vertical_alignment=ft.CrossAxisAlignment.START # Pegado arriba
+        )
+        
+        root_container = ft.Container(
+            content=view_row,
+            expand=True,
+            padding=ft.padding.only(top=15, left=12, right=12, bottom=15)
+        )
+        
+    else:
+        # --- Layout PC (Original) ---
+        inner_card = Card(form, padding=22)
+        
+        original_shadow = ft.BoxShadow(
+            blur_radius=16, spread_radius=1,
+            color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
+        )
+        
+        card_container = ft.Container(
+            content=inner_card,
+            width=440,
+            border_radius=16,
+            shadow=original_shadow
+        )
+        
+        view_row = ft.Row(
+            [card_container], 
+            alignment=ft.MainAxisAlignment.CENTER, 
+            vertical_alignment=ft.CrossAxisAlignment.CENTER # Centrado
+        )
+        
+        root_container = ft.Container(
+            content=view_row,
+            expand=True,
+            padding=20
+        )
+    
+    # Ya no usamos page.on_resize
+    
     return root_container
-    # --- FIN DE LA MODIFICACIÓN RESPONSIVA ---
+    # --- FIN DE LA CORRECCIÓN ---
