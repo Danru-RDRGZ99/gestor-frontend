@@ -10,7 +10,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         "", 
         color=ft.Colors.RED_400, 
         size=12,
-        text_align=ft.TextAlign.CENTER # <--- CAMBIO: Centrar el texto
+        text_align=ft.TextAlign.CENTER # Centrar el texto
     )
 
     # --- Widgets de CAPTCHA ---
@@ -50,7 +50,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     )
 
     def do_verify():
-        # ... (Toda tu lógica de do_verify() se mantiene exactamente igual) ...
         # 1. Obtenemos las credenciales guardadas
         login_attempt = page.session.get("login_attempt")
         
@@ -78,16 +77,22 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
             info.value = "Error de conexión o API no disponible."
             info.color = ft.Colors.RED_400
 
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Comprobamos si la llave 'error' existe en la respuesta
         elif "error" in response_data: 
-            info.value = response_data.get("error", "Error desconocido")
+            info.value = response_data.get("error", "Error desconocido") # Muestra el error
             info.color = ft.Colors.RED_400
+        # --- FIN DE LA CORRECCIÓN ---
 
         else: # ¡Éxito!
             page.session.remove("login_attempt")
             
+            # --- CORRECCIÓN EXTRA ---
+            # Guardamos solo el objeto 'user' que viene dentro de la respuesta
             user_data = response_data.get("user")
             page.session.set("user_session", user_data)
             print(f"LOGIN Y CAPTCHA EXITOSO, SESIÓN GUARDADA: {user_data}")
+            # --- FIN CORRECCIÓN EXTRA ---
             
             on_success()
             return 
@@ -102,13 +107,13 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         "Verificar", 
         on_click=lambda e: do_verify(), 
         height=46
-        # width=260 <--- CAMBIO: Eliminado
+        # Se elimina el 'width' fijo para que sea responsive
     )
     btn_cancel = Ghost(
         "Cancelar", 
         on_click=lambda e: page.go("/"), 
         height=40
-        # width=260 <--- CAMBIO: Eliminado
+        # Se elimina el 'width' fijo para que sea responsive
     )
 
     def validate(_):
@@ -116,8 +121,9 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         page.update()
 
     captcha_field.on_change = validate
-    validate(None) 
+    validate(None) # Llamada inicial
 
+    # Carga inicial del CAPTCHA al mostrar la vista
     refresh_captcha(None)
 
     # --- Construcción del Layout ---
@@ -145,21 +151,30 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         ],
         spacing=14, 
         tight=True, 
-        horizontal_alignment=ft.CrossAxisAlignment.STRETCH # <--- CAMBIO
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH # Estira los botones
     )
     
+    # --- INICIO DE LA MODIFICACIÓN ---
     card_container = ft.Container(
         content=Card(form, padding=22),
-        max_width=440, # <--- CAMBIO CLAVE
+        # width=440, <--- Eliminado
         border_radius=16,
         shadow=ft.BoxShadow(
             blur_radius=16, spread_radius=1,
             color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
         ),
+        # Se añade 'col' para el ResponsiveRow
+        col={"xs": 12, "sm": 10, "md": 8, "lg": 6, "xl": 4}
     )
 
     return ft.Container(
         expand=True,
-        content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        # Se usa ResponsiveRow para centrar y manejar el ancho de 'col'
+        content=ft.ResponsiveRow(
+            [card_container],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+        ),
         padding=20,
     )
+    # --- FIN DE LA MODIFICACIÓN ---
