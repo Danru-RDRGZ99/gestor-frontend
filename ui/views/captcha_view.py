@@ -3,17 +3,19 @@ from api_client import ApiClient
 from ui.components.buttons import Primary, Ghost
 from ui.components.cards import Card
 
-def CaptchaView(page: ft.Page, api: ApiClient, on_success):
+# --- INICIO DE LA CORRECCIÓN 1: Aceptar 'is_mobile' ---
+def CaptchaView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
+# --- FIN DE LA CORRECCIÓN 1 ---
+    
     # --- Estado y Mensajes ---
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
 
     # --- Widgets de CAPTCHA ---
-    
     captcha_image = ft.Image(
         src_base64=None, 
         height=70,
         fit=ft.ImageFit.CONTAIN,
-        col=8, # Ocupa 8 de 12 columnas
+        col=8,
     )
     
     def refresh_captcha(e):
@@ -30,7 +32,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         icon=ft.Icons.REFRESH,
         on_click=refresh_captcha,
         tooltip="Refrescar imagen",
-        col=4, # Ocupa 4 de 12 columnas
+        col=4,
     )
     
     captcha_field = ft.TextField(
@@ -38,7 +40,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         autofocus=True,
         prefix_icon=ft.Icons.ABC,
         text_size=14,
-        on_submit=lambda e: do_verify(), # Permite enviar con Enter
+        on_submit=lambda e: do_verify(),
         text_align=ft.TextAlign.CENTER,
         capitalization=ft.TextCapitalization.CHARACTERS,
     )
@@ -67,12 +69,10 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         if not response_data:
             info.value = "Error de conexión o API no disponible."
             info.color = ft.Colors.RED_400
-
         elif "error" in response_data: 
             info.value = response_data.get("error", "Error desconocido")
             info.color = ft.Colors.RED_400
-
-        else: # ¡Éxito!
+        else: 
             page.session.remove("login_attempt")
             user_data = response_data.get("user")
             page.session.set("user_session", user_data)
@@ -84,7 +84,6 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         captcha_field.value = ""
         page.update()
 
-    # --- Acciones y Validación ---
     btn_verify = Primary("Verificar", on_click=lambda e: do_verify(), width=260, height=46)
     btn_cancel = Ghost("Cancelar", on_click=lambda e: page.go("/"), width=260, height=40)
 
@@ -93,8 +92,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         page.update()
 
     captcha_field.on_change = validate
-    validate(None) # Llamada inicial
-
+    validate(None)
     refresh_captcha(None)
 
     # --- Construcción del Layout ---
@@ -123,63 +121,45 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
     
-    # --- INICIO DE LA CORRECCIÓN (MÉTODO page.platform) ---
-    
-    # Detectamos si la plataforma es móvil (Android o iOS)
-    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
+    # --- INICIO DE LA CORRECCIÓN 2: Lógica Responsiva (copiada de LoginView) ---
 
-    if is_mobile:
-        # --- Layout Móvil ---
-        inner_card = Card(form, padding=18)
-        
-        card_container = ft.Container(
-            content=inner_card,
-            width=None, # Ancho completo
-            border_radius=16,
-            shadow=None # Sin sombra
-        )
-        
-        view_row = ft.Row(
-            [card_container], 
-            alignment=ft.MainAxisAlignment.CENTER, 
-            vertical_alignment=ft.CrossAxisAlignment.START # Pegado arriba
-        )
-        
-        root_container = ft.Container(
-            content=view_row,
-            expand=True,
-            padding=ft.padding.only(top=15, left=12, right=12, bottom=15)
-        )
-        
-    else:
-        # --- Layout PC (Original) ---
-        inner_card = Card(form, padding=22)
-        
-        original_shadow = ft.BoxShadow(
+    # 1. Definir la tarjeta (versión escritorio por defecto)
+    card_container = ft.Container(
+        content=Card(form, padding=22),
+        width=440,
+        border_radius=16,
+        shadow=ft.BoxShadow(
             blur_radius=16, spread_radius=1,
             color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
-        )
-        
-        card_container = ft.Container(
-            content=inner_card,
-            width=440,
-            border_radius=16,
-            shadow=original_shadow
-        )
-        
-        view_row = ft.Row(
+        ),
+    )
+
+    # 2. Definir el contenedor principal (versión escritorio por defecto)
+    #    OJO: Usamos ft.MainAxisAlignment.CENTER para el vertical_alignment del Row
+    main_container = ft.Container(
+        expand=True,
+        content=ft.Row(
             [card_container], 
             alignment=ft.MainAxisAlignment.CENTER, 
-            vertical_alignment=ft.CrossAxisAlignment.CENTER # Centrado
-        )
+            vertical_alignment=ft.MainAxisAlignment.CENTER # Centrado en PC
+        ),
+        padding=20,
+    )
+
+    # 3. Modificar si es móvil
+    if is_mobile:
+        card_container.width = None # Ocupa todo el ancho
+        card_container.shadow = None # Sin sombra
+        card_container.border_radius = 0 # Sin bordes (para que llene la pantalla)
         
-        root_container = ft.Container(
-            content=view_row,
-            expand=True,
-            padding=20
-        )
-    
-    # Ya no usamos page.on_resize
-    
-    return root_container
-    # --- FIN DE LA CORRECCIÓN ---
+        main_container.padding = 0 # Sin padding exterior
+        
+        # Alinear el contenedor principal arriba (para que el Row se pegue arriba)
+        main_container.alignment = ft.alignment.top_center 
+        
+        # Alinear el Row interno arriba (para que la tarjeta se pegue arriba)
+        main_container.content.vertical_alignment = ft.MainAxisAlignment.START 
+
+    # 4. Devolver el contenedor principal configurado
+    return main_container
+    # --- FIN DE LA CORRECCIÓN 2 ---
