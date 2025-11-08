@@ -1,9 +1,8 @@
 import os
 import flet as ft
 import sys
-import base64  # <--- Importación clave
+import base64
 
-# Configuración para Railway
 port = int(os.environ.get("PORT", 8501))
 
 print("=== INICIANDO APLICACIÓN ===")
@@ -12,10 +11,8 @@ for item in os.listdir('.'):
     if os.path.isdir(item):
         print(f"📁 {item}/")
 
-# Agregar directorio actual al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Importar módulos desde ui.views
 try:
     from ui.views import (
         login_view,
@@ -34,7 +31,6 @@ try:
 except ImportError as e:
     print(f"❌ Error importando vistas: {e}")
     VIEWS_AVAILABLE = False
-    # Crear placeholders de emergencia
     class EmergencyView(ft.Column):
         def __init__(self, *args, **kwargs):
             super().__init__()
@@ -54,7 +50,6 @@ except ImportError as e:
     captcha_view = type('captcha_view', (), {'CaptchaView': EmergencyView})()
     horarios_admin_view = type('horarios_admin_view', (), {'HorariosAdminView': EmergencyView})()
 
-# Importar otros módulos
 try:
     from ui.theme import apply_theme
     print("✅ Tema importado correctamente")
@@ -73,7 +68,6 @@ except ImportError as e:
         def __init__(self, page):
             self.page = page
 
-# Metadatos de las rutas
 ROUTE_META = {
     "dashboard": ("Dashboard", ft.Icons.DASHBOARD),
     "planteles": ("Planteles", ft.Icons.DOMAIN),
@@ -84,22 +78,14 @@ ROUTE_META = {
     "horarios": ("Horarios Admin", ft.Icons.SCHEDULE),
 }
 NAV_WIDTH = 250
-# --- INICIO CAMBIO RESPONSIVO ---
-MOBILE_BREAKPOINT = 768 # Píxeles para cambiar a vista móvil
-# --- FIN CAMBIO RESPONSIVO ---
+MOBILE_BREAKPOINT = 768
 
-# <--- INICIO: LÓGICA DE CARGA DE ASSETS (Base64) ---
-# (Se ejecuta ANTES de iniciar la app para evitar la caché)
-
-# 1. Definir rutas
 ICON_PATH = "ui/assets/icon.png"
 SPLASH_PATH = "ui/assets/splash.png"
 
-# 2. Preparar variables
 favicons_dict = {}
 splash_b64_data_uri = None
 
-# 3. Cargar Favicon (Ícono de la App)
 try:
     if os.path.exists(ICON_PATH):
         with open(ICON_PATH, "rb") as image_file:
@@ -113,7 +99,6 @@ try:
 except Exception as e:
     print(f"❌ Error al cargar el favicon: {e}")
 
-# 4. Cargar Splash (Pantalla de Carga)
 try:
     if os.path.exists(SPLASH_PATH):
         with open(SPLASH_PATH, "rb") as image_file:
@@ -124,7 +109,6 @@ try:
         print(f"❌ ADVERTENCIA: No se encontró splash.png en {SPLASH_PATH}")
 except Exception as e:
     print(f"❌ Error al cargar la pantalla de carga: {e}")
-# --- FIN: LÓGICA DE CARGA DE ASSETS ---
 
 
 def main(page: ft.Page):
@@ -135,17 +119,10 @@ def main(page: ft.Page):
     if splash_b64_data_uri:
         page.splash = ft.Image(src_base64=splash_b64_data_uri)
 
-    # Configuración para Railway
     port = int(os.environ.get("PORT", 8501))
     
     page.title = "BLACKLAB"
     page.padding = 0
-    
-    # --- INICIO CAMBIO RESPONSIVO ---
-    # Eliminamos el tamaño mínimo de ventana
-    # page.window_min_width = 1100 
-    # page.window_min_height = 680
-    # --- FIN CAMBIO RESPONSIVO ---
 
     apply_theme(page)
 
@@ -166,14 +143,10 @@ def main(page: ft.Page):
         return allowed_map.get(rol, ["dashboard"])
 
     def on_login_success():
-        """Función central de éxito de login: redirige al dashboard."""
         print("DEBUG: on_login_success llamado, redirigiendo a /dashboard")
         page.go("/dashboard")
 
-    # --- INICIO CAMBIO RESPONSIVO ---
-    # El 'Shell' ahora decide si mostrar layout de PC o Móvil
     def build_shell(active_key: str, body: ft.Control, is_mobile: bool):
-    # --- FIN CAMBIO RESPONSIVO ---
         user_session = page.session.get("user_session") or {}
         if not user_session:
             page.go("/")
@@ -222,8 +195,6 @@ def main(page: ft.Page):
             selected_route = allowed[e.control.selected_index]
             page.go(f"/{selected_route}")
             
-        # --- INICIO CAMBIO RESPONSIVO ---
-        # Definir los destinos una sola vez
         nav_destinations = [
             ft.NavigationRailDestination(
                 icon=ROUTE_META.get(key, ("", ft.Icons.ERROR))[1],
@@ -234,13 +205,10 @@ def main(page: ft.Page):
         main_content = ft.Container(
             content=body,
             expand=True,
-            # Reducir padding en móvil
             padding=ft.padding.all(10 if is_mobile else 15), 
         )
 
         if is_mobile:
-            # --- VISTA MÓVIL ---
-            # No usamos el botón de hamburguesa, el menú está abajo
             top_app_bar.leading = None 
             
             bottom_nav = ft.BottomNavigationBar(
@@ -258,23 +226,22 @@ def main(page: ft.Page):
                 f"/{active_key}",
                 [
                     top_app_bar,
-                    main_content, # El contenido principal ocupa todo
+                    main_content,
                 ],
-                navigation_bar=bottom_nav, # Menú en la parte inferior
+                navigation_bar=bottom_nav,
                 padding=0,
             )
             
         else:
-            # --- VISTA ESCRITORIO ---
-            # (Usamos el código de slide-out que ya teníamos)
             navigation_rail = ft.NavigationRail(
                 selected_index=active_index,
                 label_type=ft.NavigationRailLabelType.ALL,
                 min_width=100,
                 min_extended_width=NAV_WIDTH,
-                extended=True, # El menú siempre está extendido por dentro
-                destinations=nav_destinations, # Usar los destinos
+                extended=True,
+                destinations=nav_destinations,
                 on_change=nav_change,
+                expand=True
             )
 
             nav_panel_content = ft.Column(
@@ -286,7 +253,6 @@ def main(page: ft.Page):
             nav_container = ft.Container(
                 content=nav_panel_content,
                 width=NAV_WIDTH, 
-                # Eliminamos bgcolor para que tome el del tema
                 animate=ft.Animation(duration=300, curve=ft.AnimationCurve.EASE_OUT_CUBIC), 
             )
 
@@ -309,7 +275,7 @@ def main(page: ft.Page):
                     top_app_bar,
                     ft.Row(
                         [
-                            nav_container, # <--- Usar el contenedor animado
+                            nav_container,
                             main_content,
                         ],
                         expand=True,
@@ -318,29 +284,22 @@ def main(page: ft.Page):
                 ],
                 padding=0,
             )
-        # --- FIN CAMBIO RESPONSIVO ---
 
     def router(route):
         page.views.clear()
         user_session = page.session.get("user_session") or {}
         current_route_key = page.route.strip("/")
         
-        # --- INICIO CAMBIO RESPONSIVO ---
-        # Determinar si estamos en móvil ANTES de construir la vista
-        # Usamos 1024 como default si page.width aún es None al inicio
         current_width = page.width if page.width is not None else 1024
         is_mobile = current_width < MOBILE_BREAKPOINT
         page.client_storage.set("is_mobile", is_mobile)
-        # --- FIN CAMBIO RESPONSIVO ---
 
         if not user_session:
             if current_route_key == "register":
-                # Flujo de Registro: va a on_login_success (-> /dashboard)
                 register_view_instance = register_view.RegisterView(page, api, on_success=on_login_success)
                 page.views.append(register_view_instance)
             
             elif current_route_key == "captcha-verify":
-                # Flujo de Captcha: va a on_login_success (-> /dashboard)
                 page.views.append(
                     ft.View(
                         "/captcha-verify",
@@ -353,7 +312,6 @@ def main(page: ft.Page):
                 if current_route_key != "":
                     page.go("/")
                 
-                # Flujo de Login:
                 page.views.append(
                     ft.View(
                         "/",
@@ -363,7 +321,6 @@ def main(page: ft.Page):
                     )
                 )
         else:
-            # Flujo de Usuario Autenticado
             user_rol = user_session.get("rol", "")
             
             allowed_routes_for_user = get_allowed_routes(user_rol)
@@ -391,10 +348,7 @@ def main(page: ft.Page):
             if view_function:
                 try:
                     body = view_function(page, api)
-                    # --- INICIO CAMBIO RESPONSIVO ---
-                    # Pasar 'is_mobile' al construir el shell
                     page.views.append(build_shell(current_route_key, body, is_mobile))
-                    # --- FIN CAMBIO RESPONSIVO ---
                 except Exception as e:
                     print(f"Error building view for '{current_route_key}': {e}")
                     import traceback
@@ -403,43 +357,30 @@ def main(page: ft.Page):
                         ft.Text(f"Error al cargar la vista: {current_route_key}", color=ft.Colors.ERROR),
                         ft.Text(str(e))
                     ], expand=True)
-                    # --- INICIO CAMBIO RESPONSIVO ---
                     page.views.append(build_shell(current_route_key, body, is_mobile))
-                    # --- FIN CAMBIO RESPONSIVO ---
             else:
                 body = ft.Text(f"Error: Vista '{current_route_key}' no encontrada.", color=ft.Colors.ERROR)
-                # --- INICIO CAMBIO RESPONSIVO ---
                 page.views.append(build_shell(current_route_key, body, is_mobile))
-                # --- FIN CAMBIO RESPONSIVO ---
 
         page.update()
 
-    # --- INICIO CAMBIO RESPONSIVO ---
-    # Nueva función para manejar el cambio de tamaño
     def handle_resize(e):
-        # Comprobar si el *modo* (móvil/escritorio) ha cambiado
         try:
-            # Obtener el ancho de la página, usar un valor grande por defecto si es None
             current_width = page.width if page.width is not None else 1024
             is_now_mobile = current_width < MOBILE_BREAKPOINT
             
-            # Obtener el estado anterior
             was_mobile = page.client_storage.get("is_mobile")
             
             if is_now_mobile != was_mobile:
-                # Si el modo cambió, volver a ejecutar el router
-                # Esto reconstruirá la vista con el layout correcto (menú lateral o inferior)
                 print(f"RESIZE: Cambiando a modo {'MÓVIL' if is_now_mobile else 'ESCRITORIO'} (Ancho: {current_width})")
                 router(page.route)
         except Exception as ex:
-            # Añadimos manejo de errores para el Timeout
             if "Timeout" in str(ex):
                 print(f"WARN: Timeout en client_storage, reintentando resize. ({ex})")
             else:
                 print(f"Error en handle_resize: {ex}")
     
     page.on_resize = handle_resize
-    # --- FIN CAMBIO RESPONSIVO ---
 
     page.on_route_change = router
     page.go(page.route)
