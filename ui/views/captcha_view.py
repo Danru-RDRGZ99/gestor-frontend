@@ -139,18 +139,68 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
     )
     
+    # --- INICIO DE LA MODIFICACIÓN RESPONSIVA ---
+    
+    # 1. Definimos la tarjeta interna
+    inner_card = Card(form)
+    
+    # 2. Definimos el contenedor de la tarjeta (el que tiene sombra y ancho)
     card_container = ft.Container(
-        content=Card(form, padding=22),
-        width=440,
+        content=inner_card,
         border_radius=16,
-        shadow=ft.BoxShadow(
-            blur_radius=16, spread_radius=1,
-            color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
-        ),
+        # 'width' y 'shadow' se establecerán dinámicamente
     )
 
-    return ft.Container(
-        expand=True,
-        content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=20,
+    # 3. Definimos la fila que centra la tarjeta
+    view_row = ft.Row(
+        [card_container],
+        alignment=ft.MainAxisAlignment.CENTER,
+        # 'vertical_alignment' se establecerá dinámicamente
     )
+
+    # 4. Definimos el contenedor raíz de la vista
+    root_container = ft.Container(
+        content=view_row,
+        expand=True,
+        # 'padding' se establecerá dinámicamente
+    )
+    
+    # 5. Guardamos la sombra original para reutilizarla
+    original_shadow = ft.BoxShadow(
+        blur_radius=16, spread_radius=1,
+        color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
+    )
+
+    # 6. Definimos la función de redimensionamiento
+    def on_page_resize(e):
+        MOBILE_BREAKPOINT = 768
+        page_width = page.width or 1000
+
+        if page_width < MOBILE_BREAKPOINT:
+            # --- Layout Móvil ---
+            inner_card.padding = 18                 # Padding de la tarjeta reducido
+            card_container.width = None             # Ancho completo (se expande)
+            card_container.shadow = None            # Sin sombra
+            view_row.vertical_alignment = ft.CrossAxisAlignment.START # Alinear arriba
+            root_container.padding = ft.padding.only(top=15, left=12, right=12, bottom=15) # Padding de vista reducido
+        else:
+            # --- Layout PC (Original) ---
+            inner_card.padding = 22                 # Padding original
+            card_container.width = 440              # Ancho fijo
+            card_container.shadow = original_shadow # Sombra original
+            view_row.vertical_alignment = ft.CrossAxisAlignment.CENTER # Alinear al centro
+            root_container.padding = 20             # Padding original
+        
+        try:
+            if root_container.page:
+                root_container.update()
+        except Exception as update_error:
+            print(f"Error updating CaptchaView layout: {update_error}")
+
+    # 7. Registrar y llamar
+    page.on_resize = on_page_resize
+    on_page_resize(None) # Llamada inicial
+
+    # 8. Retornar el contenedor raíz
+    return root_container
+    # --- FIN DE LA MODIFICACIÓN RESPONSIVA ---
