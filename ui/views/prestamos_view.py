@@ -46,18 +46,17 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     # Device detection (desktop vs mobile)
     # ---------------------------------
     def detect_mobile() -> bool:
-        try:
-            width = page.window_width
-        except Exception:
-            width = None
-        # If width is not available, fallback to platform check
+        width = getattr(page, "window_width", None)
         platform = getattr(page, "platform", None)
-        if platform:
-            platform = platform.lower()
-        is_mobile_platform = platform in ("android", "ios")
+        is_mobile_platform = False
+        try:
+            # PagePlatform has a name attribute
+            is_mobile_platform = platform and getattr(platform, "name", "").lower() in ("android", "ios")
+        except Exception:
+            is_mobile_platform = False
         if width is None:
             return is_mobile_platform
-        return (width is not None and width < 700) or is_mobile_platform
+        return (width < 700) or is_mobile_platform
 
     state = {
         "filter_plantel_id": None,
