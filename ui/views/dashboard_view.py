@@ -2,26 +2,20 @@ from __future__ import annotations
 import flet as ft
 from api_client import ApiClient
 from datetime import datetime
-import traceback # For better error logging
+import traceback
 
-# Make sure Card is imported correctly
 from ui.components.cards import Card
 
 def DashboardView(page: ft.Page, api: ApiClient):
 
-    # --- INICIO DE LA CORRECCIÓN ---
-    # 'user_session' (el diccionario guardado) ES 'user_data'.
     user_session = page.session.get("user_session") or {}
-    user_data = user_session  # <-- ¡Esta es la corrección!
-    role = user_data.get("rol", "").lower() # <-- Esta línea (14) ahora funcionará.
-    # --- FIN DE LA CORRECCIÓN ---
+    user_data = user_session
+    role = user_data.get("rol", "").lower()
 
-    # --- Paleta de Colores Dinámica ---
     def get_palette():
         dark = page.theme_mode == ft.ThemeMode.DARK
         return {
             "section_bg": ft.Colors.BLACK if dark else ft.Colors.BLUE_GREY_50,
-            # card_bg is no longer used directly on Card, but keep for other elements
             "card_bg": ft.Colors.WHITE10 if dark else ft.Colors.WHITE,
             "border": ft.Colors.WHITE24 if dark else ft.Colors.BLACK26,
             "text_primary": ft.Colors.WHITE if dark else ft.Colors.BLACK,
@@ -33,19 +27,9 @@ def DashboardView(page: ft.Page, api: ApiClient):
 
     PAL = get_palette()
     
-    # --- INICIO DE LA MODIFICACIÓN MÓVIL (Plataforma) ---
-    
-    # Detectamos si la plataforma es móvil (Android o iOS)
     is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
-
-    # Padding para la vista principal: más ajustado en móvil, más aire en desktop
-    # El ResponsiveRow ya centra el contenido, esto es solo el espacio exterior.
     view_padding = ft.padding.symmetric(horizontal=12, vertical=15) if is_mobile else ft.padding.symmetric(horizontal=24, vertical=20)
 
-    # --- FIN DE LA MODIFICACIÓN MÓVIL ---
-
-
-    # --- Helpers de UI ---
     def SectionHeader(icon, title):
         return ft.Row([
             ft.Icon(icon, size=20, color=PAL["text_primary"]),
@@ -53,11 +37,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
         ])
 
     def ItemCard(child: ft.Control):
-        # The custom Card component handles its own styling (padding, radius)
-        # We removed bgcolor from here
-        # NOTA: Si quisieras quitar sombras en móvil, tendrías que pasar 'shadow=None' aquí
-        # asumiendo que tu 'Card' customizada acepta ese parámetro.
-        # Por ejemplo: shadow = None if is_mobile else "default_shadow"
         return Card(child, padding=12, radius=10)
 
     def chip_estado(txt: str):
@@ -67,7 +46,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
             border_radius=20, border=ft.border.all(1, PAL["border"]),
         )
 
-    # --- Formateo de Datos ---
     def format_iso_date(date_str: str | None) -> str:
         if not date_str: return ""
         try:
@@ -79,18 +57,15 @@ def DashboardView(page: ft.Page, api: ApiClient):
             print(f"WARN: Could not format date '{date_str}': {e}")
             return str(date_str)
 
-    # --- Contenedores para las listas ---
     mis_prestamos_list = ft.Column(spacing=10)
     mis_reservas_list = ft.Column(spacing=10)
     error_display = ft.Text("", color=PAL["error_text"])
 
-    # --- Renderizado de Secciones (CON VERIFICACIÓN) ---
     def render_mis_prestamos():
         mis_prestamos_list.controls.clear()
         error_display.value = ""
         prestamos_data = api.get_mis_prestamos()
 
-        # Comprueba si la respuesta es un error
         if isinstance(prestamos_data, dict) and "error" in prestamos_data:
             error_detail = prestamos_data.get("error", "Error desconocido")
             error_msg = f"Error al cargar préstamos: {error_detail}"
@@ -101,7 +76,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
             if error_display.page: error_display.update()
             return
 
-        # Comprueba si la respuesta no es una lista (otro error)
         if not isinstance(prestamos_data, list):
             error_msg = f"Error al cargar préstamos: Respuesta inesperada del API ({type(prestamos_data)})"
             print(f"ERROR DashboardView: {error_msg}")
@@ -145,15 +119,12 @@ def DashboardView(page: ft.Page, api: ApiClient):
             if mis_reservas_list.page: mis_reservas_list.update()
             return
         
-        # --- NOTA: 'get_mis_reservas' no existe en api_client.py ---
-        # --- Deberás añadirlo para que esta sección funcione ---
         if not hasattr(api, "get_mis_reservas"):
             print("WARN: api.get_mis_reservas() no existe. Omitiendo sección.")
             mis_reservas_list.controls.append(SectionHeader(ft.Icons.BOOKMARK_ADD, "Mis Reservas Recientes"))
             mis_reservas_list.controls.append(ft.Text("Función no implementada en API client.", color=PAL["error_text"]))
             if mis_reservas_list.page: mis_reservas_list.update()
             return
-        # --- FIN NOTA ---
 
         reservas_data = api.get_mis_reservas()
 
@@ -200,46 +171,28 @@ def DashboardView(page: ft.Page, api: ApiClient):
 
         if mis_reservas_list.page: mis_reservas_list.update()
 
-    # --- Construcción del Layout Principal ---
     saludo = ft.Text(f"Hola, {user_data.get('nombre', user_data.get('user', ''))}.", size=14, color=PAL["text_secondary"])
 
-    # --- Contenido dinámico según el rol ---
     main_column = ft.Column(spacing=20)
     
-    # --- INICIO DE LA MODIFICACIÓN 1 ---
-    # Asignamos las propiedades 'col' a la columna principal
-    # Móvil (xs): 12/12 (ancho completo)
-    # Tablet (md): 10/12
-    # Escritorio (lg): 8/12
-    # Escritorio Ancho (xl): 6/12
     main_column.col = {"xs": 12, "md": 10, "lg": 8, "xl": 6}
-    # --- FIN DE LA MODIFICACIÓN 1 ---
 
-    # Añadir el display de errores global
     main_column.controls.append(error_display)
 
-    # Tarjeta de Bienvenida / Resumen
     welcome_content = [saludo]
     if role in ["admin", "docente", "estudiante"]:
         welcome_content.append(ft.Text(f"Rol actual: {role.capitalize()}", color=PAL["text_secondary"]))
     else:
         welcome_content.append(ft.Text("Bienvenido. Usa el menú de la izquierda.", color=PAL["text_secondary"]))
     
-    # NOTA: Aquí también podrías aplicar la sombra condicional
-    # main_column.controls.append(Card(ft.Column(welcome_content), shadow=card_shadow))
     main_column.controls.append(Card(ft.Column(welcome_content)))
 
-
-    # Añadir sección de préstamos (siempre visible para roles definidos)
     if role in ["admin", "docente", "estudiante"]:
         main_column.controls.append(Card(mis_prestamos_list))
 
-    # Añadir sección de reservas (solo para docente)
     if role == "docente":
         main_column.controls.append(Card(mis_reservas_list))
 
-
-    # --- Render inicial ---
     try:
         render_mis_prestamos()
         render_mis_reservas()
@@ -248,7 +201,6 @@ def DashboardView(page: ft.Page, api: ApiClient):
         traceback.print_exc()
         error_display.value = f"Error inesperado al renderizar dashboard: {e}"
 
-    # --- Manejo de cambio de tema ---
     def on_theme_change(msg):
         nonlocal PAL
         PAL = get_palette()
@@ -264,11 +216,7 @@ def DashboardView(page: ft.Page, api: ApiClient):
     if page:
         page.pubsub.subscribe(on_theme_change)
 
-    # --- INICIO DE LA MODIFICACIÓN 2 ---
-    # Envolvemos el contenido en una Columna con scroll,
-    # que contiene una ResponsiveRow para centrar el contenido.
-    # AÑADIMOS EL 'view_padding' ADAPTATIVO
-    return ft.Column(
+    main_view_column = ft.Column(
         [
             ft.ResponsiveRow(
                 [main_column],
@@ -277,6 +225,10 @@ def DashboardView(page: ft.Page, api: ApiClient):
         ],
         expand=True,
         scroll=ft.ScrollMode.AUTO,
-        padding=view_padding # <-- ÚNICO CAMBIO REAL
     )
-    # --- FIN DE LA MODIFICACIÓN 2 ---
+
+    return ft.Container(
+        content=main_view_column,
+        expand=True,
+        padding=view_padding
+    )
