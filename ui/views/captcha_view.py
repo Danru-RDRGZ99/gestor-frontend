@@ -1,25 +1,28 @@
 import flet as ft
 from api_client import ApiClient
+# Asumo que tus componentes Primary y Ghost están en sus respectivos archivos
 from ui.components.buttons import Primary, Ghost
 from ui.components.cards import Card
 
 def CaptchaView(page: ft.Page, api: ApiClient, on_success):
     # --- Estado y Mensajes ---
-    info = ft.Text("", color=ft.Colors.RED_400, size=12)
+    info = ft.Text(
+        "", 
+        color=ft.Colors.RED_400, 
+        size=12,
+        text_align=ft.TextAlign.CENTER # Centrar el texto
+    )
 
     # --- Widgets de CAPTCHA ---
     
-    # Usamos src_base64
     captcha_image = ft.Image(
-        # La fuente se cargará con la función refresh_captcha
         src_base64=None, 
         height=70,
         fit=ft.ImageFit.CONTAIN,
-        col=8, # Ocupa 8 de 12 columnas
+        col=8, 
     )
     
     def refresh_captcha(e):
-        # Usamos el nuevo método del API Client
         img_base64 = api.get_captcha_image() 
         
         if img_base64:
@@ -33,7 +36,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         icon=ft.Icons.REFRESH,
         on_click=refresh_captcha,
         tooltip="Refrescar imagen",
-        col=4, # Ocupa 4 de 12 columnas
+        col=4, 
     )
     
     captcha_field = ft.TextField(
@@ -41,7 +44,7 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         autofocus=True,
         prefix_icon=ft.Icons.ABC,
         text_size=14,
-        on_submit=lambda e: do_verify(), # Permite enviar con Enter
+        on_submit=lambda e: do_verify(),
         text_align=ft.TextAlign.CENTER,
         capitalization=ft.TextCapitalization.CHARACTERS,
     )
@@ -100,8 +103,18 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
         page.update()
 
     # --- Acciones y Validación ---
-    btn_verify = Primary("Verificar", on_click=lambda e: do_verify(), width=260, height=46)
-    btn_cancel = Ghost("Cancelar", on_click=lambda e: page.go("/"), width=260, height=40)
+    btn_verify = Primary(
+        "Verificar", 
+        on_click=lambda e: do_verify(), 
+        height=46
+        # Se elimina el 'width' fijo para que sea responsive
+    )
+    btn_cancel = Ghost(
+        "Cancelar", 
+        on_click=lambda e: page.go("/"), 
+        height=40
+        # Se elimina el 'width' fijo para que sea responsive
+    )
 
     def validate(_):
         btn_verify.disabled = not captcha_field.value.strip()
@@ -136,21 +149,32 @@ def CaptchaView(page: ft.Page, api: ApiClient, on_success):
             btn_verify, 
             btn_cancel
         ],
-        spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        spacing=14, 
+        tight=True, 
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH # Estira los botones
     )
     
+    # --- INICIO DE LA MODIFICACIÓN ---
     card_container = ft.Container(
         content=Card(form, padding=22),
-        width=440,
+        # width=440, <--- Eliminado
         border_radius=16,
         shadow=ft.BoxShadow(
             blur_radius=16, spread_radius=1,
             color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
         ),
+        # Se añade 'col' para el ResponsiveRow
+        col={"xs": 12, "sm": 10, "md": 8, "lg": 6, "xl": 4}
     )
 
     return ft.Container(
         expand=True,
-        content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        # Se usa ResponsiveRow para centrar y manejar el ancho de 'col'
+        content=ft.ResponsiveRow(
+            [card_container],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+        ),
         padding=20,
     )
+    # --- FIN DE LA MODIFICACIÓN ---
