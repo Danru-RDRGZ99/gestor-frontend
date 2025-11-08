@@ -19,7 +19,8 @@ MAX_LOAN_HOURS = 7
 def PrestamosView(page: ft.Page, api: ApiClient):
     """
     Vista completa para la gestión y solicitud de préstamos y recursos.
-    Versión móvil optimizada.
+    Incluye pestañas para usuarios y administradores, filtros y paneles de gestión.
+    Esta versión contiene adaptaciones para móvil y escritorio en el mismo archivo.
     """
     # --- INICIO DE LA CORRECCIÓN ---
     user_session = page.session.get("user_session") or {}
@@ -41,10 +42,22 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         }
     PAL = get_palette() # Call it once
 
-    # Detectar móvil
-    is_mobile = page.width < 600
+    # ---------------------------------
+    # Device detection (desktop vs mobile)
+    # ---------------------------------
+    def detect_mobile() -> bool:
+        width = getattr(page, "window_width", None)
+        platform = getattr(page, "platform", None)
+        is_mobile_platform = False
+        try:
+            # PagePlatform has a name attribute
+            is_mobile_platform = platform and getattr(platform, "name", "").lower() in ("android", "ios")
+        except Exception:
+            is_mobile_platform = False
+        if width is None:
+            return is_mobile_platform
+        return (width < 700) or is_mobile_platform
 
-    # Estado local
     state = {
         "filter_plantel_id": None,
         "filter_lab_id": None,
@@ -52,13 +65,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "filter_tipo": "",
         "active_tab": 0,
         "solicitar_recurso_id": None,
-        "editing_recurso_id": None,
-        "is_mobile": is_mobile,
+        "editing_recurso_id": None, # Para el form de admin
+        "is_mobile": detect_mobile(),
     }
 
     # Keep UI responsive to resize events
     def _on_resize(e):
-        new_mobile = page.width < 600
+        new_mobile = detect_mobile()
         if new_mobile != state["is_mobile"]:
             state["is_mobile"] = new_mobile
             # trigger rerender/refresh layout
@@ -66,14 +79,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     page.on_resize = _on_resize
 
     # --- Controles de Filtros y Listas ---
-    dd_plantel_filter = ft.Dropdown(
-        label="Plantel", 
-        options=[ft.dropdown.Option("", "Todos")]
-    )
-    dd_lab_filter = ft.Dropdown(
-        label="Laboratorio", 
-        options=[ft.dropdown.Option("", "Todos")]
-    )
+    dd_plantel_filter = ft.Dropdown(label="Plantel", options=[ft.dropdown.Option("", "Todos")], width=220)
+    dd_lab_filter = ft.Dropdown(label="Laboratorio", options=[ft.dropdown.Option("", "Todos")], width=220)
     dd_estado_filter = ft.Dropdown(
         label="Disponibilidad",
         options=[
@@ -81,16 +88,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.dropdown.Option("disponible", "Disponible"),
             ft.dropdown.Option("prestado", "Prestado"),
             ft.dropdown.Option("mantenimiento", "Mantenimiento"),
-        ]
+        ],
+        width=200,
     )
-    dd_tipo_filter = ft.Dropdown(
-        label="Tipo", 
-        options=[ft.dropdown.Option("", "Todos")]
-    )
+    dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200)
 
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
-    error_display = ft.Text("", color=PAL["error_text"])
+    error_display = ft.Text("", color=PAL["error_text"]) # For displaying load errors
 
     # --- Cargar catálogos iniciales (CON VERIFICACIÓN) ---
     planteles_cache = []
@@ -116,7 +121,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         # Verificar Laboratorios
         if isinstance(labs_data, list):
             labs_cache = labs_data
-        elif error_loading_data is None:
+            # We don't populate lab filter options here, depends on plantel filter
+        elif error_loading_data is None: # Only record first error
             detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar laboratorios: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
@@ -124,18 +130,20 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             print(f"ERROR PrestamosView: (secondary) Error al cargar laboratorios: {detail}")
 
+
         # Verificar Tipos
         if isinstance(tipos_data, list):
             tipos_cache = tipos_data
             dd_tipo_filter.options = [ft.dropdown.Option("", "Todos")] + \
                                      [ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t]
-        elif error_loading_data is None:
+        elif error_loading_data is None: # Only record first error
             detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar tipos de recurso: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
         else:
             detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
             print(f"ERROR PrestamosView: (secondary) Error al cargar tipos: {detail}")
+
 
     except Exception as e:
         error_loading_data = f"Excepción al cargar datos iniciales: {e}"
@@ -151,12 +159,15 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         ])
     # --- FIN CARGA INICIAL ---
 
+
     # ---------------------------------
     # Controles de Gestión de Recursos (Admin)
     # ---------------------------------
-    tf_recurso_tipo = TextField("Tipo de Recurso")
-    tf_recurso_detalles = TextField("Detalles (opcional)")
-    
+    tf_recurso_tipo = TextField("Tipo de Recurso (ej: Cable HDMI, Proyector)")
+    tf_recurso_tipo.col = {"sm": 12, "md": 4}
+    tf_recurso_detalles = TextField("Detalles/Specs (opcional)") # Changed label
+    tf_recurso_detalles.col = {"sm": 12, "md": 4}
+
     dd_recurso_estado_admin = ft.Dropdown(
         label="Estado Inicial",
         options=[
@@ -165,10 +176,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         ],
         value="disponible"
     )
+    dd_recurso_estado_admin.col = {"sm": 12, "md": 4}
 
     # Agrupar laboratorios por plantel para el dropdown de admin
     lab_options_admin = []
-    plantel_map_for_admin = {p['id']: p['nombre'] for p in planteles_cache if p.get('id')}
+    plantel_map_for_admin = {p['id']: p['nombre'] for p in planteles_cache if p.get('id')} # Map IDs to names
     labs_grouped = {}
     for lab in labs_cache:
         pid = lab.get("plantel_id")
@@ -178,60 +190,43 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             labs_grouped[pid].append(lab)
 
     for pid, pname in plantel_map_for_admin.items():
-        lab_options_admin.append(ft.dropdown.Option(key=None, text=pname, disabled=True))
+        lab_options_admin.append(ft.dropdown.Option(key=None, text=pname, disabled=True)) # Group header
         if pid in labs_grouped:
-            for l in sorted(labs_grouped[pid], key=lambda x: x.get('nombre', '')):
+            for l in sorted(labs_grouped[pid], key=lambda x: x.get('nombre', '')): # Sort labs alphabetically
                 lab_options_admin.append(ft.dropdown.Option(key=str(l['id']), text=f"  {l['nombre']}"))
 
-    dd_recurso_lab_admin = ft.Dropdown(
-        label="Laboratorio de Origen", 
-        options=lab_options_admin
-    )
 
-    btn_recurso_save = Primary("Agregar Recurso", on_click=lambda e: save_recurso(), height=40)
-    btn_recurso_cancel = Ghost("Cancelar", on_click=lambda e: clear_recurso_form(), height=40, visible=False)
+    dd_recurso_lab_admin = ft.Dropdown(label="Laboratorio de Origen", options=lab_options_admin)
+    dd_recurso_lab_admin.col = {"sm": 12, "md": 9}
+
+    btn_recurso_save = Primary("Agregar Recurso", on_click=lambda e: save_recurso())
+    btn_recurso_save.col = {"sm": 6, "md": "auto"}
+
+    btn_recurso_cancel = Ghost("Cancelar", on_click=lambda e: clear_recurso_form())
+    btn_recurso_cancel.visible = False
+    btn_recurso_cancel.col = {"sm": 6, "md": "auto"}
 
     # Lista para la pestaña de gestión de admin
     recursos_admin_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-
-    # ========================================================================
-    #  DIÁLOGO ELIMINAR
-    # ========================================================================
-    def confirm_delete_recurso(e):
-        recurso_id = page.dialog.data
-        page.dialog.open = False
-
-        result = api.delete_recurso(recurso_id)
-
-        if result and "success" in result:
-            page.snack_bar = ft.SnackBar(ft.Text("Recurso eliminado."), open=True)
-            render_admin_recursos()
-            render_recursos()
-        else:
-            detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
-            page.snack_bar = ft.SnackBar(ft.Text(f"Error al eliminar: {detail}"), open=True)
-        if page: page.update()
-
-    delete_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Confirmar eliminación"),
-        content=ft.Text("¿Estás seguro de que quieres eliminar este recurso? Esta acción no se puede deshacer y fallará si tiene préstamos asociados."),
-        actions=[
-            Tonal("Cancelar", on_click=lambda e: (setattr(page.dialog, 'open', False), page.update())),
-            Danger("Eliminar", on_click=confirm_delete_recurso),
+    admin_form_container = ft.ResponsiveRow( # Contenedor del formulario
+        [
+            tf_recurso_tipo,
+            tf_recurso_detalles,
+            dd_recurso_estado_admin,
+            dd_recurso_lab_admin,
+            # Use Column for buttons to stack on small screens if needed
+            ft.Column([ft.Row([btn_recurso_save, btn_recurso_cancel])], col={"sm": 12, "md": 3})
         ],
-        actions_alignment=ft.MainAxisAlignment.END,
+        vertical_alignment=ft.CrossAxisAlignment.END, # Align based on bottom
+        spacing=10
     )
-    
-    if delete_dialog not in page.overlay:
-        page.overlay.append(delete_dialog)
 
     # ---------------------------------
     # Lógica de renderizado y filtros
     # ---------------------------------
     def render_recursos():
         recursos_list_display.controls.clear()
-        error_display.value = ""
+        error_display.value = "" # Clear error
         recursos_data = api.get_recursos(
             plantel_id=state["filter_plantel_id"],
             lab_id=state["filter_lab_id"],
@@ -239,16 +234,18 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             tipo=state["filter_tipo"]
         )
 
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar recursos: {detail}"
             print(f"ERROR render_recursos: {error_msg}")
             error_display.value = error_msg
             if error_display.page: error_display.update()
-            if recursos_list_display.page: recursos_list_display.update()
+            if recursos_list_display.page: recursos_list_display.update() # Update to show empty state potentially
             return
         
         if not isinstance(recursos_data, list):
+        # --- FIN CORRECCIÓN DE ERRORES ---
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar recursos: {detail}"
             print(f"ERROR render_recursos: {error_msg}")
@@ -262,8 +259,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             recursos_list_display.controls.append(ft.Text("No se encontraron recursos con los filtros seleccionados.", color=PAL["muted_text"]))
         else:
             for r in recursos:
-                if isinstance(r, dict):
-                    recursos_list_display.controls.append(recurso_tile(r))
+                if isinstance(r, dict): # Ensure 'r' is a dict
+                    if state["is_mobile"]:
+                        recursos_list_display.controls.append(recurso_tile_mobile(r))
+                    else:
+                        recursos_list_display.controls.append(recurso_tile(r))
+                else:
+                    print(f"WARN render_recursos: Expected dict for resource, got {type(r)}")
 
         if page: page.update()
 
@@ -272,6 +274,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         error_display.value = ""
         solicitudes_data = (api.get_todos_los_prestamos() if is_admin else api.get_mis_prestamos())
 
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if isinstance(solicitudes_data, dict) and "error" in solicitudes_data:
             detail = solicitudes_data.get("error", "Error")
             error_msg = f"Error al cargar solicitudes: {detail}"
@@ -282,6 +285,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return
 
         if not isinstance(solicitudes_data, list):
+        # --- FIN CORRECCIÓN DE ERRORES ---
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar solicitudes: {detail}"
             print(f"ERROR render_solicitudes: {error_msg}")
@@ -295,16 +299,23 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             solicitudes_list_display.controls.append(ft.Text("No hay solicitudes para mostrar.", color=PAL["muted_text"]))
         else:
             for s in solicitudes:
-                if isinstance(s, dict):
-                    solicitudes_list_display.controls.append(solicitud_tile(s))
+                if isinstance(s, dict): # Ensure 's' is a dict
+                    if state["is_mobile"]:
+                        solicitudes_list_display.controls.append(solicitud_tile_mobile(s))
+                    else:
+                        solicitudes_list_display.controls.append(solicitud_tile(s))
+                else:
+                    print(f"WARN render_solicitudes: Expected dict for solicitud, got {type(s)}")
 
         if page: page.update()
 
+    # Renderer para la lista de gestión de recursos
     def render_admin_recursos():
         recursos_admin_list_display.controls.clear()
         error_display.value = ""
-        recursos_data = api.get_recursos()
+        recursos_data = api.get_recursos() # Admin ve *todos* los recursos
 
+        # --- INICIO CORRECCIÓN DE ERRORES ---
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar lista de admin: {detail}"
@@ -315,6 +326,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return
             
         if not isinstance(recursos_data, list):
+        # --- FIN CORRECCIÓN DE ERRORES ---
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar lista de admin: {detail}"
             print(f"ERROR render_admin_recursos: {error_msg}")
@@ -328,8 +340,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             recursos_admin_list_display.controls.append(ft.Text("No hay recursos creados."))
         else:
             for r in recursos:
-                if isinstance(r, dict):
-                    recursos_admin_list_display.controls.append(admin_recurso_tile(r))
+                if isinstance(r, dict): # Ensure 'r' is a dict
+                    if state["is_mobile"]:
+                        recursos_admin_list_display.controls.append(admin_recurso_tile_mobile(r))
+                    else:
+                        recursos_admin_list_display.controls.append(admin_recurso_tile(r))
+                else:
+                    print(f"WARN render_admin_recursos: Expected dict for resource, got {type(r)}")
 
         if recursos_admin_list_display.page:
             recursos_admin_list_display.update()
@@ -337,25 +354,33 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def on_filter_change(e):
         pid_val = dd_plantel_filter.value
 
+        # Actualizar state plantel_id
         if pid_val and pid_val.isdigit():
             state["filter_plantel_id"] = int(pid_val)
         else:
             state["filter_plantel_id"] = None
 
+        # Actualizar opciones del dropdown de laboratorios
         if state["filter_plantel_id"]:
             labs_filtrados = [l for l in labs_cache if l.get("plantel_id") == state["filter_plantel_id"]]
             dd_lab_filter.options = [ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(str(l['id']), l['nombre']) for l in labs_filtrados if l.get('id')]
         else:
             dd_lab_filter.options = [ft.dropdown.Option("", "Todos")]
-        dd_lab_filter.value = ""
-        if dd_lab_filter.page: dd_lab_filter.update()
+        dd_lab_filter.value = "" # Reset lab selection when plantel changes
+        if dd_lab_filter.page: dd_lab_filter.update() # Update the dropdown UI
 
+        # Actualizar state lab_id (ahora está reseteado)
         state["filter_lab_id"] = None
+
+        # Actualizar otros filtros
         state["filter_estado"] = dd_estado_filter.value or ""
         state["filter_tipo"] = dd_tipo_filter.value or ""
 
+        # Volver a renderizar la lista de recursos con los nuevos filtros
         render_recursos()
 
+    # --- INICIO CORRECCIÓN ---
+    # Handler específico para el filtro de lab (no resetea nada)
     def on_lab_filter_change(e):
         lid_val = dd_lab_filter.value
         if lid_val and lid_val.isdigit():
@@ -363,25 +388,32 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         else:
             state["filter_lab_id"] = None
         
+        # No es necesario actualizar plantel_id, ya está seteado
+        # state["filter_plantel_id"] = ... 
+
         state["filter_estado"] = dd_estado_filter.value or ""
         state["filter_tipo"] = dd_tipo_filter.value or ""
         render_recursos()
+    # --- FIN CORRECCIÓN ---
+
 
     # Asignar handlers
     dd_plantel_filter.on_change = on_filter_change
-    dd_lab_filter.on_change = on_lab_filter_change
-    dd_estado_filter.on_change = on_lab_filter_change
-    dd_tipo_filter.on_change = on_lab_filter_change
+    dd_lab_filter.on_change = on_lab_filter_change # <-- Handler separado
+    dd_estado_filter.on_change = on_lab_filter_change # Puede usar el mismo que lab
+    dd_tipo_filter.on_change = on_lab_filter_change # Puede usar el mismo que lab
 
     # ---------------------------------
-    # Handlers de Gestión (Admin)
+    # Handlers de Gestión (Admin) - Sin cambios, excepto llamadas a render
     # ---------------------------------
     def update_loan_status(prestamo_id: int, new_status: str):
         result = api.update_prestamo_estado(prestamo_id, new_status)
-        if result and "error" not in result:
+        # --- INICIO CORRECCIÓN DE ERRORES ---
+        if result and "error" not in result: 
+        # --- FIN CORRECCIÓN DE ERRORES ---
             page.snack_bar = ft.SnackBar(ft.Text(f"Préstamo actualizado a '{new_status}'"), open=True)
             render_solicitudes()
-            render_recursos()
+            render_recursos() # El estado del recurso puede haber cambiado
         else:
             detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             page.snack_bar = ft.SnackBar(ft.Text(f"Error al actualizar estado: {detail}"), open=True)
@@ -395,10 +427,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         dd_recurso_lab_admin.value = None
         btn_recurso_save.text = "Agregar Recurso"
         btn_recurso_cancel.visible = False
-        if is_mobile:
-            form_card.update()
-        else:
-            if admin_form_container.page: admin_form_container.update()
+        if admin_form_container.page: admin_form_container.update()
 
     def save_recurso():
         if not all([tf_recurso_tipo.value, dd_recurso_estado_admin.value, dd_recurso_lab_admin.value]):
@@ -413,6 +442,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
         tipo = tf_recurso_tipo.value.strip()
         estado = dd_recurso_estado_admin.value
+        # Use 'specs' to match Pydantic model
         specs = tf_recurso_detalles.value.strip() or ""
         recurso_id = state.get("editing_recurso_id")
 
@@ -426,15 +456,19 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 result = api.create_recurso(tipo, estado, lab_id, specs)
                 msg = "Recurso creado"
 
+            # Check if API call was successful
+            # --- INICIO CORRECCIÓN DE ERRORES ---
             if result and "error" not in result:
+            # --- FIN CORRECCIÓN DE ERRORES ---
                 page.snack_bar = ft.SnackBar(ft.Text(msg), open=True)
                 clear_recurso_form()
                 render_admin_recursos()
-                render_recursos()
+                render_recursos() # Re-render user view too
 
+                # Actualizar cache de tipos si es nuevo y no es update
                 if not is_update and tipo not in tipos_cache:
                     tipos_cache.append(tipo)
-                    tipos_cache.sort()
+                    tipos_cache.sort() # Keep sorted
                     dd_tipo_filter.options = [ft.dropdown.Option("", "Todos")] + [ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache]
                     if dd_tipo_filter.page: dd_tipo_filter.update()
             else:
@@ -446,36 +480,206 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             print(f"ERROR save_recurso: {e}")
             traceback.print_exc()
 
-        if page: page.update()
+        if page: page.update() # Ensure UI refresh after snackbar or renders
+
 
     def edit_recurso_click(r: dict):
         state["editing_recurso_id"] = r.get('id')
         tf_recurso_tipo.value = r.get('tipo')
-        tf_recurso_detalles.value = r.get('specs')
+        tf_recurso_detalles.value = r.get('specs') # Use 'specs' field
         dd_recurso_estado_admin.value = r.get('estado')
+        # Ensure lab ID is string for dropdown value
         lab_id_val = r.get('laboratorio_id')
         dd_recurso_lab_admin.value = str(lab_id_val) if lab_id_val is not None else None
 
         btn_recurso_save.text = "Actualizar Recurso"
         btn_recurso_cancel.visible = True
-
-        if is_mobile:
-            form_card.update()
-        else:
-            if admin_form_container.page: admin_form_container.update()
-
+        if admin_form_container.page: admin_form_container.update()
         page.snack_bar = ft.SnackBar(ft.Text(f"Editando recurso #{r.get('id')}..."), open=True)
         if page: page.update()
 
     def delete_recurso_click(r: dict):
+        # Use the existing delete_dialog for consistency
         page.dialog = delete_dialog
-        page.dialog.data = r.get('id')
+        # Pass the resource dict or just the ID
+        page.dialog.data = r.get('id') # Store ID to delete
         page.dialog.open = True
         if page: page.update()
 
-    # ---------------------------------
-    # Creación de Tiles (elementos de lista) - VERSIÓN MÓVIL
-    # ---------------------------------
+    def confirm_delete_recurso(e):
+        recurso_id = page.dialog.data
+        page.dialog.open = False
+
+        result = api.delete_recurso(recurso_id)
+
+        # Check API response
+        # --- INICIO CORRECCIÓN DE ERRORES ---
+        if result and "success" in result:
+        # --- FIN CORRECCIÓN DE ERRORES ---
+            page.snack_bar = ft.SnackBar(ft.Text("Recurso eliminado."), open=True)
+            render_admin_recursos()
+            render_recursos()
+        else:
+            detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
+            page.snack_bar = ft.SnackBar(ft.Text(f"Error al eliminar: {detail}"), open=True)
+        if page: page.update()
+
+    # Diálogo de confirmación para eliminar recursos
+    delete_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Confirmar eliminación"),
+        content=ft.Text("¿Estás seguro de que quieres eliminar este recurso? Esta acción no se puede deshacer y fallará si tiene préstamos asociados."), # Added warning
+        actions=[
+            ft.TextButton("Cancelar", on_click=lambda e: (setattr(page.dialog, 'open', False), page.update())),
+            Danger("Eliminar", on_click=confirm_delete_recurso), # Changed button type
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    # Add dialog only once
+    if delete_dialog not in page.overlay:
+        page.overlay.append(delete_dialog)
+
+    # ========================================================================
+    # TILES MÓVILES (NUEVOS)
+    # ========================================================================
+
+    def recurso_tile_mobile(r: dict):
+        """Tile móvil para recursos - estilo similar a laboratorios"""
+        lab_id = r.get('laboratorio_id')
+        lab = next((l for l in labs_cache if l.get('id') == lab_id), {})
+        plantel_id = lab.get('plantel_id')
+        plantel = next((p for p in planteles_cache if p.get('id') == plantel_id), {})
+
+        title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", 
+                       size=15, weight=ft.FontWeight.W_600)
+        
+        subtitle = ft.Text(
+            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
+            size=11, opacity=0.85,
+        )
+
+        estado_chip = chip_estado(r.get("estado"))
+
+        if r.get("estado") == "disponible":
+            btn = Primary("Solicitar", height=34, expand=True,
+                         on_click=lambda e, _r=r: open_solicitud_sheet(_r))
+        else:
+            btn = ft.OutlinedButton(
+                f"{r.get('estado', 'No disponible').capitalize()}", 
+                height=34, expand=True, disabled=True
+            )
+
+        return Card(
+            ft.Container(
+                ft.Column([
+                    ft.Row([title, estado_chip], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    subtitle,
+                    btn
+                ], spacing=8),
+                border_radius=10
+            ),
+            padding=10
+        )
+
+    def solicitud_tile_mobile(s: dict):
+        """Tile móvil para solicitudes - estilo similar a laboratorios"""
+        recurso = s.get('recurso', {})
+        usuario = s.get('usuario', {})
+        solicitud_id = s.get('id', 'N/A')
+        recurso_tipo = recurso.get('tipo', 'Recurso').capitalize()
+        recurso_id_val = recurso.get('id', 'N/A')
+
+        title = ft.Text(f"Solicitud #{solicitud_id}", size=15, weight=ft.FontWeight.W_600)
+        
+        recurso_info = ft.Text(f"{recurso_tipo} #{recurso_id_val}", size=12, opacity=0.85)
+        
+        timeline = ft.Text(
+            f"Pedido: {format_iso_date(s.get('created_at'))}\nDevolución: {format_iso_date(s.get('fin'))}",
+            size=10, opacity=0.7
+        )
+
+        estado_chip = chip_estado(s.get('estado'))
+
+        # Información adicional para admin
+        admin_info = None
+        if is_admin:
+            solicitante_nombre = usuario.get('nombre', '-')
+            admin_info = ft.Text(f"Solicitante: {solicitante_nombre}", size=11, italic=True, opacity=0.8)
+
+        content = [ft.Row([title, estado_chip], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)]
+        if admin_info:
+            content.append(admin_info)
+        content.extend([recurso_info, timeline])
+
+        # Acciones para admin
+        admin_actions = None
+        current_status = s.get('estado', 'pendiente')
+        if is_admin:
+            if current_status == 'pendiente':
+                admin_actions = ft.Row([
+                    Primary("Aprobar", height=32, expand=True,
+                           on_click=lambda _, _id=s['id']: update_loan_status(_id, 'aprobado')),
+                    Danger("Rechazar", height=32, expand=True,
+                          on_click=lambda _, _id=s['id']: update_loan_status(_id, 'rechazado')),
+                ], spacing=6)
+            elif current_status == 'aprobado':
+                admin_actions = Primary("Marcar Entregado", height=32, expand=True,
+                                      on_click=lambda _, _id=s['id']: update_loan_status(_id, 'entregado'))
+            elif current_status == 'entregado':
+                admin_actions = Primary("Marcar Devuelto", height=32, expand=True,
+                                      on_click=lambda _, _id=s['id']: update_loan_status(_id, 'devuelto'))
+
+        if admin_actions:
+            content.append(admin_actions)
+
+        return Card(
+            ft.Container(
+                ft.Column(content, spacing=6),
+                border_radius=10
+            ),
+            padding=10
+        )
+
+    def admin_recurso_tile_mobile(r: dict):
+        """Tile móvil para gestión de recursos (admin)"""
+        lab_id = r.get('laboratorio_id')
+        lab = next((l for l in labs_cache if l.get('id') == lab_id), {})
+        plantel_id = lab.get('plantel_id')
+        plantel = next((p for p in planteles_cache if p.get('id') == plantel_id), {})
+
+        title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", 
+                       size=15, weight=ft.FontWeight.W_600)
+        
+        subtitle = ft.Text(
+            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
+            size=11, opacity=0.85,
+        )
+
+        estado_chip = chip_estado(r.get('estado'))
+
+        actions = ft.Row([
+            Primary("Editar", height=34, expand=True,
+                   on_click=lambda e, _r=r: edit_recurso_click(_r)),
+            Danger("Eliminar", height=34, expand=True,
+                  on_click=lambda e, _r=r: delete_recurso_click(_r)),
+        ], spacing=6)
+
+        return Card(
+            ft.Container(
+                ft.Column([
+                    ft.Row([title, estado_chip], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    subtitle,
+                    actions
+                ], spacing=8),
+                border_radius=10
+            ),
+            padding=10
+        )
+
+    # ========================================================================
+    # TILES ORIGINALES (WEB) - SIN CAMBIOS
+    # ========================================================================
+
     def recurso_tile(r: dict):
         lab_id = r.get('laboratorio_id')
         lab = next((l for l in labs_cache if l.get('id') == lab_id), {})
@@ -483,20 +687,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         plantel = next((p for p in planteles_cache if p.get('id') == plantel_id), {})
 
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}", size=11, opacity=0.8)
+        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')} · Lab: {lab.get('nombre', '-')}", size=12, opacity=0.8)
 
         if r.get("estado") == "disponible":
-            btn = Primary("Solicitar", height=34, expand=True, on_click=lambda e, _r=r: open_solicitud_sheet(_r))
+            btn = ft.ElevatedButton("Solicitar", on_click=lambda e, _r=r: open_solicitud_sheet(_r))
         else:
-            btn = ft.OutlinedButton(f"{r.get('estado', 'No disponible').capitalize()}", disabled=True, height=34, expand=True)
+            btn = ft.OutlinedButton(f"{r.get('estado', 'No disponible').capitalize()}", disabled=True)
 
-        return Card(
-            ft.Container(
-                ft.Column([title, subtitle, btn], spacing=6),
-                border_radius=10
-            ),
-            padding=8
-        )
+        return ItemCard(ft.Row([ft.Column([title, subtitle], spacing=2, expand=True), btn], vertical_alignment=ft.CrossAxisAlignment.CENTER))
 
     def solicitud_tile(s: dict):
         recurso = s.get('recurso', {})
@@ -505,45 +703,39 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         recurso_tipo = recurso.get('tipo', 'Recurso').capitalize()
         recurso_id_val = recurso.get('id', 'N/A')
 
-        title = ft.Text(f"Solicitud #{solicitud_id}", size=15, weight=ft.FontWeight.W_600)
-        recurso_info = ft.Text(f"{recurso_tipo} #{recurso_id_val}", size=12)
-        timeline = ft.Text(f"Pedido: {format_iso_date(s.get('created_at'))}\nDevolución: {format_iso_date(s.get('fin'))}", size=10)
+        title = ft.Text(f"Solicitud #{solicitud_id} · {recurso_tipo} #{recurso_id_val}", size=15, weight=ft.FontWeight.W_600)
+        timeline = ft.Text(f"Pedido: {format_iso_date(s.get('created_at'))} · Devolución: {format_iso_date(s.get('fin'))}", size=11)
 
         if is_admin:
             solicitante_nombre = usuario.get('nombre', '-')
-            solicitante = ft.Text(f"Solicitante: {solicitante_nombre}", size=11, italic=True)
-            info_col = ft.Column([title, recurso_info, solicitante, timeline], spacing=2, expand=True)
+            solicitante = ft.Text(f"Solicitante: {solicitante_nombre}", size=12, italic=True)
+            info_col = ft.Column([title, solicitante, timeline], spacing=2, expand=True)
         else:
-            info_col = ft.Column([title, recurso_info, timeline], spacing=2, expand=True)
+            info_col = ft.Column([title, timeline], spacing=2, expand=True)
 
+        admin_menu = None
         current_status = s.get('estado', 'pendiente')
-        
-        if is_admin and current_status in ['pendiente', 'aprobado', 'entregado']:
-            status_actions = ft.Row([
-                Primary("Aprobar" if current_status == 'pendiente' else 
-                       "Entregar" if current_status == 'aprobado' else 
-                       "Devolver", 
-                       height=34, expand=True,
-                       on_click=lambda _, _id=s['id']: update_loan_status(_id, 
-                           'aprobado' if current_status == 'pendiente' else
-                           'entregado' if current_status == 'aprobado' else
-                           'devuelto'))
-            ])
-            return Card(
-                ft.Container(
-                    ft.Column([info_col, chip_estado(current_status), status_actions], spacing=6),
-                    border_radius=10
-                ),
-                padding=8
-            )
-        else:
-            return Card(
-                ft.Container(
-                    ft.Column([info_col, chip_estado(current_status)], spacing=6),
-                    border_radius=10
-                ),
-                padding=8
-            )
+
+        if is_admin:
+            menu_items = []
+            if current_status == 'pendiente':
+                menu_items.append(ft.PopupMenuItem(text="Aprobar", on_click=lambda _, _id=s['id']: update_loan_status(_id, 'aprobado')))
+                menu_items.append(ft.PopupMenuItem(text="Rechazar", on_click=lambda _, _id=s['id']: update_loan_status(_id, 'rechazado')))
+            elif current_status == 'aprobado':
+                menu_items.append(ft.PopupMenuItem(text="Marcar como Entregado", on_click=lambda _, _id=s['id']: update_loan_status(_id, 'entregado')))
+            elif current_status == 'entregado':
+                menu_items.append(ft.PopupMenuItem(text="Marcar como Devuelto", on_click=lambda _, _id=s['id']: update_loan_status(_id, 'devuelto')))
+
+            if menu_items:
+                admin_menu = ft.PopupMenuButton(items=menu_items, icon=ft.Icons.MORE_VERT)
+            else:
+                admin_menu = ft.Container(width=48)
+
+        controls = [info_col, chip_estado(current_status)]
+        if admin_menu:
+            controls.append(admin_menu)
+
+        return ItemCard(ft.Row(controls, vertical_alignment=ft.CrossAxisAlignment.CENTER))
 
     def admin_recurso_tile(r: dict):
         lab_id = r.get('laboratorio_id')
@@ -552,26 +744,23 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         plantel = next((p for p in planteles_cache if p.get('id') == plantel_id), {})
 
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}", size=11, opacity=0.8)
+        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')} · Lab: {lab.get('nombre', '-')}", size=12, opacity=0.8)
 
         actions = ft.Row([
-            Primary("Editar", height=34, expand=True, on_click=lambda e, _r=r: edit_recurso_click(_r)),
-            Danger("Eliminar", height=34, expand=True, on_click=lambda e, _r=r: delete_recurso_click(_r)),
-        ], spacing=6)
+            Tonal("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e, _r=r: edit_recurso_click(_r), height=36),
+            Danger("Eliminar", icon=ft.Icons.DELETE_OUTLINED, on_click=lambda e, _r=r: delete_recurso_click(_r), height=36)
+        ], spacing=5)
 
-        return Card(
-            ft.Container(
-                ft.Column([title, subtitle, chip_estado(r.get('estado')), actions], spacing=6),
-                border_radius=10
-            ),
-            padding=8
-        )
+        return ItemCard(ft.Row([
+            ft.Column([title, subtitle, chip_estado(r.get('estado'))], spacing=4, expand=True),
+            actions
+        ], vertical_alignment=ft.CrossAxisAlignment.START))
 
     # ---------------------------------
     # Panel de Solicitud (BottomSheet)
     # ---------------------------------
     bs_title = ft.Text("Solicitar Recurso", size=18, weight=ft.FontWeight.BOLD)
-    tf_motivo = ft.TextField(label="Motivo (opcional)", multiline=True, min_lines=2, height=80)
+    tf_motivo = ft.TextField(label="Motivo (opcional)", multiline=True, min_lines=2)
     slider_horas = ft.Slider(min=1, max=MAX_LOAN_HOURS, divisions=MAX_LOAN_HOURS - 1, value=2, label="{value} h")
 
     def open_solicitud_sheet(recurso: dict):
@@ -635,12 +824,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         ),
         on_dismiss=close_solicitud_sheet,
     )
-    
     if bs_solicitud not in page.overlay:
         page.overlay.append(bs_solicitud)
 
     # ---------------------------------
-    # Helpers
+    # Helpers y Layout General
     # ---------------------------------
     def format_iso_date(date_str: str | None) -> str:
         if not date_str: return ""
@@ -656,7 +844,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def chip_estado(txt: str):
         color = PAL.get("chip_text", ft.Colors.BLACK87)
         border_color = PAL.get("border", ft.Colors.BLACK26)
-        
         if txt == 'pendiente': color = ft.Colors.ORANGE_ACCENT_700
         elif txt == 'aprobado': color = ft.Colors.LIGHT_GREEN_700
         elif txt == 'entregado': color = ft.Colors.BLUE_700
@@ -672,6 +859,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             border_radius=20, border=ft.border.all(1, border_color),
         )
 
+    def ItemCard(child: ft.Control):
+        return Card(child, padding=12, radius=10)
+
     # Handler de Tabs
     def on_tabs_change(e):
         idx = e.control.selected_index
@@ -686,62 +876,20 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         elif idx == 2 and is_admin:
             render_admin_recursos()
 
-    # Render inicial
+    # Render inicial (tab 0)
     render_recursos()
 
     # ========================================================================
-    # FORMULARIO MÓVIL PARA ADMIN
+    # LAYOUT MÓVIL (NUEVO - estilo laboratorios)
     # ========================================================================
-    if is_mobile:
-        # Para móvil, ajustamos solo los TextField si es necesario
-        form_card = Card(
-            ft.Container(
-                ft.Column(
-                    [
-                        ft.Text("Gestión de Recursos", size=14, weight=ft.FontWeight.W_600),
-                        tf_recurso_tipo,
-                        tf_recurso_detalles,
-                        dd_recurso_estado_admin,
-                        dd_recurso_lab_admin,
-                        btn_recurso_save,
-                        btn_recurso_cancel,
-                    ],
-                    spacing=6,
-                ),
-                border_radius=10,
-            ),
-            padding=10,
-        )
-    else:
-        # Versión desktop del formulario (original)
-        tf_recurso_tipo.col = {"sm": 12, "md": 4}
-        tf_recurso_detalles.col = {"sm": 12, "md": 4}
-        dd_recurso_estado_admin.col = {"sm": 12, "md": 4}
-        dd_recurso_lab_admin.col = {"sm": 12, "md": 9}
-        btn_recurso_save.col = {"sm": 6, "md": "auto"}
-        btn_recurso_cancel.col = {"sm": 6, "md": "auto"}
 
-        admin_form_container = ft.ResponsiveRow(
-            [
-                tf_recurso_tipo,
-                tf_recurso_detalles,
-                dd_recurso_estado_admin,
-                dd_recurso_lab_admin,
-                ft.Column([ft.Row([btn_recurso_save, btn_recurso_cancel])], col={"sm": 12, "md": 3})
-            ],
-            vertical_alignment=ft.CrossAxisAlignment.END,
-            spacing=10
-        )
-
-    # ========================================================================
-    # FILTROS MÓVIL
-    # ========================================================================
     def filtros_card_mobile():
         return Card(
             ft.Container(
                 ft.Column(
                     [
-                        ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], 
+                              alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         dd_plantel_filter,
                         dd_lab_filter,
                         dd_estado_filter,
@@ -749,59 +897,55 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     ],
                     spacing=8
                 ),
-                border_radius=10
+                border_radius=10,
             ),
             padding=10
         )
 
-    # ========================================================================
-    # TABS
-    # ========================================================================
+    # Ajustar controles para móvil
+    if state["is_mobile"]:
+        dd_plantel_filter.height = 45
+        dd_lab_filter.height = 45
+        dd_estado_filter.height = 45
+        dd_tipo_filter.height = 45
+        dd_plantel_filter.width = None
+        dd_lab_filter.width = None
+        dd_estado_filter.width = None
+        dd_tipo_filter.width = None
+        dd_plantel_filter.expand = True
+        dd_lab_filter.expand = True
+        dd_estado_filter.expand = True
+        dd_tipo_filter.expand = True
+
     tab_disponibles = ft.Tab(
-        text="Solicitar",
+        text="Solicitar Recursos",
         icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
         content=ft.Container(recursos_list_display, padding=ft.padding.only(top=15))
     )
-    
     tab_solicitudes = ft.Tab(
-        text="Mis Solicitudes" if not is_admin else "Solicitudes",
+        text="Mis Solicitudes" if not is_admin else "Todas las Solicitudes",
         icon=ft.Icons.PENDING_ACTIONS,
         content=ft.Container(solicitudes_list_display, padding=ft.padding.only(top=15))
     )
 
-    # Contenido de la pestaña de admin
-    if is_mobile:
-        tab_admin_recursos_content = ft.Column(
-            [
-                ft.Text("Gestión de Recursos", size=16, weight=ft.FontWeight.BOLD),
-                form_card,
-                ft.Divider(height=10),
-                ft.Text("Todos los Recursos", size=14, weight=ft.FontWeight.W_600),
-                recursos_admin_list_display
-            ],
-            expand=True,
-            scroll=ft.ScrollMode.ADAPTIVE
-        )
-    else:
-        tab_admin_recursos_content = ft.Column(
-            [
-                ft.Text("Gestión de Inventario de Recursos", size=18, weight=ft.FontWeight.BOLD),
-                Card(admin_form_container, padding=14),
-                ft.Divider(height=10),
-                ft.Text("Todos los Recursos", size=16, weight=ft.FontWeight.W_600),
-                recursos_admin_list_display
-            ],
-            expand=True,
-            scroll=ft.ScrollMode.ADAPTIVE
-        )
+    tab_admin_recursos_content = ft.Column(
+        [
+            ft.Text("Gestión de Inventario de Recursos", size=18, weight=ft.FontWeight.BOLD),
+            Card(admin_form_container, padding=14),
+            ft.Divider(height=10),
+            ft.Text("Todos los Recursos", size=16, weight=ft.FontWeight.W_600),
+            recursos_admin_list_display
+        ],
+        expand=True,
+        scroll=ft.ScrollMode.ADAPTIVE
+    )
 
     tab_admin_recursos = ft.Tab(
-        text="Administrar",
+        text="Administrar Recursos",
         icon=ft.Icons.INVENTORY,
         content=ft.Container(tab_admin_recursos_content, padding=ft.padding.only(top=15))
     )
 
-    # Lista de TABS
     tabs_list = [tab_disponibles, tab_solicitudes]
     if is_admin:
         tabs_list.append(tab_admin_recursos)
@@ -813,36 +957,35 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         expand=1
     )
 
-    # ========================================================================
-    # LAYOUT FINAL MÓVIL
-    # ========================================================================
-    if is_mobile:
-        layout = ft.ListView(
+    def mobile_layout():
+        return ft.ListView(
             controls=[
                 ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
                 error_display,
                 filtros_card_mobile(),
-                tabs,
+                tabs
             ],
             expand=True,
             spacing=12,
             padding=10,
         )
-    else:
-        # Layout desktop (original)
+
+    def desktop_layout():
         filtros_card = Card(
             ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
         )
-        
-        layout = ft.Column(
+
+        return ft.Column(
             [
                 ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
                 error_display,
                 filtros_card,
                 tabs,
             ],
-            expand=True, 
-            spacing=18
+            expand=True, spacing=18
         )
 
-    return layout
+    if state["is_mobile"]:
+        return mobile_layout()
+    else:
+        return desktop_layout()
