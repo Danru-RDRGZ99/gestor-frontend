@@ -68,12 +68,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200)
 
-    # --- MODIFICACIÓN AQUÍ ---
-    # Se agregó expand=True a ambas Columnas para que llenen el espacio del Tab
-    recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    # --- FIN DE LA MODIFICACIÓN ---
-    
+    recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
+    solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
     error_display = ft.Text("", color=PAL["error_text"])
 
     planteles_cache = []
