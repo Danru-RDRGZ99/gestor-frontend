@@ -68,11 +68,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200)
 
-    # --- MODIFICACIÓN AQUÍ ---
-    # Se agregó expand=True a ambas Columnas para que llenen el espacio del Tab
+    # --- MODIFICACIÓN 1 ---
+    # Se agregó expand=True a ambas Columnas
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    # --- FIN DE LA MODIFICACIÓN ---
+    # --- FIN DE LA MODIFICACIÓN 1 ---
     
     error_display = ft.Text("", color=PAL["error_text"])
 
@@ -795,16 +795,21 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
         return Card(ft.Container(content), padding=12)
 
+    # --- MODIFICACIÓN 2 ---
+    # Se eliminó el ft.Container que envolvía a las listas
+    # y se quitó el padding.
+    
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
         icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
-        content=ft.Container(recursos_list_display, padding=ft.padding.only(top=15)),
+        content=recursos_list_display,
     )
     tab_solicitudes = ft.Tab(
         text="Mis Solicitudes" if not is_admin else "Todas las Solicitudes",
         icon=ft.Icons.PENDING_ACTIONS,
-        content=ft.Container(solicitudes_list_display, padding=ft.padding.only(top=15)),
+        content=solicitudes_list_display,
     )
+    # --- FIN DE LA MODIFICACIÓN 2 ---
 
     tab_admin_recursos_content = ft.Column(
         [
