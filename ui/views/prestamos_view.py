@@ -68,11 +68,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200)
 
-    # --- MODIFICACIÓN 1 ---
-    # Se agregó expand=True a ambas Columnas
+    # (Corrección 1: 'expand=True' en las columnas de contenido)
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    # --- FIN DE LA MODIFICACIÓN 1 ---
     
     error_display = ft.Text("", color=PAL["error_text"])
 
@@ -795,10 +793,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
         return Card(ft.Container(content), padding=12)
 
-    # --- MODIFICACIÓN 2 ---
-    # Se eliminó el ft.Container que envolvía a las listas
-    # y se quitó el padding.
-    
+    # (Corrección 2: 'content' es la columna directamente)
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
         icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
@@ -809,7 +804,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         icon=ft.Icons.PENDING_ACTIONS,
         content=solicitudes_list_display,
     )
-    # --- FIN DE LA MODIFICACIÓN 2 ---
 
     tab_admin_recursos_content = ft.Column(
         [
@@ -835,9 +829,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     tabs = ft.Tabs(selected_index=state["active_tab"], on_change=on_tabs_change, tabs=tabs_list, expand=1)
 
+    # --- MODIFICACIÓN 3 (LA IMPORTANTE) ---
+    # Se cambió ft.ListView por ft.Column para evitar el conflicto de expansión
     def mobile_layout():
         return ft.SafeArea(
-            ft.ListView(
+            ft.Column(
                 controls=[
                     ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
                     error_display,
@@ -846,9 +842,10 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 ],
                 expand=True,
                 spacing=12,
-                padding=10,
-            )
+            ),
+            padding=10,
         )
+    # --- FIN DE LA MODIFICACIÓN 3 ---
 
     def desktop_layout():
         return ft.Column(
