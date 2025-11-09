@@ -68,7 +68,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200)
 
-    # (Corrección 1: 'expand=True' en las columnas de contenido)
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     
@@ -741,7 +740,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         elif txt == "prestado":
             color = ft.Colors.AMBER_800
         elif txt == "mantenimiento":
-            color = ft.Colors.PURPLE_700
+            color = ft.ColorsVideos.PURPLE_700
         return ft.Container(
             content=ft.Text((txt or "-").capitalize(), size=11, weight=ft.FontWeight.W_500, color=color),
             padding=ft.padding.symmetric(horizontal=8, vertical=3),
@@ -793,7 +792,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
         return Card(ft.Container(content), padding=12)
 
-    # (Corrección 2: 'content' es la columna directamente)
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
         icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
@@ -829,8 +827,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     tabs = ft.Tabs(selected_index=state["active_tab"], on_change=on_tabs_change, tabs=tabs_list, expand=1)
 
-    # --- MODIFICACIÓN 3 (LA IMPORTANTE) ---
-    # Se cambió ft.ListView por ft.Column para evitar el conflicto de expansión
+    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN FINAL! ---
     def mobile_layout():
         return ft.SafeArea(
             ft.Column(
@@ -842,10 +839,10 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 ],
                 expand=True,
                 spacing=12,
-            ),
-            padding=10,
+                padding=10, # El padding se movió aquí
+            )
         )
-    # --- FIN DE LA MODIFICACIÓN 3 ---
+    # --- FIN DE LA CORRECCIÓN ---
 
     def desktop_layout():
         return ft.Column(
