@@ -54,7 +54,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "is_mobile": detect_mobile(),
     }
 
-    # --- MODIFICADO 1: Estilo para hacerlos más pequeños ---
+    # (Mantenemos el estilo pequeño que ayuda a ahorrar espacio)
     small_style = {
         "content_padding": ft.padding.symmetric(vertical=6, horizontal=10),
         "label_style": ft.TextStyle(size=13),
@@ -75,7 +75,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         **small_style
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200, **small_style)
-    # --- FIN MODIFICADO 1 ---
 
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
@@ -775,12 +774,12 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     render_recursos()
 
-    # --- MODIFICADO 2: Lógica de estilos para móvil ---
+    # --- MODIFICADO 1: Lógica de estilos para móvil ---
     def apply_filter_styles():
         if state["is_mobile"]:
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
-                dd.width = 180  # Ancho fijo para que el scroll funcione
-                dd.expand = False # NO deben expandirse
+                dd.width = None  # Volver a None
+                dd.expand = True # Volver a True (para que llenen la columna vertical)
         else:
             dd_plantel_filter.width, dd_lab_filter.width, dd_estado_filter.width, dd_tipo_filter.width = 220, 220, 200, 200
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
@@ -788,34 +787,37 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
             if dd.page:
                 dd.update()
-    # --- FIN MODIFICADO 2 ---
+    # --- FIN MODIFICADO 1 ---
 
-    # --- MODIFICADO 3: Layout de la tarjeta de filtros para móvil ---
+    # --- MODIFICADO 2: Layout de la tarjeta de filtros para móvil ---
     def filtros_card():
         if state["is_mobile"]:
-            # Fila de filtros con scroll horizontal
-            filter_row = ft.Row(
+            # Columna vertical para los filtros
+            filter_column = ft.Column(
                 controls=[
                     dd_plantel_filter,
                     dd_lab_filter,
                     dd_estado_filter,
                     dd_tipo_filter,
                 ],
-                scroll=ft.ScrollMode.ADAPTIVE,
+                scroll=ft.ScrollMode.ADAPTIVE, # <-- Scroll vertical interno
                 spacing=8,
             )
-            # Columna que contiene el título y la fila scrollable
-            content = ft.Column([
-                ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                filter_row,
-            ], spacing=8)
+            
+            # Contenedor con altura MÁXIMA para forzar el scroll
+            content = ft.Container(
+                content=filter_column,
+                max_height=200, # <-- Altura máxima de 200px
+                border_radius=8,
+            )
+            
+            # Devolverlo DENTRO de la Card, pero la Card ya no tiene padding
+            return Card(content, padding=0)
         else:
             # Layout de escritorio (sin cambios)
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
-        
-        # Reducimos un poco el padding de la tarjeta
-        return Card(ft.Container(content), padding=ft.padding.symmetric(horizontal=12, vertical=8))
-    # --- FIN MODIFICADO 3 ---
+            return Card(ft.Container(content), padding=12)
+    # --- FIN MODIFICADO 2 ---
 
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
