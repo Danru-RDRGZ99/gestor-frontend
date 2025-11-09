@@ -54,7 +54,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "is_mobile": detect_mobile(),
     }
 
-    # (Mantenemos el estilo pequeño que ayuda a ahorrar espacio)
     small_style = {
         "content_padding": ft.padding.symmetric(vertical=6, horizontal=10),
         "label_style": ft.TextStyle(size=13),
@@ -76,8 +75,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200, **small_style)
 
-    recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    # --- MODIFICADO 1: Se quitó expand=True ---
+    recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
+    solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
     
     error_display = ft.Text("", color=PAL["error_text"])
 
@@ -177,7 +177,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     btn_recurso_cancel.visible = False
     btn_recurso_cancel.col = {"sm": 6, "md": "auto"}
 
-    recursos_admin_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    # --- MODIFICADO 2: Se quitó expand=True ---
+    recursos_admin_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
     admin_form_container = ft.ResponsiveRow(
         [
             tf_recurso_tipo,
@@ -774,50 +775,40 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     render_recursos()
 
-    # --- MODIFICADO 1: Lógica de estilos para móvil ---
+    # --- MODIFICADO 3: Se revirtió la lógica de estilos ---
     def apply_filter_styles():
         if state["is_mobile"]:
+            # En móvil, los filtros se expanden al ancho
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
-                dd.width = None  # Volver a None
-                dd.expand = True # Volver a True (para que llenen la columna vertical)
+                dd.width = None
+                dd.expand = True
         else:
+            # En escritorio, tienen anchos fijos
             dd_plantel_filter.width, dd_lab_filter.width, dd_estado_filter.width, dd_tipo_filter.width = 220, 220, 200, 200
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
                 dd.expand = False
         for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
             if dd.page:
                 dd.update()
-    # --- FIN MODIFICADO 1 ---
+    # --- FIN MODIFICADO 3 ---
 
-    # --- MODIFICADO 2: Layout de la tarjeta de filtros para móvil ---
+    # --- MODIFICADO 4: Se revirtió la tarjeta de filtros a vertical ---
     def filtros_card():
         if state["is_mobile"]:
-            # Columna vertical para los filtros
-            filter_column = ft.Column(
-                controls=[
-                    dd_plantel_filter,
-                    dd_lab_filter,
-                    dd_estado_filter,
-                    dd_tipo_filter,
-                ],
-                scroll=ft.ScrollMode.ADAPTIVE, # <-- Scroll vertical interno
-                spacing=8,
-            )
-            
-            # Contenedor con altura MÁXIMA para forzar el scroll
-            content = ft.Container(
-                content=filter_column,
-                max_height=200, # <-- Altura máxima de 200px
-                border_radius=8,
-            )
-            
-            # Devolverlo DENTRO de la Card, pero la Card ya no tiene padding
-            return Card(content, padding=0)
+            # Vuelve a ser una Columna simple
+            content = ft.Column([
+                ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                dd_plantel_filter,
+                dd_lab_filter,
+                dd_estado_filter,
+                dd_tipo_filter,
+            ], spacing=8)
+            return Card(ft.Container(content), padding=12)
         else:
             # Layout de escritorio (sin cambios)
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
             return Card(ft.Container(content), padding=12)
-    # --- FIN MODIFICADO 2 ---
+    # --- FIN MODIFICADO 4 ---
 
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
@@ -830,6 +821,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         content=solicitudes_list_display,
     )
 
+    # --- MODIFICADO 5: Se quitó expand y scroll de la columna de admin ---
     tab_admin_recursos_content = ft.Column(
         [
             ft.Text("Gestión de Inventario de Recursos", size=18, weight=ft.FontWeight.BOLD),
@@ -838,9 +830,10 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.Text("Todos los Recursos", size=16, weight=ft.FontWeight.W_600),
             recursos_admin_list_display,
         ],
-        expand=True,
-        scroll=ft.ScrollMode.ADAPTIVE,
+        # expand=True,  <-- QUITADO
+        # scroll=ft.ScrollMode.ADAPTIVE, <-- QUITADO
     )
+    # --- FIN MODIFICADO 5 ---
 
     tab_admin_recursos = ft.Tab(
         text="Administrar Recursos",
@@ -852,33 +845,47 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     if is_admin:
         tabs_list.append(tab_admin_recursos)
 
-    tabs = ft.Tabs(selected_index=state["active_tab"], on_change=on_tabs_change, tabs=tabs_list, expand=1)
+    # --- MODIFICADO 6: Se quitó expand=1 de ft.Tabs ---
+    tabs = ft.Tabs(
+        selected_index=state["active_tab"], 
+        on_change=on_tabs_change, 
+        tabs=tabs_list, 
+        # expand=1 <-- QUITADO
+    )
+    # --- FIN MODIFICADO 6 ---
 
+    # --- MODIFICADO 7: Se volvió a ft.ListView ---
     def mobile_layout():
         return ft.SafeArea(
-            ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
-                        error_display,
-                        filtros_card(),
-                        tabs,
-                    ],
-                    expand=True,
-                    spacing=12,
-                ),
+            ft.ListView( # <-- Es un ListView de nuevo
+                controls=[
+                    ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
+                    error_display,
+                    filtros_card(),
+                    tabs,
+                ],
+                expand=True,
+                spacing=12,
                 padding=10, 
-                expand=True
             )
         )
+    # --- FIN MODIFICADO 7 ---
 
     def desktop_layout():
+        # El layout de escritorio sigue igual (con expansión)
+        # por eso separamos la definición de 'tabs'
+        desktop_tabs = ft.Tabs(
+            selected_index=state["active_tab"], 
+            on_change=on_tabs_change, 
+            tabs=tabs_list, 
+            expand=1 # <-- El de escritorio SÍ se expande
+        )
         return ft.Column(
             [
                 ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
                 error_display,
                 filtros_card(),
-                tabs,
+                desktop_tabs, # <-- Usa la variable de escritorio
             ],
             expand=True,
             spacing=18,
@@ -890,7 +897,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             state["is_mobile"] = new_mobile
             apply_filter_styles()
             if page:
-                page.update()
+                page.update() # Forzamos re-renderizado para cambiar de layout
 
     page.on_resize = _on_resize
     apply_filter_styles()
@@ -898,4 +905,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     if state["is_mobile"]:
         return mobile_layout()
     else:
+        # Volvemos a poner expand=True en las listas para escritorio
+        recursos_list_display.expand = True
+        solicitudes_list_display.expand = True
+        recursos_admin_list_display.expand = True
+        tab_admin_recursos_content.expand = True
+        tab_admin_recursos_content.scroll = ft.ScrollMode.ADAPTIVE
+        
         return desktop_layout()
