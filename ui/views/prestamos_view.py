@@ -310,7 +310,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             for r in recursos:
                 if isinstance(r, dict):
                     if state["is_mobile"]:
-                        # --- ¡AQUÍ ESTABA EL ERROR! ---
                         recursos_admin_list_display.controls.append(admin_recurso_tile_mobile(r))
                     else:
                         recursos_admin_list_display.controls.append(admin_recurso_tile(r))
@@ -646,7 +645,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ], vertical_alignment=ft.CrossAxisAlignment.START)
         )
 
-    # --- ¡AQUÍ ESTÁ LA NUEVA FUNCIÓN QUE FALTABA! ---
     def admin_recurso_tile_mobile(r: dict):
         lab_id = r.get("laboratorio_id")
         lab = next((l for l in labs_cache if l.get("id") == lab_id), {})
@@ -680,7 +678,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ),
             padding=12,
         )
-    # --- FIN DE LA NUEVA FUNCIÓN ---
 
     bs_title = ft.Text("Solicitar Recurso", size=18, weight=ft.FontWeight.BOLD)
     tf_motivo = ft.TextField(label="Motivo (opcional)", multiline=True, min_lines=2)
@@ -766,7 +763,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     ft.Row(
                         [
                             ft.Text("Filtros", size=18, weight=ft.FontWeight.BOLD),
-                            ft.IconButton(icon=ft.icons.CLOSE, on_click=close_filter_sheet),
+                            # --- ¡CORRECCIÓN 1 AQUÍ! ---
+                            ft.IconButton(icon=ft.Icons.CLOSE, on_click=close_filter_sheet),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
@@ -865,7 +863,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 [
                     ft.FilledButton(
                         "Mostrar Filtros",
-                        icon=ft.icons.FILTER_LIST,
+                        # --- ¡CORRECCIÓN 2 AQUÍ! ---
+                        icon=ft.Icons.FILTER_LIST,
                         on_click=open_filter_sheet,
                         height=40
                     )
