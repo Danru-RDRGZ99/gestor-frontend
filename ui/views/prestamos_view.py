@@ -667,7 +667,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return
         inicio = datetime.now()
         horas_prestamo = int(slider_horas.value)
-        fin = inicio + timedelta(hours=horas_amo)
+        fin = inicio + timedelta(hours=horas_prestamo)
         prestamo_data = {
             "recurso_id": state["solicitar_recurso_id"],
             "usuario_id": user_data.get("id"),
@@ -722,7 +722,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             print(f"WARN format_iso_date: Could not format '{date_str}': {e}")
             return str(date_str)
 
-    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN DE TIPOGRAFÍA! ---
     def chip_estado(txt: str):
         color = PAL.get("chip_text", ft.Colors.BLACK87)
         border_color = PAL.get("border", ft.Colors.BLACK26)
@@ -733,7 +732,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         elif txt == "entregado":
             color = ft.Colors.BLUE_700
         elif txt == "devuelto":
-            # Corregido: ft.ThemeMode.DARK
             color = ft.Colors.BLACK54 if page.theme_mode != ft.ThemeMode.DARK else ft.Colors.WHITE60
         elif txt == "rechazado":
             color = ft.Colors.RED_700
@@ -742,14 +740,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         elif txt == "prestado":
             color = ft.Colors.AMBER_800
         elif txt == "mantenimiento":
-            color = ft.Colors.PURPLE_700 # Corregido: ft.Colors.PURPLE_700
+            color = ft.Colors.PURPLE_700
         return ft.Container(
             content=ft.Text((txt or "-").capitalize(), size=11, weight=ft.FontWeight.W_500, color=color),
             padding=ft.padding.symmetric(horizontal=8, vertical=3),
             border_radius=20,
             border=ft.border.all(1, border_color),
         )
-    # --- FIN DE LA CORRECCIÓN ---
 
     def ItemCard(child: ft.Control):
         return Card(child, padding=12, radius=10)
@@ -830,20 +827,25 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     tabs = ft.Tabs(selected_index=state["active_tab"], on_change=on_tabs_change, tabs=tabs_list, expand=1)
 
+    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
     def mobile_layout():
         return ft.SafeArea(
-            ft.Column(
-                controls=[
-                    ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
-                    error_display,
-                    filtros_card(),
-                    tabs,
-                ],
-                expand=True,
-                spacing=12,
-                padding=10, 
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
+                        error_display,
+                        filtros_card(),
+                        tabs,
+                    ],
+                    expand=True,
+                    spacing=12,
+                ),
+                padding=10, # El padding va en el Container
+                expand=True # El Container se expande
             )
         )
+    # --- FIN DE LA CORRECCIÓN ---
 
     def desktop_layout():
         return ft.Column(
