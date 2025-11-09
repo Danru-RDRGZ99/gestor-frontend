@@ -943,7 +943,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def desktop_layout():
         return ft.Column(
             [
-                ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
                 error_display,
                 filtros_control(),
                 desktop_tabs,
