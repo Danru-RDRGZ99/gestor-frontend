@@ -75,9 +75,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200, **small_style)
 
-    # --- MODIFICADO 1: Se quitó expand=True ---
-    recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
-    solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
+    recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     
     error_display = ft.Text("", color=PAL["error_text"])
 
@@ -177,8 +176,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     btn_recurso_cancel.visible = False
     btn_recurso_cancel.col = {"sm": 6, "md": "auto"}
 
-    # --- MODIFICADO 2: Se quitó expand=True ---
-    recursos_admin_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
+    recursos_admin_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     admin_form_container = ft.ResponsiveRow(
         [
             tf_recurso_tipo,
@@ -312,6 +310,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             for r in recursos:
                 if isinstance(r, dict):
                     if state["is_mobile"]:
+                        # --- ¡AQUÍ ESTABA EL ERROR! ---
                         recursos_admin_list_display.controls.append(admin_recurso_tile_mobile(r))
                     else:
                         recursos_admin_list_display.controls.append(admin_recurso_tile(r))
@@ -647,6 +646,42 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ], vertical_alignment=ft.CrossAxisAlignment.START)
         )
 
+    # --- ¡AQUÍ ESTÁ LA NUEVA FUNCIÓN QUE FALTABA! ---
+    def admin_recurso_tile_mobile(r: dict):
+        lab_id = r.get("laboratorio_id")
+        lab = next((l for l in labs_cache if l.get("id") == lab_id), {})
+        plantel_id = lab.get("plantel_id")
+        plantel = next((p for p in planteles_cache if p.get("id") == plantel_id), {})
+        
+        title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
+        subtitle = ft.Text(
+            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
+            size=11,
+            opacity=0.85,
+        )
+        estado_chip = chip_estado(r.get("estado"))
+
+        actions = ft.Row(
+            [
+                Tonal("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e, _r=r: edit_recurso_click(_r), height=34, expand=True),
+                Danger("Eliminar", icon=ft.Icons.DELETE_OUTLINED, on_click=lambda e, _r=r: delete_recurso_click(_r), height=34, expand=True),
+            ],
+            spacing=6,
+        )
+        
+        return Card(
+            ft.Container(
+                ft.Column([
+                    ft.Row([title, estado_chip], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    subtitle,
+                    ft.Divider(height=5, opacity=0),
+                    actions,
+                ], spacing=6),
+            ),
+            padding=12,
+        )
+    # --- FIN DE LA NUEVA FUNCIÓN ---
+
     bs_title = ft.Text("Solicitar Recurso", size=18, weight=ft.FontWeight.BOLD)
     tf_motivo = ft.TextField(label="Motivo (opcional)", multiline=True, min_lines=2)
     slider_horas = ft.Slider(min=1, max=MAX_LOAN_HOURS, divisions=MAX_LOAN_HOURS - 1, value=2, label="{value} h")
@@ -719,6 +754,42 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     if bs_solicitud not in page.overlay:
         page.overlay.append(bs_solicitud)
 
+    def close_filter_sheet(e):
+        bs_filtros.open = False
+        if bs_filtros.page:
+            bs_filtros.update()
+
+    bs_filtros = ft.BottomSheet(
+        ft.Container(
+            ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text("Filtros", size=18, weight=ft.FontWeight.BOLD),
+                            ft.IconButton(icon=ft.icons.CLOSE, on_click=close_filter_sheet),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    ),
+                    dd_plantel_filter,
+                    dd_lab_filter,
+                    dd_estado_filter,
+                    dd_tipo_filter,
+                ],
+                tight=True,
+                spacing=8,
+            ),
+            padding=ft.padding.only(top=10, left=20, right=20, bottom=30),
+        ),
+        on_dismiss=close_filter_sheet,
+    )
+    if bs_filtros not in page.overlay:
+        page.overlay.append(bs_filtros)
+
+    def open_filter_sheet(e):
+        bs_filtros.open = True
+        if bs_filtros.page:
+            bs_filtros.update()
+
     def format_iso_date(date_str: str | None) -> str:
         if not date_str:
             return ""
@@ -775,40 +846,35 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     render_recursos()
 
-    # --- MODIFICADO 3: Se revirtió la lógica de estilos ---
     def apply_filter_styles():
         if state["is_mobile"]:
-            # En móvil, los filtros se expanden al ancho
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
                 dd.width = None
                 dd.expand = True
         else:
-            # En escritorio, tienen anchos fijos
             dd_plantel_filter.width, dd_lab_filter.width, dd_estado_filter.width, dd_tipo_filter.width = 220, 220, 200, 200
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
                 dd.expand = False
         for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
             if dd.page:
                 dd.update()
-    # --- FIN MODIFICADO 3 ---
 
-    # --- MODIFICADO 4: Se revirtió la tarjeta de filtros a vertical ---
-    def filtros_card():
+    def filtros_control():
         if state["is_mobile"]:
-            # Vuelve a ser una Columna simple
-            content = ft.Column([
-                ft.Row([ft.Text("Filtros", weight=ft.FontWeight.W_600)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                dd_plantel_filter,
-                dd_lab_filter,
-                dd_estado_filter,
-                dd_tipo_filter,
-            ], spacing=8)
-            return Card(ft.Container(content), padding=12)
+            return ft.Row(
+                [
+                    ft.FilledButton(
+                        "Mostrar Filtros",
+                        icon=ft.icons.FILTER_LIST,
+                        on_click=open_filter_sheet,
+                        height=40
+                    )
+                ],
+                alignment=ft.MainAxisAlignment.END,
+            )
         else:
-            # Layout de escritorio (sin cambios)
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
             return Card(ft.Container(content), padding=12)
-    # --- FIN MODIFICADO 4 ---
 
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
@@ -821,7 +887,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         content=solicitudes_list_display,
     )
 
-    # --- MODIFICADO 5: Se quitó expand y scroll de la columna de admin ---
     tab_admin_recursos_content = ft.Column(
         [
             ft.Text("Gestión de Inventario de Recursos", size=18, weight=ft.FontWeight.BOLD),
@@ -830,10 +895,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.Text("Todos los Recursos", size=16, weight=ft.FontWeight.W_600),
             recursos_admin_list_display,
         ],
-        # expand=True,  <-- QUITADO
-        # scroll=ft.ScrollMode.ADAPTIVE, <-- QUITADO
+        expand=True,
+        scroll=ft.ScrollMode.ADAPTIVE,
     )
-    # --- FIN MODIFICADO 5 ---
 
     tab_admin_recursos = ft.Tab(
         text="Administrar Recursos",
@@ -845,47 +909,45 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     if is_admin:
         tabs_list.append(tab_admin_recursos)
 
-    # --- MODIFICADO 6: Se quitó expand=1 de ft.Tabs ---
     tabs = ft.Tabs(
         selected_index=state["active_tab"], 
         on_change=on_tabs_change, 
         tabs=tabs_list, 
-        # expand=1 <-- QUITADO
+        expand=1
     )
-    # --- FIN MODIFICADO 6 ---
+    
+    desktop_tabs = ft.Tabs(
+        selected_index=state["active_tab"], 
+        on_change=on_tabs_change, 
+        tabs=tabs_list, 
+        expand=1
+    )
 
-    # --- MODIFICADO 7: Se volvió a ft.ListView ---
     def mobile_layout():
         return ft.SafeArea(
-            ft.ListView( # <-- Es un ListView de nuevo
-                controls=[
-                    ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
-                    error_display,
-                    filtros_card(),
-                    tabs,
-                ],
-                expand=True,
-                spacing=12,
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("Préstamos y Recursos", size=20, weight=ft.FontWeight.BOLD),
+                        error_display,
+                        filtros_control(),
+                        tabs,
+                    ],
+                    expand=True,
+                    spacing=12,
+                ),
                 padding=10, 
+                expand=True
             )
         )
-    # --- FIN MODIFICADO 7 ---
 
     def desktop_layout():
-        # El layout de escritorio sigue igual (con expansión)
-        # por eso separamos la definición de 'tabs'
-        desktop_tabs = ft.Tabs(
-            selected_index=state["active_tab"], 
-            on_change=on_tabs_change, 
-            tabs=tabs_list, 
-            expand=1 # <-- El de escritorio SÍ se expande
-        )
         return ft.Column(
             [
                 ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
                 error_display,
-                filtros_card(),
-                desktop_tabs, # <-- Usa la variable de escritorio
+                filtros_control(),
+                desktop_tabs,
             ],
             expand=True,
             spacing=18,
@@ -893,11 +955,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     def _on_resize(e):
         new_mobile = detect_mobile()
+        
         if new_mobile != state["is_mobile"]:
             state["is_mobile"] = new_mobile
             apply_filter_styles()
+            
             if page:
-                page.update() # Forzamos re-renderizado para cambiar de layout
+                page.update()
 
     page.on_resize = _on_resize
     apply_filter_styles()
@@ -905,11 +969,4 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     if state["is_mobile"]:
         return mobile_layout()
     else:
-        # Volvemos a poner expand=True en las listas para escritorio
-        recursos_list_display.expand = True
-        solicitudes_list_display.expand = True
-        recursos_admin_list_display.expand = True
-        tab_admin_recursos_content.expand = True
-        tab_admin_recursos_content.scroll = ft.ScrollMode.ADAPTIVE
-        
         return desktop_layout()
