@@ -30,19 +30,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # --- Estado y UI ---
     info = ft.Text("")
-    
-    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-    # El grid es scrollable, PERO NO expandible.
-    # El Container que lo rodea será el que se expanda.
+    # El grid es una Columna scrollable que contendrá los SLOTS (no los días)
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
-    # --- FIN DE LA CORRECCIÓN ---
 
     # --- Catálogos cacheados (inicializados vacíos) ---
     planteles_cache = []
     labs_cache = []
     lab_map: dict[str, str] = {}
     
-    # --- Lógica del Calendario BASE ---
+    # --- Lógica del Calendario (NUEVA: Un solo día) ---
     def is_weekend(d: date) -> bool: return d.weekday() >= 5
     def next_weekday(d: date, step: int = 1):
         n = d + timedelta(days=step)
@@ -50,41 +46,24 @@ def ReservasView(page: ft.Page, api: ApiClient):
         return n
 
     today = date.today()
-    window = {"start": today if not is_weekend(today) else next_weekday(today)}
-    day_names_short = ["Lun", "Mar", "Mié", "Jue", "Vie"]
+    # El estado ahora guarda un solo día
+    window = {"selected_date": today if not is_weekend(today) else next_weekday(today)}
     head_label = ft.Text("", size=18, weight=ft.FontWeight.W_600)
 
-    def five_weekdays_from(d: date):
-        days = []; cur = d
-        if is_weekend(cur): cur = next_weekday(cur)
-        while len(days) < 5:
-            if not is_weekend(cur): days.append(cur)
-            cur += timedelta(days=1)
-        return days
-
-    def five_weekdays_before(end_exclusive: date):
-        days = []; cur = end_exclusive - timedelta(days=1)
-        while len(days) < 5:
-            if not is_weekend(cur): days.insert(0, cur)
-            cur -= timedelta(days=1)
-        return days
-
-    def goto_next():
-        days = five_weekdays_from(window["start"])
-        window["start"] = next_weekday(days[-1])
+    def goto_next(e=None):
+        window["selected_date"] = next_weekday(window["selected_date"], step=1)
         state["confirm_for"] = None
         render()
 
-    def goto_prev():
-        prev_days = five_weekdays_before(window["start"])
-        window["start"] = prev_days[0]
+    def goto_prev(e=None):
+        window["selected_date"] = next_weekday(window["selected_date"], step=-1)
         state["confirm_for"] = None
         render()
 
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
     # --- FIN Lógica Base ---
 
-    # --- Acciones ---
+    # --- Acciones (Sin cambios) ---
     def do_create_reservation(lab_id: int, s: datetime, f: datetime):
         if user_data.get("rol") not in ["admin", "docente"]:
             info.value = "Solo administradores y docentes pueden crear reservas."
@@ -146,13 +125,47 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # --- Renderizado del Calendario ---
-    def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
-        title = ft.Text(f"{day_names_short[d.weekday()]} {d.strftime('%d/%m')}", size=16, weight=ft.FontWeight.W_600)
-        tiles = []
+    # --- MODIFICACIÓN: Renderizado del Grid (ahora son slots) ---
+    def render_grid(d: date):
+        grid.controls.clear()
+        if not dd_lab.value or not dd_lab.value.isdigit():
+            grid.controls.append(
+                ft.Row([ft.Text("Selecciona un plantel y laboratorio.")], 
+                       alignment=ft.MainAxisAlignment.CENTER)
+            )
+            if grid.page: grid.update()
+            return
 
+        grid.controls.append(
+            ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
+                   alignment=ft.MainAxisAlignment.CENTER, height=200)
+        )
+        if grid.page: grid.update()
+
+        lid = int(dd_lab.value)
+        
+        # 1. Obtener Horario (para un solo día)
+        horario_result = api.get_horario_laboratorio(lid, d, d)
+        if isinstance(horario_result, dict) and "error" in horario_result:
+            info.value = f"Error al cargar horario: {horario_result.get('error', 'Error')}"
+            info.color = ft.Colors.ERROR
+            if grid.page and info.page: info.update()
+            return
+        
+        # 2. Obtener Reservas (para un solo día)
+        api_result = api.get_reservas(lid, d, d + timedelta(days=1))
+        all_reservas = []
+        if isinstance(api_result, list):
+            all_reservas = api_result
+        else:
+            info.value = f"Error al cargar reservas: {api_result.get('error', 'Error')}"
+            info.color = ft.Colors.ERROR
+            if grid.page and info.page: info.update()
+            return
+
+        # 3. Mapear reservas por hora de inicio
         reservas_map = {}
-        for r in day_reserveds:
+        for r in all_reservas:
             try:
                 start_str = r.get('inicio')
                 if start_str:
@@ -163,13 +176,20 @@ def ReservasView(page: ft.Page, api: ApiClient):
             except (ValueError, TypeError) as e:
                 print(f"Error parsing date for reservation {r.get('id')}: {e}")
 
-        for slot in slots_calculados:
+        # 4. Obtener los slots de hoy
+        slots_for_day = horario_result.get(d.isoformat(), [])
+        
+        # 5. Limpiar grid y renderizar slots
+        grid.controls.clear()
+        
+        if not slots_for_day:
+            grid.controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
+
+        for slot in slots_for_day:
             try:
                 s_str = slot.get('inicio')
                 f_str = slot.get('fin')
-                if not s_str or not f_str:
-                    print(f"WARN: Skipping slot due to missing date: {slot}")
-                    continue
+                if not s_str or not f_str: continue
                 
                 s_dt = datetime.fromisoformat(str(s_str)).replace(tzinfo=None)
                 f_dt = datetime.fromisoformat(str(f_str)).replace(tzinfo=None)
@@ -188,32 +208,26 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 user_info = found_res_data.get('usuario', {}) 
                 reserving_user_id = user_info.get('id')
                 nombre = user_info.get('nombre', 'N/A')
-
                 current_user_id = user_data.get("id")
                 current_user_rol = user_data.get("rol")
-
-                is_owner = False
-                if current_user_id is not None and reserving_user_id is not None:
-                    is_owner = (str(current_user_id) == str(reserving_user_id))
-                
+                is_owner = (str(current_user_id) == str(reserving_user_id))
                 is_admin = (current_user_rol == "admin")
                 can_manage = is_owner or is_admin
-                
                 label = f"Reservado por {nombre}"
 
                 if can_manage and state["confirm_for"] == rid:
-                    tiles.append(ft.Row([
-                        Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, width=120, height=44),
-                        Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render()), width=72, height=44),
-                    ]))
+                    grid.controls.append(Card(ft.Row([
+                        Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, expand=True),
+                        Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render())),
+                    ])))
                 else:
-                    tiles.append(Tonal(
+                    grid.controls.append(Card(Tonal(
                         label,
                         tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
                         on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
                         disabled=not can_manage, 
-                        width=220, height=50
-                    ))
+                        height=50
+                    )))
 
             # --- CASO 2: Slot Disponible ---
             elif k_tipo in ["disponible", "libre"]:
@@ -221,103 +235,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 reserve_button = Primary(label,
                                          on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
                                          disabled=not is_allowed_to_create,
-                                         width=220, height=50)
+                                         height=50)
                 reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
-                tiles.append(reserve_button)
+                grid.controls.append(Card(reserve_button))
 
             # --- CASO 3: Slot No Habilitado ---
             else:
-                tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50));
-
-        slot_container = ft.Column(tiles, spacing=10) if state["is_mobile"] else ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False)
-        day_column = ft.Column([title, slot_container], spacing=10)
-        
-        card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
-        return ft.Container(content=Card(day_column, padding=card_padding))
-
-
-    def render_grid():
-        grid.controls.clear()
-        if not dd_lab.value or not dd_lab.value.isdigit():
-            grid.controls.append(
-                ft.Row([ft.Text("Selecciona un plantel y laboratorio para ver la disponibilidad.")], 
-                       alignment=ft.MainAxisAlignment.CENTER)
-            )
-            if grid.page: grid.update()
-            return
-
-        grid.controls.append(
-            ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
-                   alignment=ft.MainAxisAlignment.CENTER, height=200)
-        )
-        if grid.page: grid.update()
-
-        lid = int(dd_lab.value)
-        days_to_display = five_weekdays_from(window["start"])
-        end_dt_range_api = days_to_display[-1] + timedelta(days=1)
-
-        horario_result = api.get_horario_laboratorio(lid, days_to_display[0], days_to_display[-1])
-        if isinstance(horario_result, dict) and "error" in horario_result:
-            error_detail = horario_result.get("error", "Error desconocido")
-            info.value = f"Error al cargar horario: {error_detail}"
-            info.color = ft.Colors.ERROR
-            print(f"ERROR render_grid (horario): {info.value}")
-            if grid.page and info.page: info.update()
-            return
-        
-        if not isinstance(horario_result, dict):
-            info.value = f"Error al cargar horario: Respuesta inesperada del API ({type(horario_result)})"
-            info.color = ft.Colors.ERROR
-            print(f"ERROR render_grid (horario): {info.value}")
-            if grid.page and info.page: info.update()
-            return
-
-        api_result = api.get_reservas(lid, days_to_display[0], end_dt_range_api)
-        all_reservas = []
-        if isinstance(api_result, list):
-            all_reservas = api_result
-        else:
-            error_detail = api_result.get("error", "Error desconocido") if isinstance(api_result, dict) else "Error"
-            info.value = f"Error al cargar reservas: {error_detail}"
-            info.color = ft.Colors.ERROR
-            print(f"ERROR render_grid (reservas): {info.value}")
-            if grid.page and info.page: info.update()
-            return
-
-        reservations_by_day = {d: [] for d in days_to_display}
-        for r in all_reservas:
-            try:
-                start_str = r.get('inicio')
-                if start_str:
-                    dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
-                    dt_aware_local = dt_aware_utc.astimezone(None)
-                    dkey = dt_aware_local.date()
-                    if dkey in reservations_by_day:
-                        reservations_by_day[dkey].append(r)
-            except (ValueError, TypeError) as e:
-                print(f"Error parsing date {r.get('inicio')} in render_grid: {e} for reserva {r.get('id')}")
-
-        grid.controls.clear()
-        
-        grid_controls = []
-        for d in days_to_display:
-            slots_for_day = horario_result.get(d.isoformat(), [])
-            reservations_for_day = reservations_by_day.get(d, [])
-            grid_controls.append(day_section(
-                d, lid, slots_for_day, reservations_for_day
-            ))
-        
-        if state["is_mobile"]:
-            grid.controls = grid_controls
-        else:
-            grid.controls = [
-                ft.Row(
-                    controls=grid_controls,
-                    scroll=ft.ScrollMode.ADAPTIVE,
-                    expand=True,
-                    vertical_alignment=ft.CrossAxisAlignment.START
-                )
-            ]
+                grid.controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
 
         if grid.page: grid.update()
 
@@ -327,13 +251,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
             info.value = ""
             info.color = None
         
-        days = five_weekdays_from(window["start"])
+        selected_date = window["selected_date"]
         lab_name = lab_map.get(dd_lab.value, "(Selecciona Lab)")
-        head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
+        # Actualizamos el label del header al nuevo formato de un solo día
+        head_label.value = f"{selected_date.strftime('%A %d/%m')} · {lab_name}"
         
         if head_label.page: head_label.update()
         if info.page: info.update()
-        render_grid()
+        render_grid(selected_date) # Le pasamos el día seleccionado
 
     def on_change_plantel(e: ft.ControlEvent):
         pid_str = e.control.value
@@ -387,8 +312,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         dd_lab.width = None if is_mobile_now else 320
         dd_lab.expand = is_mobile_now
         
-        grid.scroll = ft.ScrollMode.ADAPTIVE 
-        
         if dd_plantel.page: dd_plantel.update()
         if dd_lab.page: dd_lab.update()
         if grid.page: grid.update()
@@ -406,9 +329,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Layout Final ---
     def build_header_controls():
         common_controls = [
-            Icon(ft.Icons.CHEVRON_LEFT, "Semana anterior", on_click=lambda e: goto_prev()),
+            Icon(ft.Icons.CHEVRON_LEFT, "Día anterior", on_click=goto_prev),
             head_label,
-            Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente semana", on_click=lambda e: goto_next()),
+            Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente día", on_click=goto_next),
             ft.Container(expand=True),
         ]
         
@@ -453,7 +376,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             bottom=10,
         )
         
-        # El Stack permite superponer el FAB sobre el contenido
         return ft.Stack([main_column, fab], expand=True)
 
     def desktop_layout():
@@ -463,7 +385,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             legend,
             info,
             ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-            # Este Container se expande para llenar el espacio
             ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
         ],
         expand=True,
