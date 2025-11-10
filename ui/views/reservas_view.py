@@ -22,6 +22,31 @@ def ReservasView(page: ft.Page, api: ApiClient):
     user_data = user_session # <-- ¡Esta es la corrección!
     # --- FIN DE LA CORRECCIÓN 1 ---
 
+    # --- INICIO CAMBIO RESPONSIVO: Detección Móvil ---
+    MOBILE_BREAKPOINT = 640 # Ancho máximo para ser considerado "móvil"
+
+    def get_is_mobile():
+        # Devuelve True si la ventana es estrecha (móvil)
+        # page.width puede ser None al inicio, trátalo como "no móvil"
+        # --- ¡CORRECCIÓN DE page.window_width A page.width! ---
+        return page.width is not None and page.width <= MOBILE_BREAKPOINT
+
+    # Almacenamos el estado para no recalcularlo en cada sub-función
+    # Se actualizará al inicio de cada render()
+    state = {"confirm_for": None, "is_mobile": get_is_mobile()}
+
+    def update_mobile_state():
+        # Llama esto al inicio de render() para asegurar que el estado es actual
+        new_is_mobile = get_is_mobile()
+        if new_is_mobile != state["is_mobile"]:
+            # El estado cambió, forzamos un reset
+            state["is_mobile"] = new_is_mobile
+            state["confirm_for"] = None # Resetea la confirmación si cambia el layout
+            print(f"INFO: Cambiando a layout {'MÓVIL' if new_is_mobile else 'WEB'}")
+        else:
+            state["is_mobile"] = new_is_mobile
+    # --- FIN CAMBIO RESPONSIVO ---
+
     # --- Controles de Filtros ---
     dd_plantel = ft.Dropdown(label="Plantel", width=260, options=[])
     dd_lab = ft.Dropdown(label="Laboratorio", width=320, options=[])
@@ -29,7 +54,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Estado y UI ---
     info = ft.Text("")
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    state = {"confirm_for": None}
+    # state = {"confirm_for": None} # <-- Movido arriba para incluir "is_mobile"
 
     # --- Catálogos cacheados ---
     planteles_cache = []
@@ -96,17 +121,40 @@ def ReservasView(page: ft.Page, api: ApiClient):
             cur -= timedelta(days=1)
         return days
 
+    # --- INICIO CAMBIO RESPONSIVO: Lógica de Calendario ---
+    def get_days_in_window(start_date: date):
+        """Devuelve los días a mostrar según el layout (móvil o web)."""
+        cur = start_date
+        if is_weekend(cur): cur = next_weekday(cur)
+        
+        if state["is_mobile"]:
+            # En móvil, mostramos solo 1 día hábil
+            return [cur]
+        else:
+            # En web, mostramos 5 días hábiles
+            return five_weekdays_from(cur)
+
     def goto_next():
-        days = five_weekdays_from(window["start"])
-        window["start"] = next_weekday(days[-1])
+        # La lógica de "siguiente" depende de cuántos días estamos mostrando
+        days = get_days_in_window(window["start"]) # Obtiene 1 o 5 días
+        last_day = days[-1]
+        window["start"] = next_weekday(last_day) # next_weekday(date) salta al siguiente día hábil
         state["confirm_for"] = None
         render()
 
     def goto_prev():
-        prev_days = five_weekdays_before(window["start"])
-        window["start"] = prev_days[0]
+        # La lógica de "anterior" también depende del layout
+        if state["is_mobile"]:
+            # Retroceder 1 día hábil
+            window["start"] = next_weekday(window["start"], step=-1)
+        else:
+            # Retroceder 5 días hábiles (lógica original)
+            prev_days = five_weekdays_before(window["start"])
+            window["start"] = prev_days[0]
+        
         state["confirm_for"] = None
         render()
+    # --- FIN CAMBIO RESPONSIVO ---
 
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
     # --- FIN Lógica Base ---
@@ -188,6 +236,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
         title = ft.Text(f"{day_names_short[d.weekday()]} {d.strftime('%d/%m')}", size=16, weight=ft.FontWeight.W_600)
         tiles = []
+        
+        # --- INICIO CAMBIO RESPONSIVO: Botones ---
+        # Determinar el layout de los botones basado en el estado
+        is_mobile_view = state["is_mobile"]
+        btn_width = None if is_mobile_view else 220
+        btn_expand = True if is_mobile_view else False
+        # --- FIN CAMBIO RESPONSIVO ---
 
         reservas_map = {}
         for r in day_reserveds:
@@ -250,17 +305,27 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 label = f"Reservado por {nombre}" # Etiqueta correcta
 
                 if can_manage and state["confirm_for"] == rid:
+                    # --- INICIO CAMBIO RESPONSIVO: Botón Confirmar ---
                     tiles.append(ft.Row([
-                        Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, width=120, height=44),
-                        Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render()), width=72, height=44),
+                        Danger("Confirmar", 
+                               on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, 
+                               width=None if is_mobile_view else 120, # Ajuste responsivo
+                               expand=btn_expand, # Ajuste responsivo
+                               height=44),
+                        Ghost("Volver", 
+                              on_click=lambda e: (state.update({"confirm_for": None}), render()), 
+                              width=72, height=44),
                     ]))
+                    # --- FIN CAMBIO RESPONSIVO ---
                 else:
                     tiles.append(Tonal(
                         label,
                         tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
                         on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
                         disabled=not can_manage, 
-                        width=220, height=50
+                        width=btn_width, # Ajuste responsivo
+                        expand=btn_expand, # Ajuste responsivo
+                        height=50
                     ))
 
             # --- CASO 2: Slot Disponible ---
@@ -269,15 +334,33 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 reserve_button = Primary(label,
                                          on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
                                          disabled=not is_allowed_to_create,
-                                         width=220, height=50)
+                                         width=btn_width, # Ajuste responsivo
+                                         expand=btn_expand, # Ajuste responsivo
+                                         height=50)
                 reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
                 tiles.append(reserve_button)
 
             # --- CASO 3: Slot No Habilitado ---
             else:
-                tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50));
+                tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", 
+                                   disabled=True, 
+                                   width=btn_width, # Ajuste responsivo
+                                   expand=btn_expand, # Ajuste responsivo
+                                   height=50));
 
-        day_column = ft.Column([title, ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False)], spacing=10)
+        # --- INICIO CAMBIO RESPONSIVO: Layout de Tiles (CON CORRECCIÓN DE SCROLL) ---
+        tiles_container = None
+        if is_mobile_view:
+            # En móvil: un Column vertical. El scrolling lo maneja el 'grid' principal.
+            # --- ¡CORRECCIÓN! Se quitó scroll=ft.ScrollMode.ADAPTIVE ---
+            tiles_container = ft.Column(tiles, spacing=8)
+        else:
+            # En web: un Row horizontal, scrollable. Ancho fijo.
+            tiles_container = ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False, spacing=8)
+            
+        day_column = ft.Column([title, tiles_container], spacing=10)
+        # --- FIN CAMBIO RESPONSIVO ---
+        
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         return ft.Container(content=Card(day_column, padding=card_padding))
 
@@ -292,7 +375,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
             return
 
         lid = int(dd_lab.value)
-        days_to_display = five_weekdays_from(window["start"])
+        
+        # --- INICIO CAMBIO RESPONSIVO: Obtener días ---
+        days_to_display = get_days_in_window(window["start"]) # 1 o 5 días
+        # --- FIN CAMBIO RESPONSIVO ---
+        
         end_dt_range_api = days_to_display[-1] + timedelta(days=1) # El final es exclusivo
 
         # 1. Obtener Horario
@@ -351,20 +438,126 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         if grid.page: grid.update()
 
+
+    # --- INICIO CORRECCIÓN DE SCOPE ---
+    # Se movió la función 'build_view_controls' aquí (ANTES de 'render')
+    # para que 'render' pueda encontrarla en su scope.
+    def build_view_controls():
+        # 1. Grupo de Navegación (Flechas y Título)
+        nav_group = ft.Row(
+            [
+                Icon(ft.Icons.CHEVRON_LEFT, "Semana anterior", on_click=lambda e: goto_prev()),
+                head_label,
+                Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente semana", on_click=lambda e: goto_next()),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER, 
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+        )
+        
+        # 2. Grupo de Filtros (Dropdowns)
+        filter_group = ft.Row(
+            [dd_plantel, dd_lab],
+            wrap=True, # Permitir que los dropdowns se apilen si no caben
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=10
+        )
+        
+        header_controls_container = None
+        if state["is_mobile"]:
+            # En móvil: Un Column, todo centrado
+            nav_group.alignment = ft.MainAxisAlignment.SPACE_BETWEEN # Llenar el espacio en móvil
+            dd_plantel.expand = True # Expandir dropdowns en móvil
+            dd_lab.expand = True
+            header_controls_container = ft.Column(
+                [nav_group, filter_group],
+                spacing=12
+            )
+        else:
+            # En web: Un Row, como antes, pero con los grupos
+            dd_plantel.expand = False # Quitar expansión en web
+            dd_lab.expand = False
+            header_controls_container = ft.Row(
+                [
+                    nav_group,
+                    ft.Container(expand=True), # El espaciador
+                    filter_group
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN, 
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            )
+        
+        # ========================================================
+        # --- INICIO CORRECCIÓN ft.Chip ---
+        legend = ft.Row([
+            ft.Chip(label=ft.Text("Disponible"), leading=ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE)),
+            ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), # <-- CORREGIDO
+            ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE))
+        ], spacing=8, wrap=True, alignment=ft.MainAxisAlignment.CENTER) # Añadido wrap=True
+        # --- FIN CORRECCIÓN ft.Chip ---
+        # ========================================================
+
+        # Devolver la lista de controles
+        return [
+            ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
+            Card(header_controls_container, padding=14),
+            legend,
+            info,
+            ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+            ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
+        ]
+    # --- FIN CORRECCIÓN DE SCOPE ---
+
+
     def render():
+        # --- INICIO CAMBIO RESPONSIVO: Actualizar estado ---
+        update_mobile_state() # Asegura que state["is_mobile"] es correcto
+        # --- FIN CAMBIO RESPONSIVO ---
+
         grid.disabled = False
         # Limpiar info solo si no estamos en modo confirmación
         if state["confirm_for"] is None:
             info.value = ""
             info.color = None
         
-        days = five_weekdays_from(window["start"])
+        # --- INICIO CAMBIO RESPONSIVO: Etiqueta de header ---
+        days = get_days_in_window(window["start"])
         lab_name = lab_map.get(dd_lab.value, "(Selecciona Lab)")
-        head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
+        
+        if state["is_mobile"]:
+            # En móvil, mostrar solo el día actual
+            head_label.value = f"{days[0].strftime('%d/%m')} · {lab_name}"
+        else:
+            # En web, mostrar el rango
+            head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
+        # --- FIN CAMBIO RESPONSIVO ---
         
         if head_label.page: head_label.update()
         if info.page: info.update()
         render_grid()
+
+        # --- INICIO CAMBIO RESPONSIVO: Re-construir layout ---
+        # El layout principal (header_controls) también debe ser reconstruido
+        # para que se mueva de Row a Column.
+        # Lo hacemos llamando a una función que reconstruye *toda* la vista.
+        # Esto es más seguro que intentar actualizar controles en el lugar.
+        
+        # Guardamos el control principal (que será devuelto por esta función)
+        # en una variable (p.ej., 'main_view_column') para poder acceder a sus controles.
+        # ... (ver al final, en la sección de Layout Final)
+        
+        # Si la vista ya está en la página, actualizamos sus controles.
+        if hasattr(page, "main_view_column"):
+             # Borramos los controles antiguos
+            page.main_view_column.controls.clear()
+            # Creamos los nuevos controles
+            # --- ¡ESTA LÍNEA AHORA FUNCIONARÁ! ---
+            new_controls = build_view_controls()
+            # Los añadimos
+            page.main_view_column.controls.extend(new_controls)
+            page.main_view_column.update()
+        # --- FIN CAMBIO RESPONSIVO ---
+
 
     def on_change_plantel(e: ft.ControlEvent):
         pid_str = e.control.value
@@ -384,56 +577,58 @@ def ReservasView(page: ft.Page, api: ApiClient):
         first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
         if first_plantel_id_str:
             dd_plantel.value = first_plantel_id_str
+            # --- INICIO CAMBIO RESPONSIVO: Actualizar estado antes de render inicial ---
+            update_mobile_state() 
+            # --- FIN CAMBIO RESPONSIVO ---
             on_change_plantel(SimpleControlEvent(control=dd_plantel)) # Llama para cargar labs y renderizar
         else:
             info.value = "El primer plantel no tiene un ID válido."
             info.color = ft.Colors.ERROR
-            days = five_weekdays_from(window["start"])
-            head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · (Sin Laboratorio)"
+            days = get_days_in_window(window["start"]) # Usar responsivo
+            head_label.value = f"{days[0].strftime('%d/%m')} · (Sin Laboratorio)"
             if info.page: info.update()
             if head_label.page: head_label.update()
 
     else:
         info.value = "No hay planteles configurados."
         info.color = ft.Colors.ERROR
-        days = five_weekdays_from(window["start"])
-        head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · (Sin Laboratorio)"
+        days = get_days_in_window(window["start"]) # Usar responsivo
+        head_label.value = f"{days[0].strftime('%d/%m')} · (Sin Laboratorio)"
         if info.page: info.update()
         if head_label.page: head_label.update()
 
 
     # --- Layout Final ---
-    header_controls = ft.Row(
-        [
-            Icon(ft.Icons.CHEVRON_LEFT, "Semana anterior", on_click=lambda e: goto_prev()),
-            head_label,
-            Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente semana", on_click=lambda e: goto_next()),
-            ft.Container(expand=True),
-            dd_plantel,
-            dd_lab
-        ],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
+    # (La función 'build_view_controls' fue movida de aquí hacia arriba)
+
+    # Creamos el control principal de la vista
+    main_view_column = ft.Column(
+        controls=build_view_controls(), # Construye los controles iniciales
+        expand=True,
+        scroll=None,
+        spacing=15
     )
     
-    # ========================================================
-    # --- INICIO CORRECCIÓN ft.Chip ---
-    legend = ft.Row([
-        ft.Chip(label=ft.Text("Disponible"), leading=ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE)),
-        ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), # <-- CORREGIDO
-        ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE))
-    ], spacing=8)
-    # --- FIN CORRECCIÓN ft.Chip ---
-    # ========================================================
+    # Adjuntamos el control principal a la 'page' para que 'render' pueda encontrarlo
+    # (Esto es un pequeño truco para que 'render' pueda actualizar el layout)
+    page.main_view_column = main_view_column
+    
+    # --- INICIO CAMBIO RESPONSIVO: Escuchar cambios de tamaño ---
+    # Para que el layout cambie *automáticamente* si el usuario redimensiona la ventana
+    def on_page_resize(e):
+        # --- ¡CORRECCIÓN DE page.window_width A page.width! ---
+        #print(f"DEBUG: Page resize detected! New width: {page.width}")
+        # Comprobar si el estado (móvil/web) ha cambiado
+        current_is_mobile = state["is_mobile"]
+        new_is_mobile = get_is_mobile()
+        
+        if current_is_mobile != new_is_mobile:
+            # ¡El layout debe cambiar!
+            # Llamamos a render() para que actualice el estado y reconstruya la vista
+            render()
 
-    return ft.Column([
-        ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
-        Card(header_controls, padding=14),
-        legend,
-        info,
-        ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-        ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
-    ],
-    expand=True,
-    scroll=None,
-    spacing=15
-    )
+    page.on_resize = on_page_resize
+    # --- FIN CAMBIO RESPONSIVO ---
+
+    return main_view_column
+    # --- FIN CAMBIO RESPONSIVO ---
