@@ -154,14 +154,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if state["is_mobile"]: return [cur]
         else: return five_weekdays_from(cur)
 
-    def goto_next(e): # <-- Corregido
+    def goto_next(e):
         days = get_days_in_window(window["start"]) 
         last_day = days[-1]
         window["start"] = next_weekday(last_day) 
         state["confirm_for"] = None
         render()
 
-    def goto_prev(e): # <-- Corregido
+    def goto_prev(e):
         if state["is_mobile"]:
             window["start"] = next_weekday(window["start"], step=-1)
         else:
@@ -299,8 +299,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
             # En web: Fila con scroll horizontal.
             tiles_container = ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False, spacing=8)
             
-        day_column = ft.Column([title, tiles_container], spacing=10)
-        # --- FIN CORRECCIÓN ---
+        # --- INICIO DE LA CORRECCIÓN DE ALINEACIÓN ---
+        day_column = ft.Column(
+            [title, tiles_container], 
+            spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.START # <-- AGREGADO
+        )
+        # --- FIN DE LA CORRECCIÓN DE ALINEACIÓN ---
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         return ft.Container(content=Card(day_column, padding=card_padding))
@@ -485,7 +490,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     )
     
     # 4. Leyenda
-    # --- ¡INICIO DE LA CORRECCIÓN DE LEYENDA! ---
     legend = ft.Row([
         ft.Chip(label=ft.Text("Disponible"), leading=ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE)),
         ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), 
@@ -495,7 +499,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # Hacemos que sea deslizable horizontalmente en móvil
     scroll=ft.ScrollMode.ADAPTIVE 
     )
-    # --- ¡FIN DE LA CORRECCIÓN DE LEYENDA! ---
 
     # --- Función para manejar el resize ---
     # (Esto es crucial para que el layout cambie sin recargar)
