@@ -45,7 +45,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # --- Estado y UI ---
     info = ft.Text("")
-    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    
+    # --- ¡INICIO DE LA CORRECCIÓN DE TARJETA! ---
+    grid = ft.Column(
+        spacing=12, 
+        scroll=ft.ScrollMode.ADAPTIVE, 
+        expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER # <-- ¡AQUÍ!
+    )
+    # --- ¡FIN DE LA CORRECCIÓN DE TARJETA! ---
 
     # --- NUEVO: Definición del BottomSheet para filtros ---
     def close_filters(e):
@@ -226,11 +234,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         is_mobile_view = state["is_mobile"]
         btn_width = None if is_mobile_view else 220
         
-        # --- ¡INICIO DE LA CORRECCIÓN DE ALINEACIÓN 1! ---
-        # Los botones ya no se expanden en móvil.
-        # Dejamos que el contenedor 'tiles_container' los centre.
+        # Dejamos que los botones NO se expandan en móvil
         btn_expand = False
-        # --- ¡FIN DE LA CORRECCIÓN DE ALINEACIÓN 1! ---
 
         reservas_map = {}
         for r in day_reserveds:
@@ -266,13 +271,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 label = f"Reservado por {nombre}"
 
                 if can_manage and state["confirm_for"] == rid:
-                    # En móvil, btn_expand es False, así que el Row se encogerá.
-                    # Hacemos que el botón de Danger se expanda para llenar el espacio.
                     tiles.append(ft.Row([
                         Danger("Confirmar", 
                                on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, 
                                width=None if is_mobile_view else 120, 
-                               expand=is_mobile_view, # <-- Que este sí se expanda
+                               expand=is_mobile_view, # Dejamos que este SÍ se expanda
                                height=44),
                         Ghost("Volver", 
                               on_click=lambda e: (state.update({"confirm_for": None}), render()), 
@@ -300,14 +303,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", 
                                    disabled=True, width=btn_width, expand=btn_expand, height=50));
 
-        # --- ¡INICIO DE LA CORRECCIÓN DE ALINEACIÓN 2! ---
         if is_mobile_view:
-            # En móvil: Columna normal. El 'grid' padre hace el scroll.
-            # Y centramos los botones.
+            # Centramos los botones en móvil
             tiles_container = ft.Column(
                 tiles, 
                 spacing=8, 
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER # <-- CENTRAR BOTONES
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
         else:
             # En web: Fila con scroll horizontal.
@@ -317,9 +318,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         day_column = ft.Column(
             [title, tiles_container], 
             spacing=10,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER # <-- CENTRAR TÍTULO Y CONTENEDOR
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
-        # --- ¡FIN DE LA CORRECCIÓN DE ALINEACIÓN 2! ---
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         return ft.Container(content=Card(day_column, padding=card_padding))
