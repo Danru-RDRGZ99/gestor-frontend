@@ -20,17 +20,16 @@ jobs:
       - name: Instalar Flet y dependencias
         run: |
           pip install flet
-          # Esta línea es MUY importante que funcione
           pip install -r requirements.txt
 
       - name: Configurar Flutter SDK (con Subosito)
-        # Esta es la acción de la comunidad, es la más popular
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # Usamos el canal estable de Flutter
+          channel: 'stable' 
 
       - name: Aceptar licencias de Android
-        run: flutter doctor --android-licenses
+        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+        run: yes | flutter doctor --android-licenses
 
       - name: Construir la APK
         run: flet build apk
