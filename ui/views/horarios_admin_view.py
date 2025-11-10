@@ -47,6 +47,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         "is_mobile": get_is_mobile(),
         "selected_lab": "general",
         "selected_day": None,
+        "initialized": False  # Bandera para controlar inicialización
     }
 
     def update_mobile_state():
@@ -75,10 +76,10 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         value="general",
         expand=True,
         filled=True,
-        on_change=lambda e: (state.update({"selected_lab": dd_lab.value}), render_horarios())
+        on_change=lambda e: (state.update({"selected_lab": dd_lab.value}), safe_render_horarios())
     )
 
-    # Selector de día simple - CORREGIDO
+    # Selector de día simple
     day_buttons = []
     for dia_num in range(5):  # Solo Lunes a Viernes
         btn = ft.TextButton(
@@ -88,7 +89,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 bgcolor=ft.Colors.PRIMARY_CONTAINER if state["selected_day"] == dia_num else None,
             ),
             data=dia_num,
-            on_click=lambda e: (state.update({"selected_day": e.control.data}), render_horarios())
+            on_click=lambda e: (state.update({"selected_day": e.control.data}), safe_render_horarios())
         )
         day_buttons.append(btn)
 
@@ -125,66 +126,83 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     def load_horarios():
         return api.get_reglas_horario()
 
+    def safe_render_horarios():
+        """Renderiza horarios solo si los controles ya están en la página"""
+        if state["initialized"]:
+            render_horarios()
+
     def render_horarios():
-        horarios_list_panel.controls.clear()
-        all_horarios = load_horarios()
-
-        if not isinstance(all_horarios, list):
-            detail = all_horarios.get("error", "Error") if isinstance(all_horarios, dict) else "Error desconocido"
-            horarios_list_panel.controls.append(ft.Text(f"Error al cargar horarios: {detail}", color=ft.Colors.ERROR))
-            return
-
-        # Filtrar por laboratorio y día seleccionado
-        filtered_horarios = []
-        for horario in all_horarios:
-            lab_id = str(horario.get('laboratorio_id')) if horario.get('laboratorio_id') is not None else "general"
-            dia = horario.get('dia_semana')
+        """Función principal para renderizar horarios"""
+        try:
+            # Limpiar controles existentes
+            horarios_list_panel.controls.clear()
             
-            # Si hay día seleccionado, filtrar por día
-            if state["selected_day"] is not None:
-                if dia == state["selected_day"] and lab_id == state["selected_lab"]:
+            all_horarios = load_horarios()
+
+            if not isinstance(all_horarios, list):
+                detail = all_horarios.get("error", "Error") if isinstance(all_horarios, dict) else "Error desconocido"
+                horarios_list_panel.controls.append(ft.Text(f"Error al cargar horarios: {detail}", color=ft.Colors.ERROR))
+                if state["initialized"]:
+                    horarios_list_panel.update()
+                return
+
+            # Filtrar por laboratorio y día seleccionado
+            filtered_horarios = []
+            for horario in all_horarios:
+                lab_id = str(horario.get('laboratorio_id')) if horario.get('laboratorio_id') is not None else "general"
+                dia = horario.get('dia_semana')
+                
+                # Si hay día seleccionado, filtrar por día
+                if state["selected_day"] is not None:
+                    if dia == state["selected_day"] and lab_id == state["selected_lab"]:
+                        filtered_horarios.append(horario)
+                # Si no hay día seleccionado, mostrar todos del laboratorio
+                elif lab_id == state["selected_lab"]:
                     filtered_horarios.append(horario)
-            # Si no hay día seleccionado, mostrar todos del laboratorio
-            elif lab_id == state["selected_lab"]:
-                filtered_horarios.append(horario)
 
-        if not filtered_horarios:
-            if state["selected_day"] is not None:
-                dia_nombre = DIAS_SEMANA.get(state["selected_day"], "Día")
-                lab_nombre = lab_map.get(state["selected_lab"], "Laboratorio")
-                horarios_list_panel.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
-                            ft.Text(f"No hay horarios para {dia_nombre}", size=16, color=ft.Colors.GREY_600),
-                            ft.Text(f"Laboratorio: {lab_nombre}", size=12, color=ft.Colors.GREY_500),
-                            ft.Text("Agrega el primer horario usando el formulario", size=12, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-                        padding=40,
-                        alignment=ft.alignment.center
+            if not filtered_horarios:
+                if state["selected_day"] is not None:
+                    dia_nombre = DIAS_SEMANA.get(state["selected_day"], "Día")
+                    lab_nombre = lab_map.get(state["selected_lab"], "Laboratorio")
+                    horarios_list_panel.controls.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
+                                ft.Text(f"No hay horarios para {dia_nombre}", size=16, color=ft.Colors.GREY_600),
+                                ft.Text(f"Laboratorio: {lab_nombre}", size=12, color=ft.Colors.GREY_500),
+                                ft.Text("Agrega el primer horario usando el formulario", size=12, color=ft.Colors.GREY_500),
+                            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                            padding=40,
+                            alignment=ft.alignment.center
+                        )
                     )
-                )
+                else:
+                    lab_nombre = lab_map.get(state["selected_lab"], "Laboratorio")
+                    horarios_list_panel.controls.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
+                                ft.Text(f"No hay horarios para {lab_nombre}", size=16, color=ft.Colors.GREY_600),
+                                ft.Text("Selecciona un día o agrega horarios", size=12, color=ft.Colors.GREY_500),
+                            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                            padding=40,
+                            alignment=ft.alignment.center
+                        )
+                    )
             else:
-                lab_nombre = lab_map.get(state["selected_lab"], "Laboratorio")
-                horarios_list_panel.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
-                            ft.Text(f"No hay horarios para {lab_nombre}", size=16, color=ft.Colors.GREY_600),
-                            ft.Text("Selecciona un día o agrega horarios", size=12, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-                        padding=40,
-                        alignment=ft.alignment.center
-                    )
-                )
-        else:
-            # Ordenar por día y hora
-            filtered_horarios.sort(key=lambda x: (x.get('dia_semana', 0), x.get('hora_inicio', '')))
-            
-            for horario in filtered_horarios:
-                horarios_list_panel.controls.append(horario_card(horario))
+                # Ordenar por día y hora
+                filtered_horarios.sort(key=lambda x: (x.get('dia_semana', 0), x.get('hora_inicio', '')))
+                
+                for horario in filtered_horarios:
+                    horarios_list_panel.controls.append(horario_card(horario))
 
-        horarios_list_panel.update()
+            # Solo actualizar si ya está inicializado
+            if state["initialized"]:
+                horarios_list_panel.update()
+
+        except Exception as e:
+            print(f"Error en render_horarios: {e}")
+            traceback.print_exc()
 
     def horario_card(horario: dict) -> ft.Control:
         lab_id = horario.get('laboratorio_id')
@@ -268,7 +286,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             if result and result.get("success"):
                 info_txt.value = "✅ Horario eliminado correctamente"
                 info_txt.color = ft.Colors.GREEN
-                render_horarios()
+                safe_render_horarios()
             else:
                 info_txt.value = "❌ Error al eliminar el horario"
                 info_txt.color = ft.Colors.RED
@@ -347,7 +365,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 info_txt.value = "✅ Horario actualizado correctamente"
                 info_txt.color = ft.Colors.GREEN
                 clear_form()
-                render_horarios()
+                safe_render_horarios()
             else:
                 error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
                 info_txt.value = f"❌ Error al actualizar: {error_msg}"
@@ -375,7 +393,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 info_txt.value = f"✅ {success_count} horario(s) creado(s) correctamente"
                 info_txt.color = ft.Colors.GREEN
                 clear_form()
-                render_horarios()
+                safe_render_horarios()
             else:
                 info_txt.value = "❌ Error al crear los horarios"
                 info_txt.color = ft.Colors.RED
@@ -383,16 +401,17 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         info_txt.update()
 
     def update_controls():
-        dd_inicio.update()
-        dd_fin.update()
-        dd_tipo.update()
-        btn_save.update()
-        btn_cancel.update()
-        info_txt.update()
-
-    def render():
-        update_mobile_state()
-        render_horarios()
+        """Actualiza controles de forma segura"""
+        if state["initialized"]:
+            try:
+                dd_inicio.update()
+                dd_fin.update()
+                dd_tipo.update()
+                btn_save.update()
+                btn_cancel.update()
+                info_txt.update()
+            except Exception as e:
+                print(f"Error actualizando controles: {e}")
 
     # --- DISEÑO SIMPLIFICADO ---
     
@@ -467,14 +486,31 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         current_is_mobile = state["is_mobile"]
         new_is_mobile = get_is_mobile()
         if current_is_mobile != new_is_mobile:
-            render()
+            # Marcar como inicializado y renderizar
+            state["initialized"] = True
+            safe_render_horarios()
 
     page.on_resize = handle_page_resize
 
-    # Carga inicial
-    render()
+    # Construir layout principal
+    main_content = ft.Container()
+    
+    def build_layout():
+        update_mobile_state()
+        if state["is_mobile"]:
+            layout_content = mobile_layout()
+        else:
+            layout_content = desktop_layout()
+        
+        main_content.content = layout_content
+        
+        # Marcar como inicializado después de construir el layout
+        state["initialized"] = True
+        
+        # Cargar datos iniciales
+        safe_render_horarios()
 
-    if state["is_mobile"]:
-        return mobile_layout()
-    else:
-        return desktop_layout()
+    # Construir layout inicial
+    build_layout()
+
+    return main_content
