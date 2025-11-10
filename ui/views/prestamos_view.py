@@ -80,61 +80,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     
     error_display = ft.Text("", color=PAL["error_text"])
 
+    # --- Los 'caches' se definen vacíos y se llenan asíncronamente ---
     planteles_cache = []
     labs_cache = []
     tipos_cache = []
-    error_loading_data = None
-
-    try:
-        planteles_data = api.get_planteles()
-        labs_data = api.get_laboratorios()
-        tipos_data = api.get_recurso_tipos()
-
-        if isinstance(planteles_data, list):
-            planteles_cache = planteles_data
-            dd_plantel_filter.options = [ft.dropdown.Option("", "Todos")] + [
-                ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")
-            ]
-        else:
-            detail = planteles_data.get("error", "Error") if isinstance(planteles_data, dict) else "Respuesta inválida"
-            error_loading_data = f"Error al cargar planteles: {detail}"
-            print(f"ERROR PrestamosView: {error_loading_data}")
-
-        if isinstance(labs_data, list):
-            labs_cache = labs_data
-        elif error_loading_data is None:
-            detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
-            error_loading_data = f"Error al cargar laboratorios: {detail}"
-            print(f"ERROR PrestamosView: {error_loading_data}")
-        else:
-            detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
-            print(f"ERROR PrestamosView: (secondary) Error al cargar laboratorios: {detail}")
-
-        if isinstance(tipos_data, list):
-            tipos_cache = tipos_data
-            dd_tipo_filter.options = [ft.dropdown.Option("", "Todos")] + [
-                ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t
-            ]
-        elif error_loading_data is None:
-            detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
-            error_loading_data = f"Error al cargar tipos de recurso: {detail}"
-            print(f"ERROR PrestamosView: {error_loading_data}")
-        else:
-            detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
-            print(f"ERROR PrestamosView: (secondary) Error al cargar tipos: {detail}")
-
-    except Exception as e:
-        error_loading_data = f"Excepción al cargar datos iniciales: {e}"
-        print(f"CRITICAL PrestamosView: {error_loading_data}")
-        traceback.print_exc()
-
-    if error_loading_data:
-        return ft.Column([
-            ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
-            ft.Text("Error al cargar datos necesarios:", color=PAL["error_text"], weight=ft.FontWeight.BOLD),
-            ft.Text(error_loading_data, color=PAL["error_text"]),
-        ])
-
+    
     tf_recurso_tipo = TextField("Tipo de Recurso (ej: Cable HDMI, Proyector)")
     tf_recurso_tipo.col = {"sm": 12, "md": 4}
     tf_recurso_detalles = TextField("Detalles/Specs (opcional)")
@@ -150,21 +100,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     dd_recurso_estado_admin.col = {"sm": 12, "md": 4}
 
-    lab_options_admin = []
-    plantel_map_for_admin = {p["id"]: p["nombre"] for p in planteles_cache if p.get("id")}
-    labs_grouped = {}
-    for lab in labs_cache:
-        pid = lab.get("plantel_id")
-        if pid in plantel_map_for_admin:
-            if pid not in labs_grouped:
-                labs_grouped[pid] = []
-            labs_grouped[pid].append(lab)
-
-    for pid, pname in plantel_map_for_admin.items():
-        lab_options_admin.append(ft.dropdown.Option(key=None, text=pname, disabled=True))
-        if pid in labs_grouped:
-            for l in sorted(labs_grouped[pid], key=lambda x: x.get("nombre", "")):
-                lab_options_admin.append(ft.dropdown.Option(key=str(l["id"]), text=f"  {l['nombre']}"))
+    lab_options_admin = [] # Se llena en la carga asíncrona
 
     dd_recurso_lab_admin = ft.Dropdown(label="Laboratorio de Origen", options=lab_options_admin)
     dd_recurso_lab_admin.col = {"sm": 12, "md": 9}
@@ -192,34 +128,33 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def render_recursos():
         recursos_list_display.controls.clear()
         error_display.value = ""
+        
+        recursos_list_display.controls.append(ft.Row([ft.ProgressRing(), ft.Text("Cargando recursos...")], alignment=ft.MainAxisAlignment.CENTER))
+        if page:
+            page.update()
+
         recursos_data = api.get_recursos(
             plantel_id=state["filter_plantel_id"],
             lab_id=state["filter_lab_id"],
             estado=state["filter_estado"],
             tipo=state["filter_tipo"],
         )
+        
+        recursos_list_display.controls.clear()
+
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar recursos: {detail}"
             print(f"ERROR render_recursos: {error_msg}")
             error_display.value = error_msg
-            if error_display.page:
-                error_display.update()
-            if recursos_list_display.page:
-                recursos_list_display.update()
-            return
-        if not isinstance(recursos_data, list):
+        elif not isinstance(recursos_data, list):
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar recursos: {detail}"
             print(f"ERROR render_recursos: {error_msg}")
             error_display.value = error_msg
-            if error_display.page:
-                error_display.update()
-            if recursos_list_display.page:
-                recursos_list_display.update()
-            return
+        
         recursos = recursos_data
-        if not recursos:
+        if not isinstance(recursos, list) or not recursos:
             recursos_list_display.controls.append(
                 ft.Text(
                     "No se encontraron recursos con los filtros seleccionados.",
@@ -241,29 +176,28 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def render_solicitudes():
         solicitudes_list_display.controls.clear()
         error_display.value = ""
+
+        solicitudes_list_display.controls.append(ft.Row([ft.ProgressRing(), ft.Text("Cargando solicitudes...")], alignment=ft.MainAxisAlignment.CENTER))
+        if page:
+            page.update()
+
         solicitudes_data = api.get_todos_los_prestamos() if is_admin else api.get_mis_prestamos()
+        
+        solicitudes_list_display.controls.clear()
+
         if isinstance(solicitudes_data, dict) and "error" in solicitudes_data:
             detail = solicitudes_data.get("error", "Error")
             error_msg = f"Error al cargar solicitudes: {detail}"
             print(f"ERROR render_solicitudes: {error_msg}")
             error_display.value = error_msg
-            if error_display.page:
-                error_display.update()
-            if solicitudes_list_display.page:
-                solicitudes_list_display.update()
-            return
-        if not isinstance(solicitudes_data, list):
+        elif not isinstance(solicitudes_data, list):
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar solicitudes: {detail}"
             print(f"ERROR render_solicitudes: {error_msg}")
             error_display.value = error_msg
-            if error_display.page:
-                error_display.update()
-            if solicitudes_list_display.page:
-                solicitudes_list_display.update()
-            return
+
         solicitudes = solicitudes_data
-        if not solicitudes:
+        if not isinstance(solicitudes, list) or not solicitudes:
             solicitudes_list_display.controls.append(
                 ft.Text("No hay solicitudes para mostrar.", color=PAL["muted_text"]) 
             )
@@ -282,29 +216,27 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def render_admin_recursos():
         recursos_admin_list_display.controls.clear()
         error_display.value = ""
+
+        recursos_admin_list_display.controls.append(ft.Row([ft.ProgressRing(), ft.Text("Cargando recursos...")], alignment=ft.MainAxisAlignment.CENTER))
+        if page:
+            page.update()
+
         recursos_data = api.get_recursos()
+        recursos_admin_list_display.controls.clear()
+        
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar lista de admin: {detail}"
             print(f"ERROR render_admin_recursos: {error_msg}")
             error_display.value = error_msg
-            if error_display.page:
-                error_display.update()
-            if recursos_admin_list_display.page:
-                recursos_admin_list_display.update()
-            return
-        if not isinstance(recursos_data, list):
+        elif not isinstance(recursos_data, list):
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar lista de admin: {detail}"
             print(f"ERROR render_admin_recursos: {error_msg}")
             error_display.value = error_msg
-            if error_display.page:
-                error_display.update()
-            if recursos_admin_list_display.page:
-                recursos_admin_list_display.update()
-            return
+        
         recursos = recursos_data
-        if not recursos:
+        if not isinstance(recursos, list) or not recursos:
             recursos_admin_list_display.controls.append(ft.Text("No hay recursos creados."))
         else:
             for r in recursos:
@@ -739,6 +671,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     slider_horas,
                     ft.Row(
                         [ft.TextButton("Cancelar", on_click=close_solicitud_sheet), ft.FilledButton("Enviar Solicitud", on_click=crear_solicitud)],
+                        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN DEL CÓDIGO INCOMPLETO! ---
                         alignment=ft.MainAxisAlignment.END,
                     ),
                 ],
@@ -763,7 +696,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     ft.Row(
                         [
                             ft.Text("Filtros", size=18, weight=ft.FontWeight.BOLD),
-                            # --- ¡CORRECCIÓN 1 AQUÍ! ---
                             ft.IconButton(icon=ft.Icons.CLOSE, on_click=close_filter_sheet),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -842,8 +774,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         elif idx == 2 and is_admin:
             render_admin_recursos()
 
-    render_recursos()
-
     def apply_filter_styles():
         if state["is_mobile"]:
             for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
@@ -857,23 +787,16 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             if dd.page:
                 dd.update()
 
+    # --- MODIFICACIÓN 1: El control de filtros ya no muestra nada en móvil ---
     def filtros_control():
         if state["is_mobile"]:
-            return ft.Row(
-                [
-                    ft.FilledButton(
-                        "Filtros",
-                        # --- ¡CORRECCIÓN 2 AQUÍ! ---
-                        icon=ft.Icons.FILTER_LIST,
-                        on_click=open_filter_sheet,
-                        height=40
-                    )
-                ],
-                alignment=ft.MainAxisAlignment.END,
-            )
+            # Ya no creamos el botón aquí, solo un contenedor vacío
+            return ft.Container()
         else:
+            # El modo escritorio sigue igual
             content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
             return Card(ft.Container(content), padding=12)
+    # --- FIN MODIFICACIÓN 1 ---
 
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
@@ -922,29 +845,50 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         expand=1
     )
 
+    # --- MODIFICACIÓN 2: El layout móvil ahora usa un Stack ---
     def mobile_layout():
+        
+        # El contenido principal (con las pestañas)
+        main_column = ft.Column(
+            controls=[
+                error_display,
+                filtros_control(), # <-- Esto ahora es un Container() vacío
+                tabs,
+            ],
+            expand=True,
+            spacing=12,
+        )
+
+        # El nuevo Botón de Acción Flotante (FAB)
+        fab = ft.FloatingActionButton(
+            icon=ft.Icons.FILTER_LIST,
+            tooltip="Filtros",
+            on_click=open_filter_sheet,
+            right=10,  # Posición: 10px desde la derecha
+            bottom=10, # Posición: 10px desde el fondo
+        )
+
         return ft.SafeArea(
             ft.Container(
-                content=ft.Column(
+                content=ft.Stack(  # <-- Usamos Stack para superponer
                     controls=[
-                        error_display,
-                        filtros_control(),
-                        tabs,
+                        main_column, # Capa 1: El contenido
+                        fab,         # Capa 2: El botón flotante
                     ],
-                    expand=True,
-                    spacing=12,
+                    expand=True
                 ),
                 padding=10, 
                 expand=True
             )
         )
+    # --- FIN MODIFICACIÓN 2 ---
 
     def desktop_layout():
         return ft.Column(
             [
                 ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
                 error_display,
-                filtros_control(),
+                filtros_control(), # <-- Esto sigue mostrando la Card en escritorio
                 desktop_tabs,
             ],
             expand=True,
@@ -963,6 +907,74 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     page.on_resize = _on_resize
     apply_filter_styles()
+
+    # --- MODIFICACIÓN 3: Carga asíncrona de datos ---
+    # Esta es la nueva función que carga los datos en segundo plano
+    def load_initial_data(e=None):
+        nonlocal planteles_cache, labs_cache, tipos_cache, lab_options_admin
+        
+        try:
+            planteles_data = api.get_planteles()
+            labs_data = api.get_laboratorios()
+            tipos_data = api.get_recurso_tipos()
+
+            if isinstance(planteles_data, list):
+                planteles_cache = planteles_data
+                dd_plantel_filter.options = [ft.dropdown.Option("", "Todos")] + [
+                    ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")
+                ]
+            else:
+                raise Exception(f"Error al cargar planteles: {planteles_data.get('error', 'Respuesta inválida')}")
+
+            if isinstance(labs_data, list):
+                labs_cache = labs_data
+            else:
+                raise Exception(f"Error al cargar laboratorios: {labs_data.get('error', 'Respuesta inválida')}")
+
+            if isinstance(tipos_data, list):
+                tipos_cache = tipos_data
+                dd_tipo_filter.options = [ft.dropdown.Option("", "Todos")] + [
+                    ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t
+                ]
+            else:
+                raise Exception(f"Error al cargar tipos: {tipos_data.get('error', 'Respuesta inválida')}")
+
+            # Re-construir las opciones del dropdown de admin
+            plantel_map_for_admin = {p["id"]: p["nombre"] for p in planteles_cache if p.get("id")}
+            labs_grouped = {}
+            for lab in labs_cache:
+                pid = lab.get("plantel_id")
+                if pid in plantel_map_for_admin:
+                    if pid not in labs_grouped:
+                        labs_grouped[pid] = []
+                    labs_grouped[pid].append(lab)
+
+            lab_options_admin.clear() # Limpiamos por si acaso
+            for pid, pname in plantel_map_for_admin.items():
+                lab_options_admin.append(ft.dropdown.Option(key=None, text=pname, disabled=True))
+                if pid in labs_grouped:
+                    for l in sorted(labs_grouped[pid], key=lambda x: x.get("nombre", "")):
+                        lab_options_admin.append(ft.dropdown.Option(key=str(l["id"]), text=f"  {l['nombre']}"))
+            
+            # Actualizar los dropdowns en la UI
+            if dd_plantel_filter.page:
+                dd_plantel_filter.update()
+                dd_tipo_filter.update()
+                dd_recurso_lab_admin.update()
+
+            # Cargar la primera vista de recursos
+            render_recursos()
+
+        except Exception as e:
+            print(f"CRITICAL PrestamosView (async): {e}")
+            traceback.print_exc()
+            error_display.value = f"Error crítico al cargar datos: {e}"
+            if error_display.page:
+                error_display.update()
+
+    # Le decimos a la página que ejecute la carga de datos en un hilo separado
+    page.run_thread(load_initial_data)
+    # --- FIN MODIFICACIÓN 3 ---
 
     if state["is_mobile"]:
         return mobile_layout()
