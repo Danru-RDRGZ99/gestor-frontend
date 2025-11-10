@@ -27,8 +27,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     def get_is_mobile():
         # Devuelve True si la ventana es estrecha (móvil)
-        # page.window_width puede ser None al inicio, trátalo como "no móvil"
-        return page.window_width is not None and page.window_width <= MOBILE_BREAKPOINT
+        # page.width puede ser None al inicio, trátalo como "no móvil"
+        # --- ¡CORRECCIÓN DE page.window_width A page.width! ---
+        return page.width is not None and page.width <= MOBILE_BREAKPOINT
 
     # Almacenamos el estado para no recalcularlo en cada sub-función
     # Se actualizará al inicio de cada render()
@@ -603,14 +604,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
         spacing=15
     )
     
-    # Adjuntamos el control principal a la 'page' para que render() pueda encontrarlo
+    # Adjuntamos el control principal a la 'page' para que 'render' pueda encontrarlo
     # (Esto es un pequeño truco para que 'render' pueda actualizar el layout)
     page.main_view_column = main_view_column
     
     # --- INICIO CAMBIO RESPONSIVO: Escuchar cambios de tamaño ---
     # Para que el layout cambie *automáticamente* si el usuario redimensiona la ventana
     def on_page_resize(e):
-        #print(f"DEBUG: Page resize detected! New width: {page.window_width}")
+        # --- ¡CORRECCIÓN DE page.window_width A page.width! ---
+        #print(f"DEBUG: Page resize detected! New width: {page.width}")
         # Comprobar si el estado (móvil/web) ha cambiado
         current_is_mobile = state["is_mobile"]
         new_is_mobile = get_is_mobile()
