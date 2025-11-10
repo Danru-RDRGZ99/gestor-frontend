@@ -1,4 +1,4 @@
-# CODIGO CORREGIDO - VERSIÓN MÓVIL OPTIMIZADA (reservas_view.py)
+# VERSIÓN CORREGIDA - SELECTOR DE FECHA Y FILTROS FUNCIONALES
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -21,7 +21,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     user_session = page.session.get("user_session") or {}
     user_data = user_session
 
-    MOBILE_BREAKPOINT = 768  # Aumentado para mejor experiencia en tablets pequeñas
+    MOBILE_BREAKPOINT = 768
 
     def get_is_mobile():
         return page.width is not None and page.width <= MOBILE_BREAKPOINT
@@ -64,7 +64,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # BOTTOM SHEET MEJORADO PARA FILTROS
     def close_filters(e):
         bs_filters.open = False
-        render()
         page.update()
 
     def apply_filters(e):
@@ -116,30 +115,36 @@ def ReservasView(page: ft.Page, api: ApiClient):
         bs_filters.open = True
         page.update()
 
+    # FAB MEJORADO - asegurar que sea visible
     fab_filter = ft.FloatingActionButton(
-        icon=ft.Icons.FILTER_ALT_OUTLINED,
+        icon=ft.Icons.FILTER_LIST,
+        text="Filtrar",
         tooltip="Filtrar laboratorios",
         on_click=open_filters,
         visible=False,
         bgcolor=ft.Colors.PRIMARY,
+        shape=ft.RoundedRectangleBorder(radius=10),
     )
 
-    # SELECTOR DE FECHA PARA MÓVIL
+    # DATE PICKER CORREGIDO
+    date_picker = ft.DatePicker(
+        first_date=date.today(),
+        last_date=date.today() + timedelta(days=60),
+    )
+    
+    def handle_date_change(e):
+        if date_picker.value:
+            state["selected_date"] = date_picker.value
+            state["confirm_for"] = None
+            render()
+    
+    date_picker.on_change = handle_date_change
+    
     def show_date_picker(e):
-        def on_date_selected(e):
-            if e.control.value:
-                state["selected_date"] = e.control.value
-                state["confirm_for"] = None
-                render()
-        
-        date_picker = ft.DatePicker(
-            first_date=date.today(),
-            last_date=date.today() + timedelta(days=60),
-            on_change=on_date_selected
-        )
-        page.overlay.append(date_picker)
+        date_picker.value = state["selected_date"]
         date_picker.pick_date()
-        page.update()
+
+    page.overlay.append(date_picker)
 
     # CARGAR DATOS INICIALES
     planteles_cache = []
@@ -350,7 +355,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # SECCIÓN DE DÍA MEJORADA PARA MÓVIL - CORREGIDA
+    # SECCIÓN DE DÍA MEJORADA PARA MÓVIL
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
         is_mobile_view = state["is_mobile"]
         
@@ -576,11 +581,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if head_label.page:
             head_label.update()
 
-        # Mostrar/ocultar controles según el modo
+        # Mostrar/ocultar controles según el modo - CORREGIDO
         if state["is_mobile"]:
             filter_group.visible = False
             mobile_date_selector.visible = True
+            # CONFIGURACIÓN CORREGIDA DEL FAB
             page.floating_action_button = fab_filter
+            page.floating_action_button_location = ft.FloatingActionButtonLocation.CENTER_DOCKED
             fab_filter.visible = True
         else:
             filter_group.visible = True
@@ -655,26 +662,32 @@ def ReservasView(page: ft.Page, api: ApiClient):
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # SELECTOR DE FECHA MÓVIL
+    # SELECTOR DE FECHA MÓVIL - MEJORADO
     mobile_date_selector = ft.Card(
         ft.Container(
             ft.Row([
                 ft.IconButton(
                     icon=ft.Icons.CHEVRON_LEFT,
                     on_click=goto_prev,
-                    icon_size=20
+                    icon_size=20,
+                    tooltip="Día anterior"
                 ),
                 ft.TextButton(
                     content=ft.Row([
-                        ft.Icon(ft.Icons.CALENDAR_TODAY, size=16),
-                        ft.Text("Seleccionar fecha", size=14),
-                    ]),
-                    on_click=show_date_picker
+                        ft.Icon(ft.Icons.CALENDAR_TODAY, size=18),
+                        ft.Text("Seleccionar fecha", size=14, weight=ft.FontWeight.W_500),
+                    ], tight=True),
+                    on_click=show_date_picker,
+                    style=ft.ButtonStyle(
+                        color=ft.Colors.PRIMARY,
+                        padding=ft.padding.symmetric(horizontal=16, vertical=8)
+                    )
                 ),
                 ft.IconButton(
                     icon=ft.Icons.CHEVRON_RIGHT,
                     on_click=goto_next,
-                    icon_size=20
+                    icon_size=20,
+                    tooltip="Siguiente día"
                 ),
                 ft.IconButton(
                     icon=ft.Icons.TODAY,
@@ -682,10 +695,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     on_click=goto_today,
                     icon_size=20
                 ),
-            ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
-            padding=10,
+            ], 
+            alignment=ft.MainAxisAlignment.SPACE_AROUND,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            padding=12,
         ),
-        visible=False
+        visible=False,
+        margin=ft.margin.only(bottom=8)
     )
 
     # GRUPOS DE CONTROLES
@@ -753,6 +770,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
         scroll=ft.ScrollMode.ADAPTIVE,
         spacing=12,
     )
+
+    # CONFIGURACIÓN INICIAL DEL FAB
+    page.floating_action_button = fab_filter
+    page.floating_action_button_location = ft.FloatingActionButtonLocation.CENTER_DOCKED
 
     page.add(ui)
     render()
