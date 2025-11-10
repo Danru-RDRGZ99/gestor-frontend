@@ -389,10 +389,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
             page.floating_action_button = None # Quitar FAB
             fab_filter.visible = False
         
+        # --- ¡INICIO DE LA CORRECCIÓN! ---
         if filter_group.page: filter_group.update()
-        if page.floating_action_button:
-            page.floating_action_button.update()
         
+        # En lugar de actualizar el FAB, actualizamos la PÁGINA
+        # para registrar el cambio de (añadir/quitar) el FAB.
+        if page: # 'page' siempre existe en este contexto
+            page.update()
+        # --- ¡FIN DE LA CORRECCIÓN! ---
+
         # 5. Deshabilitar el grid (mostrará "cargando") y llamar a render_grid
         grid.disabled = True
         grid.controls.clear()
@@ -400,8 +405,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         render_grid() # Esta función actualiza el grid al terminar
 
     # --- Manejadores de Eventos ---
-    
-    # --- ¡INICIO DE LA CORRECCIÓN! ---
     def on_change_plantel(e: ft.ControlEvent):
         pid_str = e.control.value
         pid = int(pid_str) if pid_str and pid_str.isdigit() else None
@@ -429,7 +432,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             # UX: Si estamos en móvil, cerramos el sheet al elegir lab
             if state["is_mobile"]: 
                 close_filters(None)
-    # --- ¡FIN DE LA CORRECCIÓN! ---
 
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = on_change_lab
