@@ -225,7 +225,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         is_mobile_view = state["is_mobile"]
         btn_width = None if is_mobile_view else 220
-        btn_expand = True if is_mobile_view else False
+        
+        # --- ¡INICIO DE LA CORRECCIÓN DE ALINEACIÓN 1! ---
+        # Los botones ya no se expanden en móvil.
+        # Dejamos que el contenedor 'tiles_container' los centre.
+        btn_expand = False
+        # --- ¡FIN DE LA CORRECCIÓN DE ALINEACIÓN 1! ---
 
         reservas_map = {}
         for r in day_reserveds:
@@ -261,10 +266,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 label = f"Reservado por {nombre}"
 
                 if can_manage and state["confirm_for"] == rid:
+                    # En móvil, btn_expand es False, así que el Row se encogerá.
+                    # Hacemos que el botón de Danger se expanda para llenar el espacio.
                     tiles.append(ft.Row([
                         Danger("Confirmar", 
                                on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, 
-                               width=None if is_mobile_view else 120, expand=btn_expand, height=44),
+                               width=None if is_mobile_view else 120, 
+                               expand=is_mobile_view, # <-- Que este sí se expanda
+                               height=44),
                         Ghost("Volver", 
                               on_click=lambda e: (state.update({"confirm_for": None}), render()), 
                               width=72, height=44),
@@ -291,21 +300,26 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", 
                                    disabled=True, width=btn_width, expand=btn_expand, height=50));
 
-        # --- CORRECCIÓN DE SCROLL ANIDADO ---
+        # --- ¡INICIO DE LA CORRECCIÓN DE ALINEACIÓN 2! ---
         if is_mobile_view:
             # En móvil: Columna normal. El 'grid' padre hace el scroll.
-            tiles_container = ft.Column(tiles, spacing=8)
+            # Y centramos los botones.
+            tiles_container = ft.Column(
+                tiles, 
+                spacing=8, 
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER # <-- CENTRAR BOTONES
+            )
         else:
             # En web: Fila con scroll horizontal.
             tiles_container = ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False, spacing=8)
             
-        # --- INICIO DE LA CORRECCIÓN DE ALINEACIÓN ---
+        # Centramos el Título y el Contenedor de botones
         day_column = ft.Column(
             [title, tiles_container], 
             spacing=10,
-            horizontal_alignment=ft.CrossAxisAlignment.START # <-- AGREGADO
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER # <-- CENTRAR TÍTULO Y CONTENEDOR
         )
-        # --- FIN DE LA CORRECCIÓN DE ALINEACIÓN ---
+        # --- ¡FIN DE LA CORRECCIÓN DE ALINEACIÓN 2! ---
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         return ft.Container(content=Card(day_column, padding=card_padding))
