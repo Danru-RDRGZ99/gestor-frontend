@@ -862,7 +862,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             return ft.Row(
                 [
                     ft.FilledButton(
-                        "Mostrar Filtros",
+                        "Filtros",
                         # --- ¡CORRECCIÓN 2 AQUÍ! ---
                         icon=ft.Icons.FILTER_LIST,
                         on_click=open_filter_sheet,
