@@ -6,7 +6,7 @@ from datetime import datetime, time, timedelta
 import traceback
 
 from ui.components.cards import Card
-from ui.components.buttons import Primary, Ghost, Tonal, Danger
+from ui.components.buttons import Primary, Ghost, Tonal, Danger, Icon
 from ui.components.inputs import TextField
 
 CLASS_START = time(7, 0)
@@ -18,6 +18,32 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     user_session = page.session.get("user_session") or {}
     user_data = user_session
     is_admin = user_data.get("rol") == "admin"
+
+    MOBILE_BREAKPOINT = 768
+
+    def get_is_mobile():
+        return page.width is not None and page.width <= MOBILE_BREAKPOINT
+
+    state = {
+        "filter_plantel_id": None,
+        "filter_lab_id": None,
+        "filter_estado": "",
+        "filter_tipo": "",
+        "active_tab": 0,
+        "solicitar_recurso_id": None,
+        "editing_recurso_id": None,
+        "is_mobile": get_is_mobile(),
+        "show_filters": False,  # Nuevo estado para mostrar/ocultar filtros en móvil
+    }
+
+    def update_mobile_state():
+        new_is_mobile = get_is_mobile()
+        if new_is_mobile != state["is_mobile"]:
+            state["is_mobile"] = new_is_mobile
+            state["show_filters"] = False
+            print(f"INFO: Cambiando a layout {'MÓVIL' if new_is_mobile else 'WEB'}")
+        else:
+            state["is_mobile"] = new_is_mobile
 
     def get_palette():
         dark = page.theme_mode == ft.ThemeMode.DARK
@@ -31,37 +57,27 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     PAL = get_palette()
 
-    def detect_mobile() -> bool:
-        width = getattr(page, "window_width", None)
-        platform = getattr(page, "platform", None)
-        is_mobile_platform = False
-        try:
-            is_mobile_platform = platform and getattr(platform, "name", "").lower() in ("android", "ios")
-        except Exception:
-            is_mobile_platform = False
-        if width is None:
-            return is_mobile_platform
-        return (width < 700) or is_mobile_platform
-
-    state = {
-        "filter_plantel_id": None,
-        "filter_lab_id": None,
-        "filter_estado": "",
-        "filter_tipo": "",
-        "active_tab": 0,
-        "solicitar_recurso_id": None,
-        "editing_recurso_id": None,
-        "is_mobile": detect_mobile(),
-    }
-
     small_style = {
         "content_padding": ft.padding.symmetric(vertical=6, horizontal=10),
         "label_style": ft.TextStyle(size=13),
         "text_style": ft.TextStyle(size=14),
     }
 
-    dd_plantel_filter = ft.Dropdown(label="Plantel", options=[ft.dropdown.Option("", "Todos")], width=220, **small_style)
-    dd_lab_filter = ft.Dropdown(label="Laboratorio", options=[ft.dropdown.Option("", "Todos")], width=220, **small_style)
+    # CONTROLES DE FILTRO MEJORADOS
+    dd_plantel_filter = ft.Dropdown(
+        label="Plantel", 
+        options=[ft.dropdown.Option("", "Todos")], 
+        expand=True,
+        filled=True,
+        **small_style
+    )
+    dd_lab_filter = ft.Dropdown(
+        label="Laboratorio", 
+        options=[ft.dropdown.Option("", "Todos")], 
+        expand=True,
+        filled=True,
+        **small_style
+    )
     dd_estado_filter = ft.Dropdown(
         label="Disponibilidad",
         options=[
@@ -70,21 +86,29 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.dropdown.Option("prestado", "Prestado"),
             ft.dropdown.Option("mantenimiento", "Mantenimiento"),
         ],
-        width=200,
+        expand=True,
+        filled=True,
         **small_style
     )
-    dd_tipo_filter = ft.Dropdown(label="Tipo", options=[ft.dropdown.Option("", "Todos")], width=200, **small_style)
+    dd_tipo_filter = ft.Dropdown(
+        label="Tipo", 
+        options=[ft.dropdown.Option("", "Todos")], 
+        expand=True,
+        filled=True,
+        **small_style
+    )
 
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     
     error_display = ft.Text("", color=PAL["error_text"])
 
-    # --- Los 'caches' se definen vacíos y se llenan asíncronamente ---
+    # Caches de datos
     planteles_cache = []
     labs_cache = []
     tipos_cache = []
     
+    # Controles del formulario de administración
     tf_recurso_tipo = TextField("Tipo de Recurso (ej: Cable HDMI, Proyector)")
     tf_recurso_tipo.col = {"sm": 12, "md": 4}
     tf_recurso_detalles = TextField("Detalles/Specs (opcional)")
@@ -97,12 +121,19 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.dropdown.Option("mantenimiento", "Mantenimiento"),
         ],
         value="disponible",
+        expand=True,
+        filled=True,
     )
     dd_recurso_estado_admin.col = {"sm": 12, "md": 4}
 
-    lab_options_admin = [] # Se llena en la carga asíncrona
+    lab_options_admin = []
 
-    dd_recurso_lab_admin = ft.Dropdown(label="Laboratorio de Origen", options=lab_options_admin)
+    dd_recurso_lab_admin = ft.Dropdown(
+        label="Laboratorio de Origen", 
+        options=lab_options_admin,
+        expand=True,
+        filled=True,
+    )
     dd_recurso_lab_admin.col = {"sm": 12, "md": 9}
 
     btn_recurso_save = Primary("Agregar Recurso", on_click=lambda e: save_recurso())
@@ -124,6 +155,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         vertical_alignment=ft.CrossAxisAlignment.END,
         spacing=10,
     )
+
+    # FUNCIÓN PARA MOSTRAR/OCULTAR FILTROS EN MÓVIL
+    def toggle_filters(e):
+        state["show_filters"] = not state["show_filters"]
+        render()
 
     def render_recursos():
         recursos_list_display.controls.clear()
@@ -287,6 +323,37 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     dd_lab_filter.on_change = on_lab_filter_change
     dd_estado_filter.on_change = on_lab_filter_change
     dd_tipo_filter.on_change = on_lab_filter_change
+
+    # BOTÓN PARA TOGGLE DE FILTROS EN MÓVIL
+    toggle_filters_button = ft.FilledButton(
+        icon=ft.Icons.KEYBOARD_ARROW_RIGHT,
+        text="Filtrar recursos",
+        on_click=toggle_filters,
+        visible=False,
+        expand=True,
+    )
+
+    # GRUPOS DE CONTROLES DE FILTRO
+    # Filtros para móvil (expandibles)
+    filter_group_mobile = ft.Column([
+        ft.Text("Filtrar por:", size=16, weight=ft.FontWeight.BOLD),
+        dd_plantel_filter,
+        dd_lab_filter,
+        dd_estado_filter,
+        dd_tipo_filter,
+    ], spacing=12, visible=False)
+    
+    # Filtros para escritorio (siempre visibles)
+    filter_group_desktop = ft.ResponsiveRow(
+        [
+            ft.Container(dd_plantel_filter, col={"sm": 12, "md": 3}),
+            ft.Container(dd_lab_filter, col={"sm": 12, "md": 3}),
+            ft.Container(dd_estado_filter, col={"sm": 12, "md": 3}),
+            ft.Container(dd_tipo_filter, col={"sm": 12, "md": 3}),
+        ],
+        spacing=10,
+        visible=not state["is_mobile"],
+    )
 
     def update_loan_status(prestamo_id: int, new_status: str):
         result = api.update_prestamo_estado(prestamo_id, new_status)
@@ -671,7 +738,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     slider_horas,
                     ft.Row(
                         [ft.TextButton("Cancelar", on_click=close_solicitud_sheet), ft.FilledButton("Enviar Solicitud", on_click=crear_solicitud)],
-                        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN DEL CÓDIGO INCOMPLETO! ---
                         alignment=ft.MainAxisAlignment.END,
                     ),
                 ],
@@ -683,42 +749,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     )
     if bs_solicitud not in page.overlay:
         page.overlay.append(bs_solicitud)
-
-    def close_filter_sheet(e):
-        bs_filtros.open = False
-        if bs_filtros.page:
-            bs_filtros.update()
-
-    bs_filtros = ft.BottomSheet(
-        ft.Container(
-            ft.Column(
-                [
-                    ft.Row(
-                        [
-                            ft.Text("Filtros", size=18, weight=ft.FontWeight.BOLD),
-                            ft.IconButton(icon=ft.Icons.CLOSE, on_click=close_filter_sheet),
-                        ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    ),
-                    dd_plantel_filter,
-                    dd_lab_filter,
-                    dd_estado_filter,
-                    dd_tipo_filter,
-                ],
-                tight=True,
-                spacing=8,
-            ),
-            padding=ft.padding.only(top=10, left=20, right=20, bottom=30),
-        ),
-        on_dismiss=close_filter_sheet,
-    )
-    if bs_filtros not in page.overlay:
-        page.overlay.append(bs_filtros)
-
-    def open_filter_sheet(e):
-        bs_filtros.open = True
-        if bs_filtros.page:
-            bs_filtros.update()
 
     def format_iso_date(date_str: str | None) -> str:
         if not date_str:
@@ -774,30 +804,41 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         elif idx == 2 and is_admin:
             render_admin_recursos()
 
-    def apply_filter_styles():
-        if state["is_mobile"]:
-            for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
-                dd.width = None
-                dd.expand = True
-        else:
-            dd_plantel_filter.width, dd_lab_filter.width, dd_estado_filter.width, dd_tipo_filter.width = 220, 220, 200, 200
-            for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
-                dd.expand = False
-        for dd in (dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter):
-            if dd.page:
-                dd.update()
+    def render():
+        update_mobile_state()
 
-    # --- MODIFICACIÓN 1: El control de filtros ya no muestra nada en móvil ---
-    def filtros_control():
+        # Configurar controles según el modo
         if state["is_mobile"]:
-            # Ya no creamos el botón aquí, solo un contenedor vacío
-            return ft.Container()
+            filter_group_mobile.visible = state["show_filters"]
+            toggle_filters_button.visible = True
+            filter_group_desktop.visible = False
+            
+            # Configurar el botón de toggle
+            toggle_filters_button.icon = ft.Icons.KEYBOARD_ARROW_DOWN if state["show_filters"] else ft.Icons.KEYBOARD_ARROW_RIGHT
+            toggle_filters_button.text = "Ocultar filtros" if state["show_filters"] else "Filtrar recursos"
+            
         else:
-            # El modo escritorio sigue igual
-            content = ft.Row([dd_plantel_filter, dd_lab_filter, dd_estado_filter, dd_tipo_filter], wrap=True, spacing=12)
-            return Card(ft.Container(content), padding=12)
-    # --- FIN MODIFICACIÓN 1 ---
+            filter_group_mobile.visible = False
+            toggle_filters_button.visible = False
+            filter_group_desktop.visible = True
 
+        # Actualizar controles
+        if filter_group_mobile.page:
+            filter_group_mobile.update()
+        if toggle_filters_button.page:
+            toggle_filters_button.update()
+        if filter_group_desktop.page:
+            filter_group_desktop.update()
+
+        # Renderizar contenido según la pestaña activa
+        if state["active_tab"] == 0:
+            render_recursos()
+        elif state["active_tab"] == 1:
+            render_solicitudes()
+        elif state["active_tab"] == 2 and is_admin:
+            render_admin_recursos()
+
+    # Tabs
     tab_disponibles = ft.Tab(
         text="Solicitar Recursos",
         icon=ft.Icons.CHECK_CIRCLE_OUTLINE,
@@ -837,79 +878,58 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         tabs=tabs_list, 
         expand=1
     )
-    
-    desktop_tabs = ft.Tabs(
-        selected_index=state["active_tab"], 
-        on_change=on_tabs_change, 
-        tabs=tabs_list, 
-        expand=1
+
+    # HEADER CON FILTROS
+    header_controls_container = ft.Column(
+        [toggle_filters_button, filter_group_mobile, filter_group_desktop], 
+        spacing=8
     )
 
-    # --- MODIFICACIÓN 2: El layout móvil ahora usa un Stack ---
+    # LAYOUT MÓVIL
     def mobile_layout():
-        
-        # El contenido principal (con las pestañas)
-        main_column = ft.Column(
+        return ft.Column(
             controls=[
+                ft.Text("Préstamos de Recursos", 
+                       size=20, 
+                       weight=ft.FontWeight.BOLD,
+                       text_align=ft.TextAlign.CENTER),
+                Card(header_controls_container, padding=12),
                 error_display,
-                filtros_control(), # <-- Esto ahora es un Container() vacío
-                tabs,
+                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+                ft.Container(
+                    content=tabs, 
+                    expand=True, 
+                    padding=ft.padding.symmetric(horizontal=8, vertical=8)
+                ),
             ],
             expand=True,
+            scroll=ft.ScrollMode.ADAPTIVE,
             spacing=12,
         )
 
-        # El nuevo Botón de Acción Flotante (FAB)
-        fab = ft.FloatingActionButton(
-            icon=ft.Icons.FILTER_LIST,
-            tooltip="Filtros",
-            on_click=open_filter_sheet,
-            right=10,  # Posición: 10px desde la derecha
-            bottom=10, # Posición: 10px desde el fondo
-        )
-
-        return ft.SafeArea(
-            ft.Container(
-                content=ft.Stack(  # <-- Usamos Stack para superponer
-                    controls=[
-                        main_column, # Capa 1: El contenido
-                        fab,         # Capa 2: El botón flotante
-                    ],
-                    expand=True
-                ),
-                padding=10, 
-                expand=True
-            )
-        )
-    # --- FIN MODIFICACIÓN 2 ---
-
+    # LAYOUT ESCRITORIO
     def desktop_layout():
         return ft.Column(
             [
                 ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
                 error_display,
-                filtros_control(), # <-- Esto sigue mostrando la Card en escritorio
-                desktop_tabs,
+                Card(header_controls_container, padding=12),
+                tabs,
             ],
             expand=True,
             spacing=18,
         )
 
-    def _on_resize(e):
-        new_mobile = detect_mobile()
-        
-        if new_mobile != state["is_mobile"]:
-            state["is_mobile"] = new_mobile
-            apply_filter_styles()
-            
-            if page:
-                page.update()
+    def handle_page_resize(e):
+        current_is_mobile = state["is_mobile"]
+        new_is_mobile = get_is_mobile()
+        if current_is_mobile != new_is_mobile:
+            state["show_filters"] = False
+            render()
 
-    page.on_resize = _on_resize
-    apply_filter_styles()
+    page.on_resize = handle_page_resize
 
-    # --- MODIFICACIÓN 3: Carga asíncrona de datos ---
-    # Esta es la nueva función que carga los datos en segundo plano
+    # Carga inicial de datos
     def load_initial_data(e=None):
         nonlocal planteles_cache, labs_cache, tipos_cache, lab_options_admin
         
@@ -949,7 +969,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                         labs_grouped[pid] = []
                     labs_grouped[pid].append(lab)
 
-            lab_options_admin.clear() # Limpiamos por si acaso
+            lab_options_admin.clear()
             for pid, pname in plantel_map_for_admin.items():
                 lab_options_admin.append(ft.dropdown.Option(key=None, text=pname, disabled=True))
                 if pid in labs_grouped:
@@ -963,7 +983,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 dd_recurso_lab_admin.update()
 
             # Cargar la primera vista de recursos
-            render_recursos()
+            render()
 
         except Exception as e:
             print(f"CRITICAL PrestamosView (async): {e}")
@@ -972,9 +992,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             if error_display.page:
                 error_display.update()
 
-    # Le decimos a la página que ejecute la carga de datos en un hilo separado
     page.run_thread(load_initial_data)
-    # --- FIN MODIFICACIÓN 3 ---
 
     if state["is_mobile"]:
         return mobile_layout()
