@@ -54,13 +54,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         bs_filters.open = False
         bs_filters.update()
 
-    # --- ¡INICIO CORRECCIÓN 1! ---
-    # Nueva función para el botón. Primero renderiza, luego cierra.
-    def apply_and_close_filters(e):
-        render() # ¡Aquí es donde se aplica el filtro!
-        close_filters(e) # Luego se cierra
-    # --- ¡FIN CORRECCIÓN 1! ---
-
     bs_filters = ft.BottomSheet(
         ft.Container(
             ft.Column(
@@ -68,8 +61,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     ft.Text("Filtrar Laboratorios", size=18, weight=ft.FontWeight.BOLD),
                     dd_plantel, # Reutilizamos el control
                     dd_lab,     # Reutilizamos el control
-                    # El botón ahora llama a la nueva función
-                    ft.FilledButton("Aplicar y cerrar", on_click=apply_and_close_filters) 
+                    ft.FilledButton("Aplicar y cerrar", on_click=close_filters)
                 ],
                 tight=True,
                 spacing=12,
@@ -235,8 +227,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
         is_mobile_view = state["is_mobile"]
         btn_width = None if is_mobile_view else 220
         
-        # Hacemos que los botones SÍ se expandan en móvil
-        btn_expand = True if is_mobile_view else False
+        # --- ¡BOTONES CENTRADOS! ---
+        # Dejamos que los botones NO se expandan en móvil
+        btn_expand = False
 
         reservas_map = {}
         for r in day_reserveds:
@@ -276,7 +269,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                         Danger("Confirmar", 
                                on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, 
                                width=None if is_mobile_view else 120, 
-                               expand=btn_expand, # Ahora es True en móvil
+                               expand=is_mobile_view, # Dejamos que este SÍ se expanda
                                height=44),
                         Ghost("Volver", 
                               on_click=lambda e: (state.update({"confirm_for": None}), render()), 
@@ -304,47 +297,39 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", 
                                    disabled=True, width=btn_width, expand=btn_expand, height=50));
 
+        # --- ¡CONTENIDO CENTRADO! ---
         if is_mobile_view:
-            # En móvil: Columna normal. El 'grid' padre hace el scroll.
-            # Quitamos el centrado de los botones.
+            # Centramos los botones en móvil
             tiles_container = ft.Column(
                 tiles, 
-                spacing=8
-                # horizontal_alignment=ft.CrossAxisAlignment.CENTER <-- QUITADO
+                spacing=8, 
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
             )
         else:
             # En web: Fila con scroll horizontal.
             tiles_container = ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False, spacing=8)
             
-        # Volvemos a alinear el Título a la izquierda (START)
+        # Centramos el Título y el Contenedor de botones
         day_column = ft.Column(
             [title, tiles_container], 
             spacing=10,
-            horizontal_alignment=ft.CrossAxisAlignment.START # <-- CAMBIADO A START
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         
-        # Esta parte (el contenedor de la tarjeta) la dejamos como estaba,
-        # para que la tarjeta ocupe todo el ancho
+        # --- ¡TARJETA CENTRADA! ---
         card_content = Card(day_column, padding=card_padding)
 
         if is_mobile_view:
-            # En móvil, envolvemos la tarjeta en un Row que se expande
-            # y que la tarjeta dentro también se expande.
+            # En móvil, envolvemos la tarjeta en un Row que la centrará
             return ft.Row(
-                controls=[
-                    ft.Container(
-                        content=card_content,
-                        expand=True, # La tarjeta ahora se expandirá dentro de este Container
-                        padding=ft.padding.symmetric(horizontal=10) # Añade un pequeño padding lateral
-                    )
-                ],
-                expand=True # El Row se expande para llenar el ancho
+                controls=[card_content],
+                alignment=ft.MainAxisAlignment.CENTER
             )
         else:
-            # En web, la devolvemos como estaba. También la expandimos para consistencia.
-            return ft.Container(content=card_content, expand=True)
+            # En web, la devolvemos como estaba
+            return ft.Container(content=card_content)
 
 
     # --- Renderizado del Grid (Contenedor de días) ---
@@ -444,8 +429,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         render_grid() # Esta función actualiza el grid al terminar
 
     # --- Manejadores de Eventos ---
-    
-    # --- ¡INICIO CORRECCIÓN 2! ---
     def on_change_plantel(e: ft.ControlEvent):
         pid_str = e.control.value
         pid = int(pid_str) if pid_str and pid_str.isdigit() else None
@@ -455,23 +438,24 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         state["confirm_for"] = None
 
+        # Si e.control.page es None, es la llamada de inicialización.
+        # No llames a update() ni a render().
         if e.control.page: 
             dd_lab.update() # Actualizar opciones de lab (para web/sheet)
-            
-            # Solo renderizar en vivo si estamos en ESCRITORIO
-            if not state["is_mobile"]:
-                render() 
+            render() # Renderizar el grid con el nuevo lab
         
+        # (El resto de la lógica de UX se movió a on_change_lab)
+
     def on_change_lab(e: ft.ControlEvent):
         state["confirm_for"] = None
         
+        # Si e.control.page es None, es la llamada de inicialización.
         if e.control.page:
-            # Solo renderizar en vivo si estamos en ESCRITORIO
-            if not state["is_mobile"]:
-                render()
+            render() # Llama al render principal
             
-            # Ya NO cerramos el sheet aquí
-    # --- ¡FIN CORRECCIÓN 2! ---
+            # UX: Si estamos en móvil, cerramos el sheet al elegir lab
+            if state["is_mobile"]: 
+                close_filters(None)
 
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = on_change_lab
