@@ -78,7 +78,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         bs_filters.update()
 
     fab_filter = ft.FloatingActionButton(
-        # --- ¡CORRECCIÓN! ft.icons -> ft.Icons ---
         icon=ft.Icons.FILTER_ALT_OUTLINED,
         tooltip="Filtrar laboratorios",
         on_click=open_filters,
@@ -312,7 +311,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         grid.controls.clear()
         if not dd_lab.value or not dd_lab.value.isdigit():
             info.value = "Selecciona un plantel y un laboratorio válido para ver la disponibilidad."; info.color = ft.Colors.AMBER_700
-            page.update(info, grid); return
+            if grid.page: page.update(info, grid) # Solo actualizar si ya está en la página
+            return
 
         lid = int(dd_lab.value)
         days_to_display = get_days_in_window(window["start"]) 
@@ -322,10 +322,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
         horario_result = api.get_horario_laboratorio(lid, days_to_display[0], days_to_display[-1])
         if not isinstance(horario_result, dict):
             info.value = f"Error al cargar horario: Respuesta inesperada"; info.color = ft.Colors.ERROR
-            page.update(info, grid); return
+            if grid.page: page.update(info, grid); return
         if "error" in horario_result:
             info.value = f"Error al cargar horario: {horario_result.get('error')}"; info.color = ft.Colors.ERROR
-            page.update(info, grid); return
+            if grid.page: page.update(info, grid); return
 
         # 2. Obtener Reservas
         api_result = api.get_reservas(lid, days_to_display[0], end_dt_range_api)
@@ -333,7 +333,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if isinstance(api_result, list): all_reservas = api_result
         else:
             info.value = f"Error al cargar reservas: {api_result.get('error', 'Error') if isinstance(api_result, dict) else 'Error'}"; info.color = ft.Colors.ERROR
-            page.update(info, grid); return
+            if grid.page: page.update(info, grid); return
 
         # 3. Mapear reservas por día
         reservations_by_day = {d: [] for d in days_to_display}
@@ -356,7 +356,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         # Ocultar "cargando" y mostrar el grid
         grid.disabled = False
-        grid.update()
+        if grid.page: grid.update()
 
     # --- Función Principal de Renderizado ---
     def render():
@@ -366,7 +366,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         # 2. Limpiar 'info' si no estamos confirmando
         if state["confirm_for"] is None:
             info.value = ""; info.color = None
-            info.update()
+            if info.page: info.update()
 
         # 3. Actualizar la etiqueta del header
         days = get_days_in_window(window["start"])
@@ -375,7 +375,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             head_label.value = f"{days[0].strftime('%d/%m')} · {lab_name}"
         else:
             head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
-        head_label.update()
+        if head_label.page: head_label.update()
         
         # 4. Ajustar layout de filtros (Móvil vs Web)
         if state["is_mobile"]:
@@ -389,39 +389,47 @@ def ReservasView(page: ft.Page, api: ApiClient):
             page.floating_action_button = None # Quitar FAB
             fab_filter.visible = False
         
-        filter_group.update()
+        if filter_group.page: filter_group.update()
         if page.floating_action_button:
             page.floating_action_button.update()
-
+        
         # 5. Deshabilitar el grid (mostrará "cargando") y llamar a render_grid
         grid.disabled = True
         grid.controls.clear()
-        grid.update()
+        if grid.page: grid.update()
         render_grid() # Esta función actualiza el grid al terminar
 
     # --- Manejadores de Eventos ---
+    
+    # --- ¡INICIO DE LA CORRECCIÓN! ---
     def on_change_plantel(e: ft.ControlEvent):
         pid_str = e.control.value
         pid = int(pid_str) if pid_str and pid_str.isdigit() else None
         filtered_labs = [l for l in labs_cache if l.get("plantel_id") == pid] if pid is not None else []
         dd_lab.options = [ft.dropdown.Option(str(l["id"]), l["nombre"]) for l in filtered_labs if l.get("id")]
         dd_lab.value = str(filtered_labs[0]["id"]) if filtered_labs else None
-        dd_lab.update()
         
         state["confirm_for"] = None
-        render() # Llama al render principal
+
+        # Si e.control.page es None, es la llamada de inicialización.
+        # No llames a update() ni a render().
+        if e.control.page: 
+            dd_lab.update() # Actualizar opciones de lab (para web/sheet)
+            render() # Renderizar el grid con el nuevo lab
         
-        # --- UX: Si estamos en móvil, no cerramos el sheet ---
-        # (El usuario debe poder elegir plantel Y lab antes de cerrar)
-        # if state["is_mobile"]: close_filters(None)
+        # (El resto de la lógica de UX se movió a on_change_lab)
 
     def on_change_lab(e: ft.ControlEvent):
         state["confirm_for"] = None
-        render() # Llama al render principal
         
-        # --- UX: Si estamos en móvil, cerramos el sheet al elegir lab ---
-        if state["is_mobile"]: 
-            close_filters(None)
+        # Si e.control.page es None, es la llamada de inicialización.
+        if e.control.page:
+            render() # Llama al render principal
+            
+            # UX: Si estamos en móvil, cerramos el sheet al elegir lab
+            if state["is_mobile"]: 
+                close_filters(None)
+    # --- ¡FIN DE LA CORRECCIÓN! ---
 
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = on_change_lab
@@ -431,8 +439,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
         first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
         if first_plantel_id_str:
             dd_plantel.value = first_plantel_id_str
-            # No llamamos a render() aquí, sino a la función que NO renderiza
-            # para evitar una carga doble
+            # Esta llamada ahora es SEGURA.
+            # Solo preparará los datos de dd_lab.value y dd_lab.options
+            # porque e.control.page será None.
             on_change_plantel(SimpleControlEvent(control=dd_plantel))
         else:
             info.value = "El primer plantel no tiene un ID válido."; info.color = ft.Colors.ERROR
