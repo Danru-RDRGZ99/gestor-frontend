@@ -1,4 +1,3 @@
-# Archivo: ui/views/reservas_view.py
 import flet as ft
 from datetime import datetime, date, time, timedelta
 from api_client import ApiClient
@@ -13,61 +12,35 @@ class SimpleControlEvent:
     control: ft.Control
 
 def ReservasView(page: ft.Page, api: ApiClient):
-    """
-    Vista para la gestión de reservas de laboratorios.
-    Utiliza el endpoint /laboratorios/{lab_id}/horario para obtener los slots.
-    """
-    # --- INICIO DE LA CORRECCIÓN 1 ---
     user_session = page.session.get("user_session") or {}
-    user_data = user_session # <-- ¡Esta es la corrección!
-    # --- FIN DE LA CORRECCIÓN 1 ---
+    user_data = user_session
+    
+    # --- MODIFICACIÓN 1: Detección de móvil dinámica ---
+    def detect_mobile() -> bool:
+        width = getattr(page, "window_width", None)
+        return (width is not None and width < 700) or getattr(page.platform, "name", "").lower() in ("android", "ios")
+
+    state = {
+        "confirm_for": None,
+        "is_mobile": detect_mobile()
+    }
+    # --- FIN MODIFICACIÓN 1 ---
 
     # --- Controles de Filtros ---
-    dd_plantel = ft.Dropdown(label="Plantel", width=260, options=[])
-    dd_lab = ft.Dropdown(label="Laboratorio", width=320, options=[])
+    dd_plantel = ft.Dropdown(label="Plantel", options=[])
+    dd_lab = ft.Dropdown(label="Laboratorio", options=[])
 
     # --- Estado y UI ---
     info = ft.Text("")
-    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    state = {"confirm_for": None}
+    # El grid se expandirá para llenar el espacio
+    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True) 
 
-    # --- Catálogos cacheados ---
+    # --- Catálogos cacheados (inicializados vacíos) ---
     planteles_cache = []
     labs_cache = []
     lab_map: dict[str, str] = {}
-    error_loading_data = None
-
-    try:
-        planteles_data = api.get_planteles()
-        labs_data = api.get_laboratorios()
-
-        if isinstance(planteles_data, list):
-            planteles_cache = planteles_data
-            dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
-        else:
-            error_detail = planteles_data.get("error", "Error") if isinstance(planteles_data, dict) else "Respuesta inesperada"
-            error_loading_data = f"Error al cargar planteles: {error_detail}"
-            print(f"ERROR ReservasView (Planteles): {error_loading_data}")
-
-        if isinstance(labs_data, list):
-            labs_cache = labs_data
-            lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
-        else:
-            error_detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inesperada"
-            if error_loading_data: error_loading_data += f"\nError al cargar laboratorios: {error_detail}"
-            else: error_loading_data = f"Error al cargar laboratorios: {error_detail}"
-            print(f"ERROR ReservasView (Labs): {error_loading_data}")
-
-    except Exception as e:
-        error_loading_data = f"Excepción al cargar datos iniciales: {e}"
-        print(f"CRITICAL ReservasView: {error_loading_data}"); traceback.print_exc()
-
-    if error_loading_data:
-        return ft.Column([
-            ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
-            ft.Text("Error al cargar datos necesarios:", color=ft.Colors.ERROR, weight=ft.FontWeight.BOLD),
-            ft.Text(error_loading_data, color=ft.Colors.ERROR)
-        ])
+    
+    # --- MODIFICACIÓN 2: Se ELIMINA el bloque try/except que cargaba datos aquí ---
 
     # --- Lógica del Calendario BASE ---
     def is_weekend(d: date) -> bool: return d.weekday() >= 5
@@ -111,7 +84,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
     # --- FIN Lógica Base ---
 
-
     # --- Acciones ---
     def do_create_reservation(lab_id: int, s: datetime, f: datetime):
         if user_data.get("rol") not in ["admin", "docente"]:
@@ -124,65 +96,55 @@ def ReservasView(page: ft.Page, api: ApiClient):
         grid.disabled = True
         page.update(info, grid)
 
-        # --- INICIO DE LA CORRECCIÓN 2 ---
-        # Empaquetamos los datos como espera api_client.create_reserva
         payload = {
             "laboratorio_id": lab_id,
-            "usuario_id": user_data.get("id"), # Obtenemos el ID del usuario de la sesión
-            "inicio": s.isoformat(), # Enviamos como string ISO
+            "usuario_id": user_data.get("id"), 
+            "inicio": s.isoformat(), 
             "fin": f.isoformat()
         }
         result = api.create_reserva(payload)
-        # --- FIN DE LA CORRECCIÓN 2 ---
 
         grid.disabled = False
         info.color = None
 
         if result and "error" not in result:
             info.value = "Reserva creada con éxito."
-            info.color = ft.Colors.GREEN_500 # Color de éxito
+            info.color = ft.Colors.GREEN_500
             state["confirm_for"] = None
-            render() # Recargamos
+            render() 
         else:
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
             page.update(info, grid)
 
-    # --- ¡INICIO DE LA CORRECCIÓN FINAL! ---
     def do_cancel_reservation(rid: int):
         info.value = "Cancelando reserva, por favor espera..."
         info.color = ft.Colors.AMBER_700
         grid.disabled = True
         page.update(info, grid)
 
-        # El método en api_client se llama 'delete_reserva'
-        # (pero en realidad llama a PUT /reservas/{id}/cancelar)
         result = api.delete_reserva(rid)
 
         grid.disabled = False
         info.color = None
         state["confirm_for"] = None
 
-        # Si la respuesta NO tiene un 'error', entonces fue un éxito.
-        # El API devuelve el objeto de la reserva cancelada (con código 200).
         if result and "error" not in result:
             info.value = "Reserva cancelada exitosamente."
-            info.color = ft.Colors.GREEN_500 # Color de éxito
-            render() # Recargamos el calendario
+            info.color = ft.Colors.GREEN_500 
+            render() 
         else:
-            # Si SÍ tiene un 'error', o 'result' está vacío
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
             page.update(info, grid)
-    # --- ¡FIN DE LA CORRECCIÓN FINAL! ---
 
     def ask_inline_cancel(rid: int, etiqueta: str):
         state["confirm_for"] = rid
         info.value = f"Confirmar cancelación para {etiqueta}"
         info.color = ft.Colors.AMBER_700
-        render() # Volvemos a renderizar para mostrar los botones de confirmación
+        render()
 
     # --- Renderizado del Calendario ---
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
@@ -194,15 +156,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
             try:
                 start_str = r.get('inicio')
                 if start_str:
-                    # 1. Parsear la fecha UTC (con 'Z') a un objeto 'aware'
                     dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
-                    # 2. Convertir de UTC a la zona horaria local del sistema
                     dt_aware_local = dt_aware_utc.astimezone(None)
-                    # 3. Hacerla 'naive' (sin tzinfo) para usarla como llave
                     dt_naive_local = dt_aware_local.replace(tzinfo=None)
-                    
                     reservas_map[dt_naive_local] = r
-                    
             except (ValueError, TypeError) as e:
                 print(f"Error parsing date for reservation {r.get('id')}: {e}")
 
@@ -210,16 +167,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
             try:
                 s_str = slot.get('inicio')
                 f_str = slot.get('fin')
-                
                 if not s_str or not f_str:
                     print(f"WARN: Skipping slot due to missing date: {slot}")
                     continue
                 
-                # Asumimos que el /horario devuelve timestamps "naive" (locales)
-                # Por lo tanto, NO reemplazamos 'Z'
                 s_dt = datetime.fromisoformat(str(s_str)).replace(tzinfo=None)
                 f_dt = datetime.fromisoformat(str(f_str)).replace(tzinfo=None)
-                
                 k_tipo = slot.get('tipo', 'no_habilitado')
                 
             except (ValueError, TypeError) as e:
@@ -227,7 +180,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 continue
 
             label = slot_label(s_dt, f_dt)
-            # Ahora s_dt (local naive) debería coincidir con las llaves (local naive) de reservas_map
             found_res_data = reservas_map.get(s_dt) 
 
             # --- CASO 1: Slot Reservado ---
@@ -247,7 +199,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 is_admin = (current_user_rol == "admin")
                 can_manage = is_owner or is_admin
                 
-                label = f"Reservado por {nombre}" # Etiqueta correcta
+                label = f"Reservado por {nombre}"
 
                 if can_manage and state["confirm_for"] == rid:
                     tiles.append(ft.Row([
@@ -277,7 +229,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
             else:
                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50));
 
-        day_column = ft.Column([title, ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False)], spacing=10)
+        # --- MODIFICACIÓN 3: Layout de tarjetas de día ---
+        # En móvil, los slots van en una Columna. En escritorio, en una Fila.
+        slot_container = ft.Column(tiles, spacing=10) if state["is_mobile"] else ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False)
+        day_column = ft.Column([title, slot_container], spacing=10)
+        # --- FIN MODIFICACIÓN 3 ---
+        
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         return ft.Container(content=Card(day_column, padding=card_padding))
 
@@ -285,17 +242,24 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def render_grid():
         grid.controls.clear()
         if not dd_lab.value or not dd_lab.value.isdigit():
-            info.value = "Selecciona un plantel y un laboratorio válido para ver la disponibilidad."
-            info.color = ft.Colors.AMBER_700
+            grid.controls.append(
+                ft.Row([ft.Text("Selecciona un plantel y laboratorio para ver la disponibilidad.")], 
+                       alignment=ft.MainAxisAlignment.CENTER)
+            )
             if grid.page: grid.update()
-            if info.page: info.update() # Asegúrate de actualizar info también
             return
+
+        # Ponemos el indicador de carga DENTRO del grid
+        grid.controls.append(
+            ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
+                   alignment=ft.MainAxisAlignment.CENTER, height=200)
+        )
+        if grid.page: grid.update()
 
         lid = int(dd_lab.value)
         days_to_display = five_weekdays_from(window["start"])
-        end_dt_range_api = days_to_display[-1] + timedelta(days=1) # El final es exclusivo
+        end_dt_range_api = days_to_display[-1] + timedelta(days=1)
 
-        # 1. Obtener Horario
         horario_result = api.get_horario_laboratorio(lid, days_to_display[0], days_to_display[-1])
         if isinstance(horario_result, dict) and "error" in horario_result:
             error_detail = horario_result.get("error", "Error desconocido")
@@ -312,7 +276,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if grid.page and info.page: info.update()
             return
 
-        # 2. Obtener Reservas
         api_result = api.get_reservas(lid, days_to_display[0], end_dt_range_api)
         all_reservas = []
         if isinstance(api_result, list):
@@ -325,35 +288,52 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if grid.page and info.page: info.update()
             return
 
-        # 3. Mapear reservas por día
         reservations_by_day = {d: [] for d in days_to_display}
         for r in all_reservas:
             try:
                 start_str = r.get('inicio')
                 if start_str:
-                    # Convertir la fecha UTC a local y luego a 'date' para la agrupación
                     dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
                     dt_aware_local = dt_aware_utc.astimezone(None)
-                    dkey = dt_aware_local.date() # Usar la fecha local
-                    
+                    dkey = dt_aware_local.date()
                     if dkey in reservations_by_day:
                         reservations_by_day[dkey].append(r)
             except (ValueError, TypeError) as e:
                 print(f"Error parsing date {r.get('inicio')} in render_grid: {e} for reserva {r.get('id')}")
 
-        # 4. Renderizar
+        # Limpiamos el indicador de carga
+        grid.controls.clear()
+        
+        # --- MODIFICACIÓN 4: Layout del grid ---
+        # En móvil, el grid es una Columna (un día sobre otro).
+        # En escritorio, es una Fila (un día al lado del otro).
+        grid_controls = []
         for d in days_to_display:
             slots_for_day = horario_result.get(d.isoformat(), [])
             reservations_for_day = reservations_by_day.get(d, [])
-            grid.controls.append(day_section(
+            grid_controls.append(day_section(
                 d, lid, slots_for_day, reservations_for_day
             ))
+        
+        if state["is_mobile"]:
+            # En móvil, los controles se añaden directamente al grid (que es una Columna)
+            grid.controls = grid_controls
+        else:
+            # En escritorio, los metemos en una Fila con scroll
+            grid.controls = [
+                ft.Row(
+                    controls=grid_controls,
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    expand=True,
+                    vertical_alignment=ft.CrossAxisAlignment.START
+                )
+            ]
+        # --- FIN MODIFICACIÓN 4 ---
 
         if grid.page: grid.update()
 
     def render():
         grid.disabled = False
-        # Limpiar info solo si no estamos en modo confirmación
         if state["confirm_for"] is None:
             info.value = ""
             info.color = None
@@ -379,61 +359,198 @@ def ReservasView(page: ft.Page, api: ApiClient):
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = lambda e: (state.update({"confirm_for": None}), render())
 
-    # --- Inicialización ---
-    if planteles_cache:
-        first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
-        if first_plantel_id_str:
-            dd_plantel.value = first_plantel_id_str
-            on_change_plantel(SimpleControlEvent(control=dd_plantel)) # Llama para cargar labs y renderizar
-        else:
-            info.value = "El primer plantel no tiene un ID válido."
-            info.color = ft.Colors.ERROR
-            days = five_weekdays_from(window["start"])
-            head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · (Sin Laboratorio)"
-            if info.page: info.update()
-            if head_label.page: head_label.update()
+    # --- MODIFICACIÓN 5: BottomSheet para filtros móviles ---
+    def close_filter_sheet(e):
+        bs_filtros.open = False
+        if bs_filtros.page: bs_filtros.update()
 
-    else:
-        info.value = "No hay planteles configurados."
-        info.color = ft.Colors.ERROR
-        days = five_weekdays_from(window["start"])
-        head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · (Sin Laboratorio)"
-        if info.page: info.update()
-        if head_label.page: head_label.update()
+    bs_filtros = ft.BottomSheet(
+        ft.Container(
+            ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Text("Filtros", size=18, weight=ft.FontWeight.BOLD),
+                            ft.IconButton(icon=ft.Icons.CLOSE, on_click=close_filter_sheet),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    ),
+                    dd_plantel,
+                    dd_lab,
+                ],
+                tight=True,
+                spacing=8,
+            ),
+            padding=ft.padding.only(top=10, left=20, right=20, bottom=30),
+        ),
+        on_dismiss=close_filter_sheet,
+    )
+    if bs_filtros not in page.overlay:
+        page.overlay.append(bs_filtros)
 
+    def open_filter_sheet(e):
+        bs_filtros.open = True
+        if bs_filtros.page: bs_filtros.update()
+    # --- FIN MODIFICACIÓN 5 ---
+
+    # --- MODIFICACIÓN 6: Lógica de estilos y resize ---
+    def apply_filter_styles():
+        is_mobile_now = state["is_mobile"]
+        dd_plantel.width = None if is_mobile_now else 260
+        dd_plantel.expand = is_mobile_now
+        dd_lab.width = None if is_mobile_now else 320
+        dd_lab.expand = is_mobile_now
+        
+        # Ajustamos el grid
+        grid.scroll = ft.ScrollMode.ADAPTIVE # Siempre vertical
+        
+        if dd_plantel.page: dd_plantel.update()
+        if dd_lab.page: dd_lab.update()
+        if grid.page: grid.update()
+
+    def _on_resize(e):
+        new_mobile = detect_mobile()
+        if new_mobile != state["is_mobile"]:
+            state["is_mobile"] = new_mobile
+            apply_filter_styles()
+            render() # Volver a renderizar todo
+            if page: page.update()
+
+    page.on_resize = _on_resize
+    # --- FIN MODIFICACIÓN 6 ---
 
     # --- Layout Final ---
-    header_controls = ft.Row(
-        [
+    def build_header_controls():
+        # Construye la barra de cabecera de forma dinámica
+        common_controls = [
             Icon(ft.Icons.CHEVRON_LEFT, "Semana anterior", on_click=lambda e: goto_prev()),
             head_label,
             Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente semana", on_click=lambda e: goto_next()),
             ft.Container(expand=True),
-            dd_plantel,
-            dd_lab
-        ],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER
-    )
+        ]
+        
+        if not state["is_mobile"]:
+            # En escritorio, añadimos los dropdowns aquí
+            common_controls.extend([dd_plantel, dd_lab])
+
+        return ft.Row(
+            common_controls,
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN, 
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            wrap=True, # Permitir que se ajuste si la pantalla es pequeña
+            spacing=10
+        )
     
-    # ========================================================
-    # --- INICIO CORRECCIÓN ft.Chip ---
     legend = ft.Row([
         ft.Chip(label=ft.Text("Disponible"), leading=ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE)),
-        ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), # <-- CORREGIDO
+        ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), 
         ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE))
-    ], spacing=8)
-    # --- FIN CORRECCIÓN ft.Chip ---
-    # ========================================================
+    ], spacing=8, wrap=True) # Permitir que se ajuste
 
-    return ft.Column([
-        ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
-        Card(header_controls, padding=14),
-        legend,
-        info,
-        ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-        ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
-    ],
-    expand=True,
-    scroll=None,
-    spacing=15
-    )
+    # --- MODIFICACIÓN 7: Layout dinámico (Column vs Stack) ---
+    def mobile_layout():
+        main_column = ft.Column(
+            [
+                ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
+                Card(build_header_controls(), padding=14),
+                legend,
+                info,
+                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+                ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
+            ],
+            expand=True,
+            scroll=None, # El scroll lo maneja el 'grid' interno
+            spacing=15
+        )
+        
+        fab = ft.FloatingActionButton(
+            icon=ft.Icons.FILTER_LIST,
+            tooltip="Filtros",
+            on_click=open_filter_sheet,
+            right=10,
+            bottom=10,
+        )
+        
+        return ft.Stack([main_column, fab], expand=True)
+
+    def desktop_layout():
+        return ft.Column([
+            ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
+            Card(build_header_controls(), padding=14),
+            legend,
+            info,
+            ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+            ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
+        ],
+        expand=True,
+        scroll=None,
+        spacing=15
+        )
+    # --- FIN MODIFICACIÓN 7 ---
+
+    # --- MODIFICACIÓN 8: Carga asíncrona de datos ---
+    def load_initial_data(e=None):
+        nonlocal planteles_cache, labs_cache, lab_map
+        
+        try:
+            planteles_data_async = api.get_planteles()
+            labs_data_async = api.get_laboratorios()
+            
+            error_msg = ""
+            
+            if isinstance(planteles_data_async, list):
+                planteles_cache = planteles_data_async
+                dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
+            else:
+                error_detail = planteles_data_async.get("error", "Error") if isinstance(planteles_data_async, dict) else "Respuesta inesperada"
+                error_msg += f"Error al cargar planteles: {error_detail}\n"
+                print(f"ERROR ReservasView (Planteles): {error_msg}")
+
+            if isinstance(labs_data_async, list):
+                labs_cache = labs_data_async
+                lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
+            else:
+                error_detail = labs_data_async.get("error", "Error") if isinstance(labs_data_async, dict) else "Respuesta inesperada"
+                error_msg += f"Error al cargar laboratorios: {error_detail}"
+                print(f"ERROR ReservasView (Labs): {error_msg}")
+
+            if error_msg:
+                raise Exception(error_msg)
+
+            # Lógica de inicialización (del final del script original)
+            if planteles_cache:
+                first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
+                if first_plantel_id_str:
+                    dd_plantel.value = first_plantel_id_str
+                    if dd_plantel.page: dd_plantel.update()
+                    # Simulamos el evento para cargar los labs y renderizar
+                    on_change_plantel(SimpleControlEvent(control=dd_plantel)) 
+                else:
+                    info.value = "El primer plantel no tiene un ID válido."
+                    info.color = ft.Colors.ERROR
+                    if info.page: info.update()
+            else:
+                info.value = "No hay planteles configurados."
+                info.color = ft.Colors.ERROR
+                if info.page: info.update()
+                
+            # Actualizamos los dropdowns en la UI
+            if dd_plantel.page:
+                dd_plantel.update()
+
+        except Exception as e:
+            print(f"CRITICAL ReservasView (async): {e}"); traceback.print_exc()
+            info.value = f"Error crítico al cargar datos: {e}"
+            info.color = ft.Colors.ERROR
+            if info.page: info.update()
+
+    # --- FIN MODIFICACIÓN 8 ---
+
+    # Aplicamos estilos y cargamos datos
+    apply_filter_styles()
+    page.run_thread(load_initial_data) # <-- Ejecutamos la carga
+
+    if state["is_mobile"]:
+        return mobile_layout()
+    else:
+        return desktop_layout()
