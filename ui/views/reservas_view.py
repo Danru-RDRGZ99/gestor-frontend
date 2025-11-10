@@ -1,4 +1,4 @@
-# VERSIÓN CORREGIDA - ERROR on_resize SOLUCIONADO
+# VERSIÓN CORREGIDA - FILTROS VISIBLES EN MÓVIL
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -21,7 +21,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     user_session = page.session.get("user_session") or {}
     user_data = user_session
 
-    MOBILE_BREAKPOINT = 768  # Aumentado para mejor experiencia en tablets pequeñas
+    MOBILE_BREAKPOINT = 768
 
     def get_is_mobile():
         return page.width is not None and page.width <= MOBILE_BREAKPOINT
@@ -579,10 +579,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if head_label.page:
             head_label.update()
 
-        # CORRECCIÓN: CONFIGURACIÓN MEJORADA DEL FAB
+        # CORRECCIÓN: MOSTRAR INFORMACIÓN DEL LABORATORIO ACTUAL EN MÓVIL
         if state["is_mobile"]:
             filter_group.visible = False
             mobile_date_selector.visible = True
+            current_lab_info.visible = True  # Mostrar info del lab actual
             # CONFIGURAR FAB CORRECTAMENTE
             page.floating_action_button = fab_filter
             page.floating_action_button_location = ft.FloatingActionButtonLocation.END_FLOAT
@@ -590,13 +591,38 @@ def ReservasView(page: ft.Page, api: ApiClient):
         else:
             filter_group.visible = True
             mobile_date_selector.visible = False
+            current_lab_info.visible = False
             page.floating_action_button = None
             fab_filter.visible = False
+
+        # Actualizar información del laboratorio actual
+        current_lab_name = lab_map.get(dd_lab.value, "No seleccionado")
+        current_plantel_name = ""
+        if dd_plantel.value:
+            for plantel in planteles_cache:
+                if str(plantel.get("id")) == dd_plantel.value:
+                    current_plantel_name = plantel.get("nombre", "")
+                    break
+        
+        current_lab_info.content = ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.SCHOOL, size=16, color=ft.Colors.PRIMARY),
+                ft.Text("Plantel:", size=14, weight=ft.FontWeight.W_500),
+                ft.Text(current_plantel_name, size=14, expand=True),
+            ]),
+            ft.Row([
+                ft.Icon(ft.Icons.SCIENCE, size=16, color=ft.Colors.PRIMARY),
+                ft.Text("Laboratorio:", size=14, weight=ft.FontWeight.W_500),
+                ft.Text(current_lab_name, size=14, expand=True),
+            ]),
+        ], spacing=6)
 
         if filter_group.page:
             filter_group.update()
         if mobile_date_selector.page:
             mobile_date_selector.update()
+        if current_lab_info.page:
+            current_lab_info.update()
 
         page.update()
 
@@ -703,13 +729,30 @@ def ReservasView(page: ft.Page, api: ApiClient):
         margin=ft.margin.only(bottom=8)
     )
 
+    # INFORMACIÓN DEL LABORATORIO ACTUAL (PARA MÓVIL)
+    current_lab_info = ft.Card(
+        ft.Container(
+            ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=ft.Colors.PRIMARY),
+                    ft.Text("Laboratorio actual:", size=14, weight=ft.FontWeight.BOLD),
+                ]),
+                ft.Container(height=4),
+                ft.Text("Selecciona un laboratorio usando el botón de filtro", size=12, color=ft.Colors.GREY_600),
+            ]),
+            padding=12,
+        ),
+        visible=False,
+        margin=ft.margin.only(bottom=8)
+    )
+
     # GRUPOS DE CONTROLES
     dd_plantel.expand = 1
     dd_lab.expand = 1
     filter_group = ft.Row([dd_plantel, dd_lab], spacing=10, visible=False)
 
     header_controls_container = ft.Column(
-        [nav_group, mobile_date_selector, filter_group], 
+        [nav_group, mobile_date_selector, current_lab_info, filter_group], 
         spacing=8
     )
 
