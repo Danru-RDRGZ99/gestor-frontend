@@ -227,9 +227,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         is_mobile_view = state["is_mobile"]
         btn_width = None if is_mobile_view else 220
-        
-        # Dejamos que los botones NO se expandan en móvil
-        btn_expand = False
 
         reservas_map = {}
         for r in day_reserveds:
