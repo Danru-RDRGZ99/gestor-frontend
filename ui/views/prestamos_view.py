@@ -926,11 +926,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         return ft.SafeArea(
             ft.Container(
                 content=ft.Column(
-                    controls=[
                         error_display,
                         filtros_control(),
                         tabs,
-                    ],
                     expand=True,
                     spacing=12,
                 ),
