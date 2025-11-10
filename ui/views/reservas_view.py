@@ -46,14 +46,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Estado y UI ---
     info = ft.Text("")
     
-    # --- ¡INICIO DE LA CORRECCIÓN DE TARJETA! ---
-    grid = ft.Column(
-        spacing=12, 
-        scroll=ft.ScrollMode.ADAPTIVE, 
-        expand=True,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER # <-- ¡AQUÍ!
-    )
-    # --- ¡FIN DE LA CORRECCIÓN DE TARJETA! ---
+    # --- ¡CORRECCIÓN! Simplificamos el grid. El centrado lo hará el hijo. ---
+    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
     # --- NUEVO: Definición del BottomSheet para filtros ---
     def close_filters(e):
@@ -322,7 +316,21 @@ def ReservasView(page: ft.Page, api: ApiClient):
         )
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
-        return ft.Container(content=Card(day_column, padding=card_padding))
+        
+        # --- ¡INICIO DE LA CORRECCIÓN DE CENTRADO! ---
+        # Creamos el contenido de la tarjeta
+        card_content = Card(day_column, padding=card_padding)
+
+        if is_mobile_view:
+            # En móvil, envolvemos la tarjeta en un Row que la centrará
+            return ft.Row(
+                controls=[card_content],
+                alignment=ft.MainAxisAlignment.CENTER
+            )
+        else:
+            # En web, la devolvemos como estaba
+            return ft.Container(content=card_content)
+        # --- ¡FIN DE LA CORRECCIÓN DE CENTRADO! ---
 
 
     # --- Renderizado del Grid (Contenedor de días) ---
