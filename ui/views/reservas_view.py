@@ -154,15 +154,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if state["is_mobile"]: return [cur]
         else: return five_weekdays_from(cur)
 
-    # --- ¡INICIO DE LA CORRECCIÓN! ---
-    def goto_next(e): # <-- AÑADIDO (e)
+    def goto_next(e): # <-- Corregido
         days = get_days_in_window(window["start"]) 
         last_day = days[-1]
         window["start"] = next_weekday(last_day) 
         state["confirm_for"] = None
         render()
 
-    def goto_prev(e): # <-- AÑADIDO (e)
+    def goto_prev(e): # <-- Corregido
         if state["is_mobile"]:
             window["start"] = next_weekday(window["start"], step=-1)
         else:
@@ -170,7 +169,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             window["start"] = prev_days[0]
         state["confirm_for"] = None
         render()
-    # --- ¡FIN DE LA CORRECCIÓN! ---
 
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
 
@@ -487,11 +485,17 @@ def ReservasView(page: ft.Page, api: ApiClient):
     )
     
     # 4. Leyenda
+    # --- ¡INICIO DE LA CORRECCIÓN DE LEYENDA! ---
     legend = ft.Row([
         ft.Chip(label=ft.Text("Disponible"), leading=ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE)),
         ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), 
         ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE))
-    ], spacing=8, wrap=True, alignment=ft.MainAxisAlignment.CENTER)
+    ], 
+    spacing=8, 
+    # Hacemos que sea deslizable horizontalmente en móvil
+    scroll=ft.ScrollMode.ADAPTIVE 
+    )
+    # --- ¡FIN DE LA CORRECCIÓN DE LEYENDA! ---
 
     # --- Función para manejar el resize ---
     # (Esto es crucial para que el layout cambie sin recargar)
