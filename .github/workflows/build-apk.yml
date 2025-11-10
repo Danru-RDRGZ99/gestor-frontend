@@ -1,4 +1,4 @@
-name: Construir Flet APK (Manual)
+name: Construir Flet APK (Manual Completo)
 
 on:
   push:
@@ -20,15 +20,16 @@ jobs:
       - name: Instalar Flet y dependencias
         run: |
           pip install flet
-          # Si tienes un requirements.txt, descomenta la siguiente línea
-          # pip install -r requirements.txt
+          # Esta línea es MUY importante que funcione
+          pip install -r requirements.txt
 
-      - name: Configurar Flutter SDK
-        # Esta es la acción oficial de Flet para SOLO instalar Flutter
-        uses: flet-dev/setup-flutter@v2
+      - name: Configurar Flutter SDK (con Subosito)
+        # Esta es la acción de la comunidad, es la más popular
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable' # Usamos el canal estable de Flutter
 
       - name: Aceptar licencias de Android
-        # A veces es necesario para la compilación de APK
         run: flutter doctor --android-licenses
 
       - name: Construir la APK
