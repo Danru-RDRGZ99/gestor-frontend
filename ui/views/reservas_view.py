@@ -46,10 +46,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Estado y UI ---
     info = ft.Text("")
     
-    # Simplificamos el grid. El centrado lo hará el hijo.
+    # Simplificamos el grid. El centrado lo hará el hijo (la tarjeta del día).
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
-    # --- NUEVO: Definición del BottomSheet para filtros ---
+    # --- LÓGICA DE FILTROS FLOTANTES ---
     def close_filters(e):
         bs_filters.open = False
         bs_filters.update()
@@ -74,7 +74,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # Añadimos el sheet al overlay de la página
     page.overlay.append(bs_filters)
 
-    # --- NUEVO: Definición del Botón Flotante (FAB) ---
     def open_filters(e):
         bs_filters.open = True
         bs_filters.update()
@@ -85,7 +84,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         on_click=open_filters,
         visible=False # Empezará oculto
     )
-    # --- FIN SECCIONES NUEVAS ---
+    # --- FIN LÓGICA DE FILTROS FLOTANTES ---
 
     # --- Catálogos cacheados ---
     planteles_cache = []
@@ -228,8 +227,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
         is_mobile_view = state["is_mobile"]
         btn_width = None if is_mobile_view else 220
         
+        # --- ¡BOTONES CENTRADOS! ---
         # Dejamos que los botones NO se expandan en móvil
-        btn_expand = True
+        btn_expand = False
 
         reservas_map = {}
         for r in day_reserveds:
@@ -297,6 +297,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", 
                                    disabled=True, width=btn_width, expand=btn_expand, height=50));
 
+        # --- ¡CONTENIDO CENTRADO! ---
         if is_mobile_view:
             # Centramos los botones en móvil
             tiles_container = ft.Column(
@@ -317,26 +318,18 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         
-        # --- ¡INICIO DE LA CORRECCIÓN DE OCUPAR TODO EL ANCHO! ---
+        # --- ¡TARJETA CENTRADA! ---
         card_content = Card(day_column, padding=card_padding)
 
         if is_mobile_view:
-            # En móvil, envolvemos la tarjeta en un Row que se expande
-            # y que la tarjeta dentro también se expande.
+            # En móvil, envolvemos la tarjeta en un Row que la centrará
             return ft.Row(
-                controls=[
-                    ft.Container(
-                        content=card_content,
-                        expand=True, # La tarjeta ahora se expandirá dentro de este Container
-                        padding=ft.padding.symmetric(horizontal=10) # Añade un pequeño padding lateral
-                    )
-                ],
-                expand=True # El Row se expande para llenar el ancho
+                controls=[card_content],
+                alignment=ft.MainAxisAlignment.CENTER
             )
         else:
-            # En web, la devolvemos como estaba. También la expandimos para consistencia.
-            return ft.Container(content=card_content, expand=True)
-        # --- ¡FIN DE LA CORRECCIÓN DE OCUPAR TODO EL ANCHO! ---
+            # En web, la devolvemos como estaba
+            return ft.Container(content=card_content)
 
 
     # --- Renderizado del Grid (Contenedor de días) ---
