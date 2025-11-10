@@ -1,4 +1,4 @@
-# VERSIÓN CORREGIDA - FILTROS VISIBLES EN MÓVIL
+# VERSIÓN CORREGIDA - FILTROS VISIBLES SIN FAB
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -29,7 +29,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
     state = {
         "confirm_for": None, 
         "is_mobile": get_is_mobile(),
-        "selected_date": date.today()
+        "selected_date": date.today(),
+        "show_filters": False  # Nuevo estado para mostrar/ocultar filtros en móvil
     }
 
     def update_mobile_state():
@@ -61,70 +62,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
     info = ft.Text("", size=14)
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
-    # BOTTOM SHEET MEJORADO PARA FILTROS
-    def close_filters(e):
-        bs_filters.open = False
-        page.update()
-
-    def apply_filters(e):
-        state["confirm_for"] = None
-        bs_filters.open = False
+    # FUNCIÓN PARA MOSTRAR/OCULTAR FILTROS EN MÓVIL
+    def toggle_filters(e):
+        state["show_filters"] = not state["show_filters"]
         render()
-        page.update()
 
-    bs_filters = ft.BottomSheet(
-        ft.Container(
-            ft.Column(
-                [
-                    ft.Row([
-                        ft.Text("Filtrar Laboratorios", 
-                               size=18, 
-                               weight=ft.FontWeight.BOLD,
-                               expand=True),
-                        ft.IconButton(
-                            icon=ft.Icons.CLOSE,
-                            on_click=close_filters,
-                            icon_size=20
-                        )
-                    ]),
-                    ft.Divider(height=1),
-                    ft.Container(height=10),
-                    dd_plantel,
-                    dd_lab,
-                    ft.Container(height=10),
-                    ft.Row([
-                        ft.FilledButton(
-                            "Aplicar filtros", 
-                            on_click=apply_filters,
-                            expand=True,
-                            height=45
-                        ),
-                    ]),
-                ],
-                tight=True,
-                spacing=12,
-            ),
-            padding=ft.padding.all(20),
-        ),
-        open=False,
-        dismissible=True,
-    )
-    page.overlay.append(bs_filters)
-
-    def open_filters(e):
-        bs_filters.open = True
-        page.update()
-
-    # FAB MEJORADO - POSICIÓN CORREGIDA
-    fab_filter = ft.FloatingActionButton(
-        icon=ft.Icons.FILTER_LIST,
-        tooltip="Filtrar laboratorios",
-        on_click=open_filters,
-        visible=False,
-        bgcolor=ft.Colors.PRIMARY,
-    )
-
-    # DATE PICKER CORREGIDO - INICIALIZACIÓN ADECUADA
+    # DATE PICKER
     date_picker = ft.DatePicker(
         first_date=date.today() - timedelta(days=30),
         last_date=date.today() + timedelta(days=60),
@@ -579,50 +522,33 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if head_label.page:
             head_label.update()
 
-        # CORRECCIÓN: MOSTRAR INFORMACIÓN DEL LABORATORIO ACTUAL EN MÓVIL
+        # NUEVA LÓGICA: MOSTRAR FILTROS DE DIFERENTES MANERAS
         if state["is_mobile"]:
-            filter_group.visible = False
+            # En móvil: mostrar botón para toggle de filtros o filtros expandidos
+            filter_group.visible = state["show_filters"]
             mobile_date_selector.visible = True
-            current_lab_info.visible = True  # Mostrar info del lab actual
-            # CONFIGURAR FAB CORRECTAMENTE
-            page.floating_action_button = fab_filter
-            page.floating_action_button_location = ft.FloatingActionButtonLocation.END_FLOAT
-            fab_filter.visible = True
+            toggle_filters_button.visible = True
+            filter_group_desktop.visible = False
+            
+            # Configurar el botón de toggle
+            toggle_filters_button.icon = ft.Icons.KEYBOARD_ARROW_DOWN if state["show_filters"] else ft.Icons.KEYBOARD_ARROW_RIGHT
+            toggle_filters_button.text = "Ocultar filtros" if state["show_filters"] else "Cambiar laboratorio"
+            
         else:
-            filter_group.visible = True
+            # En escritorio: mostrar filtros siempre visibles
+            filter_group.visible = False
             mobile_date_selector.visible = False
-            current_lab_info.visible = False
-            page.floating_action_button = None
-            fab_filter.visible = False
-
-        # Actualizar información del laboratorio actual
-        current_lab_name = lab_map.get(dd_lab.value, "No seleccionado")
-        current_plantel_name = ""
-        if dd_plantel.value:
-            for plantel in planteles_cache:
-                if str(plantel.get("id")) == dd_plantel.value:
-                    current_plantel_name = plantel.get("nombre", "")
-                    break
-        
-        current_lab_info.content = ft.Column([
-            ft.Row([
-                ft.Icon(ft.Icons.SCHOOL, size=16, color=ft.Colors.PRIMARY),
-                ft.Text("Plantel:", size=14, weight=ft.FontWeight.W_500),
-                ft.Text(current_plantel_name, size=14, expand=True),
-            ]),
-            ft.Row([
-                ft.Icon(ft.Icons.SCIENCE, size=16, color=ft.Colors.PRIMARY),
-                ft.Text("Laboratorio:", size=14, weight=ft.FontWeight.W_500),
-                ft.Text(current_lab_name, size=14, expand=True),
-            ]),
-        ], spacing=6)
+            toggle_filters_button.visible = False
+            filter_group_desktop.visible = True
 
         if filter_group.page:
             filter_group.update()
         if mobile_date_selector.page:
             mobile_date_selector.update()
-        if current_lab_info.page:
-            current_lab_info.update()
+        if toggle_filters_button.page:
+            toggle_filters_button.update()
+        if filter_group_desktop.page:
+            filter_group_desktop.update()
 
         page.update()
 
@@ -654,8 +580,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         state["confirm_for"] = None
         if e.control.page:
             render()
-            if state["is_mobile"]:
-                close_filters(None)
 
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = on_change_lab
@@ -686,7 +610,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # SELECTOR DE FECHA MÓVIL - MEJORADO
+    # SELECTOR DE FECHA MÓVIL
     mobile_date_selector = ft.Card(
         ft.Container(
             ft.Row([
@@ -729,30 +653,31 @@ def ReservasView(page: ft.Page, api: ApiClient):
         margin=ft.margin.only(bottom=8)
     )
 
-    # INFORMACIÓN DEL LABORATORIO ACTUAL (PARA MÓVIL)
-    current_lab_info = ft.Card(
-        ft.Container(
-            ft.Column([
-                ft.Row([
-                    ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=ft.Colors.PRIMARY),
-                    ft.Text("Laboratorio actual:", size=14, weight=ft.FontWeight.BOLD),
-                ]),
-                ft.Container(height=4),
-                ft.Text("Selecciona un laboratorio usando el botón de filtro", size=12, color=ft.Colors.GREY_600),
-            ]),
-            padding=12,
-        ),
+    # BOTÓN PARA TOGGLE DE FILTROS EN MÓVIL
+    toggle_filters_button = ft.FilledButton(
+        icon=ft.Icons.KEYBOARD_ARROW_RIGHT,
+        text="Cambiar laboratorio",
+        on_click=toggle_filters,
         visible=False,
-        margin=ft.margin.only(bottom=8)
+        expand=True,
     )
 
     # GRUPOS DE CONTROLES
     dd_plantel.expand = 1
     dd_lab.expand = 1
-    filter_group = ft.Row([dd_plantel, dd_lab], spacing=10, visible=False)
+    
+    # Filtros para móvil (expandibles)
+    filter_group = ft.Column([
+        ft.Text("Filtrar por:", size=16, weight=ft.FontWeight.BOLD),
+        dd_plantel,
+        dd_lab,
+    ], spacing=12, visible=False)
+    
+    # Filtros para escritorio (siempre visibles)
+    filter_group_desktop = ft.Row([dd_plantel, dd_lab], spacing=10, visible=not state["is_mobile"])
 
     header_controls_container = ft.Column(
-        [nav_group, mobile_date_selector, current_lab_info, filter_group], 
+        [nav_group, mobile_date_selector, toggle_filters_button, filter_group, filter_group_desktop], 
         spacing=8
     )
 
@@ -778,11 +703,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE)),
     ], spacing=8, scroll=ft.ScrollMode.ADAPTIVE)
 
-    # CORRECCIÓN: FUNCIÓN on_resize DEFINIDA CORRECTAMENTE
+    # FUNCIÓN PARA MANEJAR RESIZE
     def handle_page_resize(e):
         current_is_mobile = state["is_mobile"]
         new_is_mobile = get_is_mobile()
         if current_is_mobile != new_is_mobile:
+            state["show_filters"] = False  # Resetear filtros al cambiar modo
             render()
 
     page.on_resize = handle_page_resize
@@ -813,9 +739,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         spacing=12,
     )
 
-    # CONFIGURACIÓN INICIAL DEL FAB - CORREGIDA
-    page.floating_action_button = fab_filter
-    page.floating_action_button_location = ft.FloatingActionButtonLocation.END_FLOAT
+    # ELIMINAR CONFIGURACIÓN DE FAB
+    page.floating_action_button = None
 
     page.add(ui)
     render()
