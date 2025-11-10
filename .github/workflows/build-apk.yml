@@ -1,4 +1,4 @@
-name: Construir Flet APK
+name: Construir Flet APK (Manual)
 
 on:
   push:
@@ -12,13 +12,28 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Construir app Flet (APK)
-        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-        # Usamos una versión específica en lugar de @v1
-        uses: flet-dev/flet-build-action@v1.0.3
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
         with:
-          platform: apk
-          
+          python-version: '3.11'
+
+      - name: Instalar Flet y dependencias
+        run: |
+          pip install flet
+          # Si tienes un requirements.txt, descomenta la siguiente línea
+          # pip install -r requirements.txt
+
+      - name: Configurar Flutter SDK
+        # Esta es la acción oficial de Flet para SOLO instalar Flutter
+        uses: flet-dev/setup-flutter@v2
+
+      - name: Aceptar licencias de Android
+        # A veces es necesario para la compilación de APK
+        run: flutter doctor --android-licenses
+
+      - name: Construir la APK
+        run: flet build apk
+
       - name: Subir APK como Artefacto
         uses: actions/upload-artifact@v4
         with:
