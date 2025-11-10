@@ -66,7 +66,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
     # --- FIN Lógica Base ---
 
-    # --- Acciones (Sin cambios) ---
+    # --- Acciones (Ahora asíncronas) ---
     def do_create_reservation(lab_id: int, s: datetime, f: datetime):
         if user_data.get("rol") not in ["admin", "docente"]:
             info.value = "Solo administradores y docentes pueden crear reservas."
@@ -85,10 +85,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
             "fin": f.isoformat()
         }
         # Corremos la creación en un hilo para no bloquear
-        page.run_thread(run_create_reservation, args=(payload,))
-
+        page.run_thread(run_create_reservation, payload)
 
     def run_create_reservation(payload: dict):
+        # Esta función se ejecuta en un hilo de fondo
         result = api.create_reserva(payload)
         
         # Volvemos al hilo principal para actualizar la UI
@@ -113,11 +113,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
         page.update(info, grid)
         
         # Corremos la cancelación en un hilo
-        page.run_thread(run_cancel_reservation, args=(rid,))
+        page.run_thread(run_cancel_reservation, rid)
 
     def run_cancel_reservation(rid: int):
+        # Esta función se ejecuta en un hilo de fondo
         result = api.delete_reserva(rid)
 
+        # Volvemos al hilo principal para actualizar la UI
         grid.disabled = False
         info.color = None
         state["confirm_for"] = None
@@ -139,39 +141,51 @@ def ReservasView(page: ft.Page, api: ApiClient):
         render()
 
     # --- MODIFICACIÓN: Renderizado del Grid (ahora es asíncrono) ---
-    def render_grid_async(d: date):
-        # 1. Limpiamos y mostramos "Cargando..."
-        grid.controls.clear()
+    
+    # Esta función SÓLO obtiene los datos. Se ejecuta en un hilo.
+    def get_data_for_grid(d: date):
         if not dd_lab.value or not dd_lab.value.isdigit():
-            grid.controls.append(
-                ft.Row([ft.Text("Selecciona un plantel y laboratorio.")], 
-                       alignment=ft.MainAxisAlignment.CENTER)
-            )
-            if grid.page: grid.update()
-            return
-
-        grid.controls.append(
-            ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
-                   alignment=ft.MainAxisAlignment.CENTER, height=200)
-        )
-        if grid.page: grid.update()
-
-        # 2. Obtenemos datos de la API (esto es lo que tarda)
+            return {"error": "Selecciona un laboratorio."}
+        
         try:
             lid = int(dd_lab.value)
+            end_dt = d + timedelta(days=1)
             
+            # Hacemos las llamadas bloqueantes a la API
             horario_result = api.get_horario_laboratorio(lid, d, d)
+            api_result = api.get_reservas(lid, d, end_dt)
+            
+            # Devolvemos los datos para la UI
+            return {
+                "horario": horario_result,
+                "reservas": api_result,
+                "lid": lid,
+                "date": d
+            }
+        except Exception as e:
+            print(f"Error en get_data_for_grid: {e}")
+            return {"error": f"Excepción en API: {e}"}
+
+    # Esta función DIBUJA la UI. Se ejecuta en el hilo principal.
+    def update_grid_with_data(e: ft.ControlEvent):
+        grid.controls.clear()
+        data = e.data # e.data contiene lo que retornó get_data_for_grid
+        
+        try:
+            if "error" in data:
+                raise Exception(data["error"])
+
+            lid = data["lid"]
+            d = data["date"]
+            horario_result = data["horario"]
+            all_reservas = data["reservas"]
+            
             if isinstance(horario_result, dict) and "error" in horario_result:
                 raise Exception(f"Error al cargar horario: {horario_result.get('error', 'Error')}")
             if not isinstance(horario_result, dict):
                  raise Exception(f"Respuesta inesperada del API de horario")
-            
-            api_result = api.get_reservas(lid, d, d + timedelta(days=1))
-            all_reservas = []
-            if isinstance(api_result, list):
-                all_reservas = api_result
-            else:
-                raise Exception(f"Error al cargar reservas: {api_result.get('error', 'Error')}")
+            if not isinstance(all_reservas, list):
+                raise Exception(f"Error al cargar reservas: {all_reservas.get('error', 'Error')}")
 
             # 3. Mapear reservas por hora de inicio
             reservas_map = {}
@@ -185,12 +199,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
             # 4. Obtener los slots de hoy
             slots_for_day = horario_result.get(d.isoformat(), [])
             
-            # 5. Limpiar grid y renderizar slots
-            grid.controls.clear()
-            
             if not slots_for_day:
                 grid.controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
 
+            # 5. Renderizar slots
             for slot in slots_for_day:
                 s_dt = datetime.fromisoformat(str(slot.get('inicio'))).replace(tzinfo=None)
                 f_dt = datetime.fromisoformat(str(slot.get('fin'))).replace(tzinfo=None)
@@ -235,7 +247,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     grid.controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
 
         except Exception as e:
-            print(f"Error en render_grid_async: {e}")
+            print(f"Error en update_grid_with_data: {e}")
             traceback.print_exc()
             grid.controls.clear()
             grid.controls.append(ft.Text(f"Error al cargar: {e}", color=ft.Colors.ERROR))
@@ -261,8 +273,20 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if head_label.page: head_label.update()
         if info.page: info.update()
         
-        # ...y LUEGO manda a llamar la carga de datos en un hilo separado.
-        page.run_thread(render_grid_async, args=(selected_date,))
+        # 1. Limpiamos el grid y mostramos "Cargando..."
+        grid.controls.clear()
+        grid.controls.append(
+            ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
+                   alignment=ft.MainAxisAlignment.CENTER, height=200)
+        )
+        if grid.page: grid.update()
+        
+        # 2. ...y LUEGO manda a llamar la carga de datos en un hilo separado.
+        page.run_in_thread(
+            target=get_data_for_grid,    # Función que hace el trabajo lento
+            data=selected_date,         # Datos que le pasamos a la función
+            on_finish=update_grid_with_data # Función que se llama al terminar
+        )
 
 
     def on_change_plantel(e: ft.ControlEvent):
@@ -397,62 +421,64 @@ def ReservasView(page: ft.Page, api: ApiClient):
         spacing=15
         )
 
-    def load_initial_data(e=None):
+    # --- MODIFICACIÓN ASÍNCRONA DE CARGA INICIAL ---
+    
+    def on_catalog_data_loaded(e: ft.ControlEvent):
         nonlocal planteles_cache, labs_cache, lab_map
+        data = e.data
         
         try:
-            planteles_data_async = api.get_planteles()
-            labs_data_async = api.get_laboratorios()
+            if "error" in data:
+                raise Exception(data["error"])
+
+            planteles_cache = data["planteles"]
+            labs_cache = data["labs"]
+            lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
             
-            error_msg = ""
+            dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
             
-            if isinstance(planteles_data_async, list):
-                planteles_cache = planteles_data_async
-                dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
-            else:
-                error_detail = planteles_data_async.get("error", "Error") if isinstance(planteles_data_async, dict) else "Respuesta inesperada"
-                error_msg += f"Error al cargar planteles: {error_detail}\n"
-                print(f"ERROR ReservasView (Planteles): {error_msg}")
-
-            if isinstance(labs_data_async, list):
-                labs_cache = labs_data_async
-                lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
-            else:
-                error_detail = labs_data_async.get("error", "Error") if isinstance(labs_data_async, dict) else "Respuesta inesperada"
-                error_msg += f"Error al cargar laboratorios: {error_detail}"
-                print(f"ERROR ReservasView (Labs): {error_msg}")
-
-            if error_msg:
-                raise Exception(error_msg)
-
             if planteles_cache:
                 first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
                 if first_plantel_id_str:
                     dd_plantel.value = first_plantel_id_str
-                    if dd_plantel.page: dd_plantel.update()
-                    # Simulamos el evento para cargar los labs y renderizar
-                    on_change_plantel(SimpleControlEvent(control=dd_plantel)) 
+                    on_change_plantel(SimpleControlEvent(control=dd_plantel)) # Esto llamará a render()
                 else:
                     info.value = "El primer plantel no tiene un ID válido."
                     info.color = ft.Colors.ERROR
-                    if info.page: info.update()
             else:
                 info.value = "No hay planteles configurados."
                 info.color = ft.Colors.ERROR
-                if info.page: info.update()
-                
-            if dd_plantel.page:
-                dd_plantel.update()
+            
+            if info.page: info.update()
+            if dd_plantel.page: dd_plantel.update()
 
         except Exception as e:
-            print(f"CRITICAL ReservasView (async): {e}"); traceback.print_exc()
-            info.value = f"Error crítico al cargar datos: {e}"
+            print(f"CRITICAL ReservasView (on_catalog_data_loaded): {e}"); traceback.print_exc()
+            info.value = f"Error crítico al cargar catálogos: {e}"
             info.color = ft.Colors.ERROR
             if info.page: info.update()
 
+    def get_catalog_data(e=None):
+        # Esta función se ejecuta en un hilo de fondo
+        try:
+            planteles_data_async = api.get_planteles()
+            labs_data_async = api.get_laboratorios()
+            
+            if isinstance(planteles_data_async, dict) and "error" in planteles_data_async:
+                return {"error": f"Error planteles: {planteles_data_async.get('error')}"}
+            if isinstance(labs_data_async, dict) and "error" in labs_data_async:
+                return {"error": f"Error laboratorios: {labs_data_async.get('error')}"}
+            
+            return {"planteles": planteles_data_async, "labs": labs_data_async}
+        except Exception as e:
+            return {"error": f"Excepción al cargar catálogos: {e}"}
+
     # Aplicamos estilos y cargamos datos
     apply_filter_styles()
-    page.run_thread(load_initial_data)
+    page.run_in_thread(
+        target=get_catalog_data,
+        on_finish=on_catalog_data_loaded
+    )
 
     if state["is_mobile"]:
         return mobile_layout()
