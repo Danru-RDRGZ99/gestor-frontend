@@ -6,7 +6,7 @@ from ui.components.cards import Card
 from dataclasses import dataclass
 import traceback
 
-# --- ¡NUEVO! Lista de días en español ---
+# Lista de días en español
 DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
 # Clase simple para simular la estructura del evento
@@ -34,7 +34,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Estado y UI ---
     info = ft.Text("")
     # El grid es una Columna scrollable que contendrá los SLOTS
-    # ¡Le quitamos el expand=True que causaba la pantalla gris!
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
 
     # --- Catálogos cacheados (inicializados vacíos) ---
@@ -85,7 +84,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
             "fin": f.isoformat()
         }
         # Corremos la creación en un hilo para no bloquear
-        page.run_thread(run_create_reservation, payload)
+        # --- ¡CORRECCIÓN! Usando page.run_thread ---
+        page.run_thread(target=run_create_reservation, args=(payload,))
 
     def run_create_reservation(payload: dict):
         # Esta función se ejecuta en un hilo de fondo
@@ -99,12 +99,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
             info.value = "Reserva creada con éxito."
             info.color = ft.Colors.GREEN_500
             state["confirm_for"] = None
-            render() 
+            render() # Vuelve a cargar el calendario
         else:
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-        page.update(info, grid) # Actualiza la UI desde el hilo principal
+            page.update(info, grid) # Actualiza la UI desde el hilo principal
 
     def do_cancel_reservation(rid: int):
         info.value = "Cancelando reserva, por favor espera..."
@@ -113,7 +113,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         page.update(info, grid)
         
         # Corremos la cancelación en un hilo
-        page.run_thread(run_cancel_reservation, rid)
+        # --- ¡CORRECCIÓN! Usando page.run_thread ---
+        page.run_thread(target=run_cancel_reservation, args=(rid,))
 
     def run_cancel_reservation(rid: int):
         # Esta función se ejecuta en un hilo de fondo
@@ -127,12 +128,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if result and "error" not in result:
             info.value = "Reserva cancelada exitosamente."
             info.color = ft.Colors.GREEN_500 
-            render() 
+            render() # Vuelve a cargar el calendario
         else:
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-        page.update(info, grid) # Actualiza la UI
+            page.update(info, grid) # Actualiza la UI
 
     def ask_inline_cancel(rid: int, etiqueta: str):
         state["confirm_for"] = rid
@@ -140,54 +141,32 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # --- MODIFICACIÓN: Renderizado del Grid (ahora es asíncrono) ---
+    # --- MODIFICACIÓN: Renderizado del Grid (asíncrono) ---
     
-    # Esta función SÓLO obtiene los datos. Se ejecuta en un hilo.
-    def get_data_for_grid(d: date):
-        if not dd_lab.value or not dd_lab.value.isdigit():
-            return {"error": "Selecciona un laboratorio."}
+    # Esta función ahora hace TODO (obtener datos Y construir la UI)
+    # Se ejecutará en un hilo de fondo.
+    def render_grid_in_thread(d: date):
         
+        new_controls = [] # Construimos los controles aquí
         try:
+            # 1. Obtener datos
+            if not dd_lab.value or not dd_lab.value.isdigit():
+                raise Exception("Selecciona un laboratorio.")
+            
             lid = int(dd_lab.value)
             end_dt = d + timedelta(days=1)
             
-            # Hacemos las llamadas bloqueantes a la API
             horario_result = api.get_horario_laboratorio(lid, d, d)
             api_result = api.get_reservas(lid, d, end_dt)
-            
-            # Devolvemos los datos para la UI
-            return {
-                "horario": horario_result,
-                "reservas": api_result,
-                "lid": lid,
-                "date": d
-            }
-        except Exception as e:
-            print(f"Error en get_data_for_grid: {e}")
-            return {"error": f"Excepción en API: {e}"}
-
-    # Esta función DIBUJA la UI. Se ejecuta en el hilo principal.
-    def update_grid_with_data(e: ft.ControlEvent):
-        grid.controls.clear()
-        data = e.data # e.data contiene lo que retornó get_data_for_grid
-        
-        try:
-            if "error" in data:
-                raise Exception(data["error"])
-
-            lid = data["lid"]
-            d = data["date"]
-            horario_result = data["horario"]
-            all_reservas = data["reservas"]
             
             if isinstance(horario_result, dict) and "error" in horario_result:
                 raise Exception(f"Error al cargar horario: {horario_result.get('error', 'Error')}")
             if not isinstance(horario_result, dict):
                  raise Exception(f"Respuesta inesperada del API de horario")
-            if not isinstance(all_reservas, list):
-                raise Exception(f"Error al cargar reservas: {all_reservas.get('error', 'Error')}")
+            if not isinstance(api_result, list):
+                raise Exception(f"Error al cargar reservas: {api_result.get('error', 'Error')}")
 
-            # 3. Mapear reservas por hora de inicio
+            # 2. Mapear reservas por hora de inicio
             reservas_map = {}
             for r in all_reservas:
                 start_str = r.get('inicio')
@@ -196,13 +175,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     dt_aware_local = dt_aware_utc.astimezone(None)
                     reservas_map[dt_aware_local.replace(tzinfo=None)] = r
 
-            # 4. Obtener los slots de hoy
+            # 3. Obtener los slots de hoy
             slots_for_day = horario_result.get(d.isoformat(), [])
             
             if not slots_for_day:
-                grid.controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
+                new_controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
 
-            # 5. Renderizar slots
+            # 4. Renderizar slots
             for slot in slots_for_day:
                 s_dt = datetime.fromisoformat(str(slot.get('inicio'))).replace(tzinfo=None)
                 f_dt = datetime.fromisoformat(str(slot.get('fin'))).replace(tzinfo=None)
@@ -223,12 +202,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     label = f"Reservado por {nombre}"
 
                     if can_manage and state["confirm_for"] == rid:
-                        grid.controls.append(Card(ft.Row([
+                        new_controls.append(Card(ft.Row([
                             Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, expand=True),
                             Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render())),
                         ])))
                     else:
-                        grid.controls.append(Card(Tonal(
+                        new_controls.append(Card(Tonal(
                             label,
                             tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
                             on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
@@ -242,16 +221,17 @@ def ReservasView(page: ft.Page, api: ApiClient):
                                              disabled=not is_allowed_to_create,
                                              height=50)
                     reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
-                    grid.controls.append(Card(reserve_button))
+                    new_controls.append(Card(reserve_button))
                 else:
-                    grid.controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
+                    new_controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
 
         except Exception as e:
-            print(f"Error en update_grid_with_data: {e}")
+            print(f"Error en render_grid_in_thread: {e}")
             traceback.print_exc()
-            grid.controls.clear()
-            grid.controls.append(ft.Text(f"Error al cargar: {e}", color=ft.Colors.ERROR))
-
+            new_controls = [ft.Text(f"Error al cargar: {e}", color=ft.Colors.ERROR)]
+        
+        # 5. Actualizar la UI de golpe
+        grid.controls = new_controls
         if grid.page: grid.update()
 
 
@@ -266,7 +246,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         selected_date = window["selected_date"]
         lab_name = lab_map.get(dd_lab.value, "(Selecciona Lab)")
         
-        # --- ¡CORRECCIÓN DE IDIOMA! ---
         dia_es = DIAS_SEMANA[selected_date.weekday()]
         head_label.value = f"{dia_es} {selected_date.strftime('%d/%m')} · {lab_name}"
         
@@ -282,11 +261,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if grid.page: grid.update()
         
         # 2. ...y LUEGO manda a llamar la carga de datos en un hilo separado.
-        page.run_in_thread(
-            target=get_data_for_grid,    # Función que hace el trabajo lento
-            data=selected_date,         # Datos que le pasamos a la función
-            on_finish=update_grid_with_data # Función que se llama al terminar
-        )
+        page.run_thread(target=render_grid_in_thread, args=(selected_date,))
 
 
     def on_change_plantel(e: ft.ControlEvent):
@@ -422,26 +397,39 @@ def ReservasView(page: ft.Page, api: ApiClient):
         )
 
     # --- MODIFICACIÓN ASÍNCRONA DE CARGA INICIAL ---
-    
-    def on_catalog_data_loaded(e: ft.ControlEvent):
+    # Esta función ahora hace TODO: obtiene datos Y actualiza la UI al final
+    def load_initial_data_in_thread(e=None):
         nonlocal planteles_cache, labs_cache, lab_map
-        data = e.data
         
         try:
-            if "error" in data:
-                raise Exception(data["error"])
+            planteles_data_async = api.get_planteles()
+            labs_data_async = api.get_laboratorios()
+            
+            error_msg = ""
+            
+            if isinstance(planteles_data_async, list):
+                planteles_cache = planteles_data_async
+                dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
+            else:
+                error_detail = planteles_data_async.get("error", "Error") if isinstance(planteles_data_async, dict) else "Respuesta inesperada"
+                error_msg += f"Error al cargar planteles: {error_detail}\n"
 
-            planteles_cache = data["planteles"]
-            labs_cache = data["labs"]
-            lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
-            
-            dd_plantel.options = [ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")]
-            
+            if isinstance(labs_data_async, list):
+                labs_cache = labs_data_async
+                lab_map = {str(l.get("id", "")): l.get("nombre", "Nombre Desconocido") for l in labs_cache if l.get("id")}
+            else:
+                error_detail = labs_data_async.get("error", "Error") if isinstance(labs_data_async, dict) else "Respuesta inesperada"
+                error_msg += f"Error al cargar laboratorios: {error_detail}"
+
+            if error_msg:
+                raise Exception(error_msg)
+
             if planteles_cache:
                 first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
                 if first_plantel_id_str:
                     dd_plantel.value = first_plantel_id_str
-                    on_change_plantel(SimpleControlEvent(control=dd_plantel)) # Esto llamará a render()
+                    # Simulamos el evento para cargar los labs y renderizar
+                    on_change_plantel(SimpleControlEvent(control=dd_plantel)) 
                 else:
                     info.value = "El primer plantel no tiene un ID válido."
                     info.color = ft.Colors.ERROR
@@ -449,36 +437,20 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 info.value = "No hay planteles configurados."
                 info.color = ft.Colors.ERROR
             
+            # Actualizamos la UI desde el hilo
             if info.page: info.update()
             if dd_plantel.page: dd_plantel.update()
 
         except Exception as e:
-            print(f"CRITICAL ReservasView (on_catalog_data_loaded): {e}"); traceback.print_exc()
+            print(f"CRITICAL ReservasView (load_initial_data_in_thread): {e}"); traceback.print_exc()
             info.value = f"Error crítico al cargar catálogos: {e}"
             info.color = ft.Colors.ERROR
             if info.page: info.update()
 
-    def get_catalog_data(e=None):
-        # Esta función se ejecuta en un hilo de fondo
-        try:
-            planteles_data_async = api.get_planteles()
-            labs_data_async = api.get_laboratorios()
-            
-            if isinstance(planteles_data_async, dict) and "error" in planteles_data_async:
-                return {"error": f"Error planteles: {planteles_data_async.get('error')}"}
-            if isinstance(labs_data_async, dict) and "error" in labs_data_async:
-                return {"error": f"Error laboratorios: {labs_data_async.get('error')}"}
-            
-            return {"planteles": planteles_data_async, "labs": labs_data_async}
-        except Exception as e:
-            return {"error": f"Excepción al cargar catálogos: {e}"}
-
     # Aplicamos estilos y cargamos datos
     apply_filter_styles()
-    page.run_in_thread(
-        target=get_catalog_data,
-        on_finish=on_catalog_data_loaded
-    )
+    # --- ¡CORRECCIÓN! Usando page.run_thread ---
+    page.run_thread(target=load_initial_data_in_thread)
 
     if state["is_mobile"]:
         return mobile_layout()
