@@ -1,4 +1,4 @@
-# VERSIÓN CORREGIDA - FILTROS VISIBLES SIN FAB
+# VERSIÓN SIMPLIFICADA - SIN SELECTOR DE FECHA Y SIN DUPLICACIONES
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -30,7 +30,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         "confirm_for": None, 
         "is_mobile": get_is_mobile(),
         "selected_date": date.today(),
-        "show_filters": False  # Nuevo estado para mostrar/ocultar filtros en móvil
+        "show_filters": False
     }
 
     def update_mobile_state():
@@ -42,7 +42,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         else:
             state["is_mobile"] = new_is_mobile
 
-    # CONTROLES DE FILTRO MEJORADOS PARA MÓVIL
+    # CONTROLES DE FILTRO
     dd_plantel = ft.Dropdown(
         label="Plantel",
         options=[],
@@ -66,26 +66,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def toggle_filters(e):
         state["show_filters"] = not state["show_filters"]
         render()
-
-    # DATE PICKER
-    date_picker = ft.DatePicker(
-        first_date=date.today() - timedelta(days=30),
-        last_date=date.today() + timedelta(days=60),
-    )
-    
-    def handle_date_change(e):
-        if date_picker.value:
-            state["selected_date"] = date_picker.value
-            state["confirm_for"] = None
-            render()
-    
-    date_picker.on_change = handle_date_change
-    
-    def show_date_picker(e):
-        date_picker.value = state["selected_date"]
-        date_picker.pick_date()
-
-    page.overlay.append(date_picker)
 
     # CARGAR DATOS INICIALES
     planteles_cache = []
@@ -165,7 +145,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     
     head_label = ft.Text("", size=16, weight=ft.FontWeight.W_600)
 
-    # FUNCIONES DE NAVEGACIÓN MEJORADAS PARA MÓVIL
+    # FUNCIONES DE NAVEGACIÓN SIMPLIFICADAS
     def goto_next(e):
         if state["is_mobile"]:
             state["selected_date"] = next_weekday(state["selected_date"])
@@ -296,11 +276,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # SECCIÓN DE DÍA MEJORADA PARA MÓVIL
+    # SECCIÓN DE DÍA
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
         is_mobile_view = state["is_mobile"]
         
-        # Header mejorado para móvil
+        # Header del día
         day_header = ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.CALENDAR_TODAY, size=16),
@@ -416,7 +396,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     )
                 )
 
-        # Contenedor de slots adaptado a móvil
+        # Contenedor de slots
         if is_mobile_view:
             tiles_container = ft.Column(
                 tiles, 
@@ -430,7 +410,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         day_content = ft.Column([day_header, tiles_container], spacing=0)
 
-        # CORRECCIÓN: Usar Container en lugar de Card para aplicar margin
+        # Usar Container para aplicar margin
         if is_mobile_view:
             card_container = ft.Container(
                 content=Card(day_content, padding=0),
@@ -522,11 +502,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if head_label.page:
             head_label.update()
 
-        # NUEVA LÓGICA: MOSTRAR FILTROS DE DIFERENTES MANERAS
+        # CONFIGURACIÓN DE CONTROLES
         if state["is_mobile"]:
-            # En móvil: mostrar botón para toggle de filtros o filtros expandidos
+            # En móvil: mostrar botón para toggle de filtros
             filter_group.visible = state["show_filters"]
-            mobile_date_selector.visible = True
             toggle_filters_button.visible = True
             filter_group_desktop.visible = False
             
@@ -537,14 +516,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
         else:
             # En escritorio: mostrar filtros siempre visibles
             filter_group.visible = False
-            mobile_date_selector.visible = False
             toggle_filters_button.visible = False
             filter_group_desktop.visible = True
 
         if filter_group.page:
             filter_group.update()
-        if mobile_date_selector.page:
-            mobile_date_selector.update()
         if toggle_filters_button.page:
             toggle_filters_button.update()
         if filter_group_desktop.page:
@@ -599,7 +575,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.ERROR
         head_label.value = "Error de Configuración"
 
-    # NAVEGACIÓN MEJORADA PARA MÓVIL
+    # NAVEGACIÓN SIMPLIFICADA
     nav_group = ft.Row(
         [
             Icon(ft.Icons.CHEVRON_LEFT, "Día anterior", on_click=goto_prev),
@@ -608,49 +584,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
-    )
-
-    # SELECTOR DE FECHA MÓVIL
-    mobile_date_selector = ft.Card(
-        ft.Container(
-            ft.Row([
-                ft.IconButton(
-                    icon=ft.Icons.CHEVRON_LEFT,
-                    on_click=goto_prev,
-                    icon_size=20,
-                    tooltip="Día anterior"
-                ),
-                ft.TextButton(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.CALENDAR_TODAY, size=18),
-                        ft.Text("Seleccionar fecha", size=14, weight=ft.FontWeight.W_500),
-                    ], tight=True),
-                    on_click=show_date_picker,
-                    style=ft.ButtonStyle(
-                        color=ft.Colors.PRIMARY,
-                        padding=ft.padding.symmetric(horizontal=16, vertical=8)
-                    )
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.CHEVRON_RIGHT,
-                    on_click=goto_next,
-                    icon_size=20,
-                    tooltip="Siguiente día"
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.TODAY,
-                    tooltip="Ir a hoy",
-                    on_click=goto_today,
-                    icon_size=20
-                ),
-            ], 
-            alignment=ft.MainAxisAlignment.SPACE_AROUND,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER
-            ),
-            padding=12,
-        ),
-        visible=False,
-        margin=ft.margin.only(bottom=8)
     )
 
     # BOTÓN PARA TOGGLE DE FILTROS EN MÓVIL
@@ -677,11 +610,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
     filter_group_desktop = ft.Row([dd_plantel, dd_lab], spacing=10, visible=not state["is_mobile"])
 
     header_controls_container = ft.Column(
-        [nav_group, mobile_date_selector, toggle_filters_button, filter_group, filter_group_desktop], 
+        [nav_group, toggle_filters_button, filter_group, filter_group_desktop], 
         spacing=8
     )
 
-    # LEYENDA ADAPTADA A MÓVIL
+    # LEYENDA SIMPLIFICADA
     legend_items = [
         ("🟢 Disponible", "Horarios disponibles para reservar"),
         ("🟡 Reservado", "Horarios ya reservados"),
@@ -708,12 +641,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
         current_is_mobile = state["is_mobile"]
         new_is_mobile = get_is_mobile()
         if current_is_mobile != new_is_mobile:
-            state["show_filters"] = False  # Resetear filtros al cambiar modo
+            state["show_filters"] = False
             render()
 
     page.on_resize = handle_page_resize
 
-    # INTERFAZ DE USUARIO FINAL
+    # INTERFAZ DE USUARIO FINAL - SIMPLIFICADA
     ui = ft.Column(
         controls=[
             ft.Text("Reservas de Laboratorios", 
@@ -738,9 +671,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         scroll=ft.ScrollMode.ADAPTIVE,
         spacing=12,
     )
-
-    # ELIMINAR CONFIGURACIÓN DE FAB
-    page.floating_action_button = None
 
     page.add(ui)
     render()
