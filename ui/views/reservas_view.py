@@ -348,11 +348,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
                                    expand=btn_expand, # Ajuste responsivo
                                    height=50));
 
-        # --- INICIO CAMBIO RESPONSIVO: Layout de Tiles ---
+        # --- INICIO CAMBIO RESPONSIVO: Layout de Tiles (CON CORRECCIÓN DE SCROLL) ---
         tiles_container = None
         if is_mobile_view:
-            # En móvil: un Column vertical, scrollable. Los botones se expandirán.
-            tiles_container = ft.Column(tiles, scroll=ft.ScrollMode.ADAPTIVE, spacing=8)
+            # En móvil: un Column vertical. El scrolling lo maneja el 'grid' principal.
+            # --- ¡CORRECCIÓN! Se quitó scroll=ft.ScrollMode.ADAPTIVE ---
+            tiles_container = ft.Column(tiles, spacing=8)
         else:
             # En web: un Row horizontal, scrollable. Ancho fijo.
             tiles_container = ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False, spacing=8)
