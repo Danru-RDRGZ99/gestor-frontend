@@ -33,7 +33,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # --- Estado y UI ---
     info = ft.Text("")
-    # El grid es una Columna scrollable que contendrá los SLOTS
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
 
     # --- Catálogos cacheados (inicializados vacíos) ---
@@ -83,15 +82,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
             "inicio": s.isoformat(), 
             "fin": f.isoformat()
         }
-        # Corremos la creación en un hilo para no bloquear
-        # --- ¡CORRECCIÓN! Usando page.run_thread ---
-        page.run_thread(target=run_create_reservation, args=(payload,))
+        # --- ¡CORRECCIÓN 1! (Quitado 'target=' y 'args=') ---
+        page.run_thread(run_create_reservation, payload)
 
     def run_create_reservation(payload: dict):
-        # Esta función se ejecuta en un hilo de fondo
         result = api.create_reserva(payload)
         
-        # Volvemos al hilo principal para actualizar la UI
         grid.disabled = False
         info.color = None
 
@@ -99,12 +95,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
             info.value = "Reserva creada con éxito."
             info.color = ft.Colors.GREEN_500
             state["confirm_for"] = None
-            render() # Vuelve a cargar el calendario
+            render() 
         else:
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-            page.update(info, grid) # Actualiza la UI desde el hilo principal
+        page.update(info, grid)
 
     def do_cancel_reservation(rid: int):
         info.value = "Cancelando reserva, por favor espera..."
@@ -112,15 +108,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
         grid.disabled = True
         page.update(info, grid)
         
-        # Corremos la cancelación en un hilo
-        # --- ¡CORRECCIÓN! Usando page.run_thread ---
-        page.run_thread(target=run_cancel_reservation, args=(rid,))
+        # --- ¡CORRECCIÓN 2! (Quitado 'target=' y 'args=') ---
+        page.run_thread(run_cancel_reservation, rid)
 
     def run_cancel_reservation(rid: int):
-        # Esta función se ejecuta en un hilo de fondo
         result = api.delete_reserva(rid)
 
-        # Volvemos al hilo principal para actualizar la UI
         grid.disabled = False
         info.color = None
         state["confirm_for"] = None
@@ -128,12 +121,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if result and "error" not in result:
             info.value = "Reserva cancelada exitosamente."
             info.color = ft.Colors.GREEN_500 
-            render() # Vuelve a cargar el calendario
+            render() 
         else:
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-            page.update(info, grid) # Actualiza la UI
+        page.update(info, grid)
 
     def ask_inline_cancel(rid: int, etiqueta: str):
         state["confirm_for"] = rid
@@ -141,15 +134,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # --- MODIFICACIÓN: Renderizado del Grid (asíncrono) ---
-    
-    # Esta función ahora hace TODO (obtener datos Y construir la UI)
-    # Se ejecutará en un hilo de fondo.
     def render_grid_in_thread(d: date):
-        
-        new_controls = [] # Construimos los controles aquí
+        new_controls = []
         try:
-            # 1. Obtener datos
             if not dd_lab.value or not dd_lab.value.isdigit():
                 raise Exception("Selecciona un laboratorio.")
             
@@ -166,22 +153,19 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if not isinstance(api_result, list):
                 raise Exception(f"Error al cargar reservas: {api_result.get('error', 'Error')}")
 
-            # 2. Mapear reservas por hora de inicio
             reservas_map = {}
-            for r in all_reservas:
+            for r in api_result: # Cambiado de all_reservas a api_result
                 start_str = r.get('inicio')
                 if start_str:
                     dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
                     dt_aware_local = dt_aware_utc.astimezone(None)
                     reservas_map[dt_aware_local.replace(tzinfo=None)] = r
 
-            # 3. Obtener los slots de hoy
             slots_for_day = horario_result.get(d.isoformat(), [])
             
             if not slots_for_day:
                 new_controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
 
-            # 4. Renderizar slots
             for slot in slots_for_day:
                 s_dt = datetime.fromisoformat(str(slot.get('inicio'))).replace(tzinfo=None)
                 f_dt = datetime.fromisoformat(str(slot.get('fin'))).replace(tzinfo=None)
@@ -230,14 +214,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
             traceback.print_exc()
             new_controls = [ft.Text(f"Error al cargar: {e}", color=ft.Colors.ERROR)]
         
-        # 5. Actualizar la UI de golpe
         grid.controls = new_controls
         if grid.page: grid.update()
 
 
     def render():
-        # Esta función AHORA es SÚPER RÁPIDA.
-        # Solo actualiza el texto del header...
         grid.disabled = False
         if state["confirm_for"] is None:
             info.value = ""
@@ -252,7 +233,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if head_label.page: head_label.update()
         if info.page: info.update()
         
-        # 1. Limpiamos el grid y mostramos "Cargando..."
         grid.controls.clear()
         grid.controls.append(
             ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
@@ -260,8 +240,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         )
         if grid.page: grid.update()
         
-        # 2. ...y LUEGO manda a llamar la carga de datos en un hilo separado.
-        page.run_thread(target=render_grid_in_thread, args=(selected_date,))
+        # --- ¡CORRECCIÓN 3! (Quitado 'target=' y 'args=') ---
+        page.run_thread(render_grid_in_thread, selected_date)
 
 
     def on_change_plantel(e: ft.ControlEvent):
@@ -272,7 +252,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         dd_lab.value = str(filtered_labs[0]["id"]) if filtered_labs else None
         state["confirm_for"] = None
         if dd_lab.page: dd_lab.update()
-        render() # <-- Esto ahora es asíncrono
+        render()
 
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = lambda e: (state.update({"confirm_for": None}), render())
@@ -364,7 +344,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 legend,
                 info,
                 ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-                # Este Container se expande para llenar el espacio
                 ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
             ],
             expand=True,
@@ -396,9 +375,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         spacing=15
         )
 
-    # --- MODIFICACIÓN ASÍNCRONA DE CARGA INICIAL ---
-    # Esta función ahora hace TODO: obtiene datos Y actualiza la UI al final
-    def load_initial_data_in_thread(e=None):
+    def load_initial_data_in_thread(): # Ya no necesita 'e=None'
         nonlocal planteles_cache, labs_cache, lab_map
         
         try:
@@ -428,7 +405,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
                 if first_plantel_id_str:
                     dd_plantel.value = first_plantel_id_str
-                    # Simulamos el evento para cargar los labs y renderizar
                     on_change_plantel(SimpleControlEvent(control=dd_plantel)) 
                 else:
                     info.value = "El primer plantel no tiene un ID válido."
@@ -437,7 +413,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 info.value = "No hay planteles configurados."
                 info.color = ft.Colors.ERROR
             
-            # Actualizamos la UI desde el hilo
             if info.page: info.update()
             if dd_plantel.page: dd_plantel.update()
 
@@ -449,8 +424,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # Aplicamos estilos y cargamos datos
     apply_filter_styles()
-    # --- ¡CORRECCIÓN! Usando page.run_thread ---
-    page.run_thread(target=load_initial_data_in_thread)
+    # --- ¡CORRECCIÓN 4! (Quitado 'target=') ---
+    page.run_thread(load_initial_data_in_thread)
 
     if state["is_mobile"]:
         return mobile_layout()
