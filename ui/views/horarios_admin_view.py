@@ -14,8 +14,8 @@ DIAS_SEMANA: Dict[int, str] = {
 }
 DIAS_SEMANA_SHORT: Dict[int, str] = {k: v[:3] for k, v in DIAS_SEMANA.items()}
 
-HORA_INICIO_DIA = time(7, 0)  # Horario más temprano
-HORA_FIN_DIA = time(21, 0)    # Horario más tarde
+HORA_INICIO_DIA = time(7, 0)
+HORA_FIN_DIA = time(21, 0)
 INTERVALO_MINUTOS = 30
 HORA_OPTIONS = generate_time_options(HORA_INICIO_DIA, HORA_FIN_DIA, INTERVALO_MINUTOS)
 
@@ -78,19 +78,14 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         on_change=lambda e: (state.update({"selected_lab": dd_lab.value}), render_horarios())
     )
 
-    # Selector de día simple
+    # Selector de día simple - CORREGIDO
     day_buttons = []
     for dia_num in range(5):  # Solo Lunes a Viernes
         btn = ft.TextButton(
             DIAS_SEMANA_SHORT[dia_num],
             style=ft.ButtonStyle(
-                color={
-                    ft.MaterialState.DEFAULT: ft.Colors.PRIMARY if state["selected_day"] == dia_num else ft.Colors.GREY_600,
-                    ft.MaterialState.HOVERED: ft.Colors.PRIMARY,
-                },
-                bgcolor={
-                    ft.MaterialState.DEFAULT: ft.Colors.PRIMARY_CONTAINER if state["selected_day"] == dia_num else ft.Colors.TRANSPARENT,
-                }
+                color=ft.Colors.PRIMARY if state["selected_day"] == dia_num else ft.Colors.GREY_600,
+                bgcolor=ft.Colors.PRIMARY_CONTAINER if state["selected_day"] == dia_num else None,
             ),
             data=dia_num,
             on_click=lambda e: (state.update({"selected_day": e.control.data}), render_horarios())
