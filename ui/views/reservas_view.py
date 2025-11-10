@@ -1,4 +1,4 @@
-# VERSIÓN SIMPLIFICADA - SIN SELECTOR DE FECHA Y SIN DUPLICACIONES
+# VERSIÓN CON CAMBIO DE FECHAS DESLIZABLE
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -16,7 +16,7 @@ class SimpleControlEvent:
 def ReservasView(page: ft.Page, api: ApiClient):
     """
     Vista para la gestión de reservas de laboratorios.
-    Versión móvil optimizada.
+    Versión móvil optimizada con gestos deslizables.
     """
     user_session = page.session.get("user_session") or {}
     user_data = user_session
@@ -30,7 +30,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
         "confirm_for": None, 
         "is_mobile": get_is_mobile(),
         "selected_date": date.today(),
-        "show_filters": False
+        "show_filters": False,
+        "swipe_start_x": 0,  # Para detectar gestos de deslizamiento
+        "swipe_start_y": 0
     }
 
     def update_mobile_state():
@@ -145,8 +147,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
     
     head_label = ft.Text("", size=16, weight=ft.FontWeight.W_600)
 
-    # FUNCIONES DE NAVEGACIÓN SIMPLIFICADAS
-    def goto_next(e):
+    # FUNCIONES DE NAVEGACIÓN CON ANIMACIÓN
+    def goto_next(e=None):
         if state["is_mobile"]:
             state["selected_date"] = next_weekday(state["selected_date"])
         else:
@@ -154,21 +156,77 @@ def ReservasView(page: ft.Page, api: ApiClient):
             last_day = days[-1]
             window["start"] = next_weekday(last_day)
         state["confirm_for"] = None
+        # Agregar feedback visual
+        if state["is_mobile"]:
+            swipe_feedback.content = ft.Container(
+                bgcolor=ft.Colors.PRIMARY.with_opacity(0.1),
+                border=ft.border.all(2, ft.Colors.PRIMARY),
+                border_radius=10,
+                animate=ft.animation.Animation(300, ft.AnimationCurve.EASE_OUT)
+            )
+            page.update(swipe_feedback)
+            # Remover el feedback después de un tiempo
+            def remove_feedback():
+                swipe_feedback.content = ft.Container()
+                page.update(swipe_feedback)
+            import threading
+            threading.Timer(0.3, remove_feedback).start()
         render()
 
-    def goto_prev(e):
+    def goto_prev(e=None):
         if state["is_mobile"]:
             state["selected_date"] = next_weekday(state["selected_date"], step=-1)
         else:
             prev_days = five_weekdays_before(window["start"])
             window["start"] = prev_days[0]
         state["confirm_for"] = None
+        # Agregar feedback visual
+        if state["is_mobile"]:
+            swipe_feedback.content = ft.Container(
+                bgcolor=ft.Colors.PRIMARY.with_opacity(0.1),
+                border=ft.border.all(2, ft.Colors.PRIMARY),
+                border_radius=10,
+                animate=ft.animation.Animation(300, ft.AnimationCurve.EASE_OUT)
+            )
+            page.update(swipe_feedback)
+            # Remover el feedback después de un tiempo
+            def remove_feedback():
+                swipe_feedback.content = ft.Container()
+                page.update(swipe_feedback)
+            import threading
+            threading.Timer(0.3, remove_feedback).start()
         render()
 
     def goto_today(e):
         state["selected_date"] = today if not is_weekend(today) else next_weekday(today)
         state["confirm_for"] = None
         render()
+
+    # FUNCIONES PARA GESTOS DESLIZABLES
+    def handle_swipe_start(e: ft.DragStartEvent):
+        if state["is_mobile"]:
+            state["swipe_start_x"] = e.local_x
+            state["swipe_start_y"] = e.local_y
+
+    def handle_swipe_update(e: ft.DragUpdateEvent):
+        if state["is_mobile"]:
+            # Podemos agregar un efecto visual durante el deslizamiento
+            pass
+
+    def handle_swipe_end(e: ft.DragEndEvent):
+        if state["is_mobile"]:
+            swipe_threshold = 50  # Mínimo de píxeles para considerar un deslizamiento
+            delta_x = e.local_x - state["swipe_start_x"]
+            delta_y = e.local_y - state["swipe_start_y"]
+            
+            # Solo procesar si el movimiento es principalmente horizontal
+            if abs(delta_x) > abs(delta_y) and abs(delta_x) > swipe_threshold:
+                if delta_x > 0:
+                    # Deslizamiento hacia la derecha - día anterior
+                    goto_prev()
+                else:
+                    # Deslizamiento hacia la izquierda - siguiente día
+                    goto_next()
 
     def get_days_in_window(start_date: date):
         if state["is_mobile"]:
@@ -276,7 +334,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # SECCIÓN DE DÍA
+    # SECCIÓN DE DÍA CON SOPORTE PARA DESLIZAMIENTO
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
         is_mobile_view = state["is_mobile"]
         
@@ -329,11 +387,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 is_admin = current_user_rol == "admin"
                 can_manage = is_owner or is_admin
 
-                # Versión móvil compacta
                 display_label = f"🟡 {label} - {nombre}" if is_mobile_view else f"Reservado por {nombre}"
 
                 if can_manage and state["confirm_for"] == rid:
-                    # Botones de confirmación adaptados a móvil
                     if is_mobile_view:
                         confirm_row = ft.Column([
                             ft.Text("¿Cancelar reserva?", size=14, weight=ft.FontWeight.BOLD),
@@ -410,7 +466,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         day_content = ft.Column([day_header, tiles_container], spacing=0)
 
-        # Usar Container para aplicar margin
+        # Envolver en GestureDetector para deslizamiento en móvil
+        if is_mobile_view:
+            day_content = ft.GestureDetector(
+                content=day_content,
+                on_pan_start=handle_swipe_start,
+                on_pan_update=handle_swipe_update,
+                on_pan_end=handle_swipe_end,
+            )
+
         if is_mobile_view:
             card_container = ft.Container(
                 content=Card(day_content, padding=0),
@@ -496,25 +560,33 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if state["is_mobile"]:
             current_date = state["selected_date"]
             head_label.value = f"{day_names_short[current_date.weekday()]} {current_date.strftime('%d/%m')} · {lab_name}"
+            # Agregar indicador de deslizamiento
+            swipe_indicator.content = ft.Row([
+                ft.Text("← Desliza para cambiar día →", 
+                       size=12, 
+                       color=ft.Colors.GREY_600,
+                       text_align=ft.TextAlign.CENTER,
+                       expand=True)
+            ], alignment=ft.MainAxisAlignment.CENTER)
         else:
             head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
+            swipe_indicator.content = ft.Container()
         
         if head_label.page:
             head_label.update()
+        if swipe_indicator.page:
+            swipe_indicator.update()
 
         # CONFIGURACIÓN DE CONTROLES
         if state["is_mobile"]:
-            # En móvil: mostrar botón para toggle de filtros
             filter_group.visible = state["show_filters"]
             toggle_filters_button.visible = True
             filter_group_desktop.visible = False
             
-            # Configurar el botón de toggle
             toggle_filters_button.icon = ft.Icons.KEYBOARD_ARROW_DOWN if state["show_filters"] else ft.Icons.KEYBOARD_ARROW_RIGHT
             toggle_filters_button.text = "Ocultar filtros" if state["show_filters"] else "Cambiar laboratorio"
             
         else:
-            # En escritorio: mostrar filtros siempre visibles
             filter_group.visible = False
             toggle_filters_button.visible = False
             filter_group_desktop.visible = True
@@ -575,7 +647,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.ERROR
         head_label.value = "Error de Configuración"
 
-    # NAVEGACIÓN SIMPLIFICADA
+    # NAVEGACIÓN CON INDICADOR DE DESLIZAMIENTO
     nav_group = ft.Row(
         [
             Icon(ft.Icons.CHEVRON_LEFT, "Día anterior", on_click=goto_prev),
@@ -584,6 +656,19 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    # INDICADOR DE DESLIZAMIENTO
+    swipe_indicator = ft.Container(
+        content=ft.Container(),
+        padding=ft.padding.only(bottom=8),
+        visible=True
+    )
+
+    # FEEDBACK VISUAL PARA DESLIZAMIENTO
+    swipe_feedback = ft.Container(
+        content=ft.Container(),
+        expand=True,
     )
 
     # BOTÓN PARA TOGGLE DE FILTROS EN MÓVIL
@@ -610,11 +695,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
     filter_group_desktop = ft.Row([dd_plantel, dd_lab], spacing=10, visible=not state["is_mobile"])
 
     header_controls_container = ft.Column(
-        [nav_group, toggle_filters_button, filter_group, filter_group_desktop], 
+        [nav_group, swipe_indicator, toggle_filters_button, filter_group, filter_group_desktop], 
         spacing=8
     )
 
-    # LEYENDA SIMPLIFICADA
+    # LEYENDA
     legend_items = [
         ("🟢 Disponible", "Horarios disponibles para reservar"),
         ("🟡 Reservado", "Horarios ya reservados"),
@@ -646,8 +731,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     page.on_resize = handle_page_resize
 
-    # INTERFAZ DE USUARIO FINAL - SIMPLIFICADA
-    ui = ft.Column(
+    # CONTENEDOR PRINCIPAL CON SOPORTE PARA DESLIZAMIENTO
+    main_content = ft.Column(
         controls=[
             ft.Text("Reservas de Laboratorios", 
                    size=20, 
@@ -670,6 +755,17 @@ def ReservasView(page: ft.Page, api: ApiClient):
         expand=True,
         scroll=ft.ScrollMode.ADAPTIVE,
         spacing=12,
+    )
+
+    # ENVOLVER TODO EN GESTURE DETECTOR PARA DESLIZAMIENTO
+    ui = ft.GestureDetector(
+        content=ft.Column([
+            main_content,
+            swipe_feedback
+        ], expand=True),
+        on_pan_start=handle_swipe_start,
+        on_pan_update=handle_swipe_update,
+        on_pan_end=handle_swipe_end,
     )
 
     page.add(ui)
