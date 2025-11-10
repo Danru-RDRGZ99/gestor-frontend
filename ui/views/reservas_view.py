@@ -6,6 +6,9 @@ from ui.components.cards import Card
 from dataclasses import dataclass
 import traceback
 
+# --- ¡NUEVO! Lista de días en español ---
+DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
 # Clase simple para simular la estructura del evento
 @dataclass
 class SimpleControlEvent:
@@ -30,7 +33,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # --- Estado y UI ---
     info = ft.Text("")
-    # El grid es una Columna scrollable que contendrá los SLOTS (no los días)
+    # El grid es una Columna scrollable que contendrá los SLOTS
+    # ¡Le quitamos el expand=True que causaba la pantalla gris!
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
 
     # --- Catálogos cacheados (inicializados vacíos) ---
@@ -38,7 +42,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     labs_cache = []
     lab_map: dict[str, str] = {}
     
-    # --- Lógica del Calendario (NUEVA: Un solo día) ---
+    # --- Lógica del Calendario (Un solo día) ---
     def is_weekend(d: date) -> bool: return d.weekday() >= 5
     def next_weekday(d: date, step: int = 1):
         n = d + timedelta(days=step)
@@ -46,9 +50,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         return n
 
     today = date.today()
-    # El estado ahora guarda un solo día
     window = {"selected_date": today if not is_weekend(today) else next_weekday(today)}
-    head_label = ft.Text("", size=18, weight=ft.FontWeight.W_600)
+    head_label = ft.Text("Cargando...", size=18, weight=ft.FontWeight.W_600)
 
     def goto_next(e=None):
         window["selected_date"] = next_weekday(window["selected_date"], step=1)
@@ -81,8 +84,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
             "inicio": s.isoformat(), 
             "fin": f.isoformat()
         }
-        result = api.create_reserva(payload)
+        # Corremos la creación en un hilo para no bloquear
+        page.run_thread(run_create_reservation, args=(payload,))
 
+
+    def run_create_reservation(payload: dict):
+        result = api.create_reserva(payload)
+        
+        # Volvemos al hilo principal para actualizar la UI
         grid.disabled = False
         info.color = None
 
@@ -95,14 +104,18 @@ def ReservasView(page: ft.Page, api: ApiClient):
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-            page.update(info, grid)
+        page.update(info, grid) # Actualiza la UI desde el hilo principal
 
     def do_cancel_reservation(rid: int):
         info.value = "Cancelando reserva, por favor espera..."
         info.color = ft.Colors.AMBER_700
         grid.disabled = True
         page.update(info, grid)
+        
+        # Corremos la cancelación en un hilo
+        page.run_thread(run_cancel_reservation, args=(rid,))
 
+    def run_cancel_reservation(rid: int):
         result = api.delete_reserva(rid)
 
         grid.disabled = False
@@ -117,7 +130,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-            page.update(info, grid)
+        page.update(info, grid) # Actualiza la UI
 
     def ask_inline_cancel(rid: int, etiqueta: str):
         state["confirm_for"] = rid
@@ -125,8 +138,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # --- MODIFICACIÓN: Renderizado del Grid (ahora son slots) ---
-    def render_grid(d: date):
+    # --- MODIFICACIÓN: Renderizado del Grid (ahora es asíncrono) ---
+    def render_grid_async(d: date):
+        # 1. Limpiamos y mostramos "Cargando..."
         grid.controls.clear()
         if not dd_lab.value or not dd_lab.value.isdigit():
             grid.controls.append(
@@ -142,110 +156,96 @@ def ReservasView(page: ft.Page, api: ApiClient):
         )
         if grid.page: grid.update()
 
-        lid = int(dd_lab.value)
-        
-        # 1. Obtener Horario (para un solo día)
-        horario_result = api.get_horario_laboratorio(lid, d, d)
-        if isinstance(horario_result, dict) and "error" in horario_result:
-            info.value = f"Error al cargar horario: {horario_result.get('error', 'Error')}"
-            info.color = ft.Colors.ERROR
-            if grid.page and info.page: info.update()
-            return
-        
-        # 2. Obtener Reservas (para un solo día)
-        api_result = api.get_reservas(lid, d, d + timedelta(days=1))
-        all_reservas = []
-        if isinstance(api_result, list):
-            all_reservas = api_result
-        else:
-            info.value = f"Error al cargar reservas: {api_result.get('error', 'Error')}"
-            info.color = ft.Colors.ERROR
-            if grid.page and info.page: info.update()
-            return
+        # 2. Obtenemos datos de la API (esto es lo que tarda)
+        try:
+            lid = int(dd_lab.value)
+            
+            horario_result = api.get_horario_laboratorio(lid, d, d)
+            if isinstance(horario_result, dict) and "error" in horario_result:
+                raise Exception(f"Error al cargar horario: {horario_result.get('error', 'Error')}")
+            if not isinstance(horario_result, dict):
+                 raise Exception(f"Respuesta inesperada del API de horario")
+            
+            api_result = api.get_reservas(lid, d, d + timedelta(days=1))
+            all_reservas = []
+            if isinstance(api_result, list):
+                all_reservas = api_result
+            else:
+                raise Exception(f"Error al cargar reservas: {api_result.get('error', 'Error')}")
 
-        # 3. Mapear reservas por hora de inicio
-        reservas_map = {}
-        for r in all_reservas:
-            try:
+            # 3. Mapear reservas por hora de inicio
+            reservas_map = {}
+            for r in all_reservas:
                 start_str = r.get('inicio')
                 if start_str:
                     dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
                     dt_aware_local = dt_aware_utc.astimezone(None)
-                    dt_naive_local = dt_aware_local.replace(tzinfo=None)
-                    reservas_map[dt_naive_local] = r
-            except (ValueError, TypeError) as e:
-                print(f"Error parsing date for reservation {r.get('id')}: {e}")
+                    reservas_map[dt_aware_local.replace(tzinfo=None)] = r
 
-        # 4. Obtener los slots de hoy
-        slots_for_day = horario_result.get(d.isoformat(), [])
-        
-        # 5. Limpiar grid y renderizar slots
-        grid.controls.clear()
-        
-        if not slots_for_day:
-            grid.controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
+            # 4. Obtener los slots de hoy
+            slots_for_day = horario_result.get(d.isoformat(), [])
+            
+            # 5. Limpiar grid y renderizar slots
+            grid.controls.clear()
+            
+            if not slots_for_day:
+                grid.controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
 
-        for slot in slots_for_day:
-            try:
-                s_str = slot.get('inicio')
-                f_str = slot.get('fin')
-                if not s_str or not f_str: continue
-                
-                s_dt = datetime.fromisoformat(str(s_str)).replace(tzinfo=None)
-                f_dt = datetime.fromisoformat(str(f_str)).replace(tzinfo=None)
+            for slot in slots_for_day:
+                s_dt = datetime.fromisoformat(str(slot.get('inicio'))).replace(tzinfo=None)
+                f_dt = datetime.fromisoformat(str(slot.get('fin'))).replace(tzinfo=None)
                 k_tipo = slot.get('tipo', 'no_habilitado')
-                
-            except (ValueError, TypeError) as e:
-                print(f"WARN: Skipping slot due to invalid date: {slot} | Error: {e}") 
-                continue
+                label = slot_label(s_dt, f_dt)
+                found_res_data = reservas_map.get(s_dt) 
 
-            label = slot_label(s_dt, f_dt)
-            found_res_data = reservas_map.get(s_dt) 
+                if found_res_data:
+                    rid = found_res_data.get('id')
+                    user_info = found_res_data.get('usuario', {}) 
+                    reserving_user_id = user_info.get('id')
+                    nombre = user_info.get('nombre', 'N/A')
+                    current_user_id = user_data.get("id")
+                    current_user_rol = user_data.get("rol")
+                    is_owner = (str(current_user_id) == str(reserving_user_id))
+                    is_admin = (current_user_rol == "admin")
+                    can_manage = is_owner or is_admin
+                    label = f"Reservado por {nombre}"
 
-            # --- CASO 1: Slot Reservado ---
-            if found_res_data:
-                rid = found_res_data.get('id')
-                user_info = found_res_data.get('usuario', {}) 
-                reserving_user_id = user_info.get('id')
-                nombre = user_info.get('nombre', 'N/A')
-                current_user_id = user_data.get("id")
-                current_user_rol = user_data.get("rol")
-                is_owner = (str(current_user_id) == str(reserving_user_id))
-                is_admin = (current_user_rol == "admin")
-                can_manage = is_owner or is_admin
-                label = f"Reservado por {nombre}"
-
-                if can_manage and state["confirm_for"] == rid:
-                    grid.controls.append(Card(ft.Row([
-                        Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, expand=True),
-                        Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render())),
-                    ])))
+                    if can_manage and state["confirm_for"] == rid:
+                        grid.controls.append(Card(ft.Row([
+                            Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, expand=True),
+                            Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render())),
+                        ])))
+                    else:
+                        grid.controls.append(Card(Tonal(
+                            label,
+                            tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
+                            on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
+                            disabled=not can_manage, 
+                            height=50
+                        )))
+                elif k_tipo in ["disponible", "libre"]:
+                    is_allowed_to_create = user_data.get("rol") in ["admin", "docente"]
+                    reserve_button = Primary(label,
+                                             on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
+                                             disabled=not is_allowed_to_create,
+                                             height=50)
+                    reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
+                    grid.controls.append(Card(reserve_button))
                 else:
-                    grid.controls.append(Card(Tonal(
-                        label,
-                        tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
-                        on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
-                        disabled=not can_manage, 
-                        height=50
-                    )))
+                    grid.controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
 
-            # --- CASO 2: Slot Disponible ---
-            elif k_tipo in ["disponible", "libre"]:
-                is_allowed_to_create = user_data.get("rol") in ["admin", "docente"]
-                reserve_button = Primary(label,
-                                         on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
-                                         disabled=not is_allowed_to_create,
-                                         height=50)
-                reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
-                grid.controls.append(Card(reserve_button))
-
-            # --- CASO 3: Slot No Habilitado ---
-            else:
-                grid.controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
+        except Exception as e:
+            print(f"Error en render_grid_async: {e}")
+            traceback.print_exc()
+            grid.controls.clear()
+            grid.controls.append(ft.Text(f"Error al cargar: {e}", color=ft.Colors.ERROR))
 
         if grid.page: grid.update()
 
+
     def render():
+        # Esta función AHORA es SÚPER RÁPIDA.
+        # Solo actualiza el texto del header...
         grid.disabled = False
         if state["confirm_for"] is None:
             info.value = ""
@@ -253,12 +253,17 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         selected_date = window["selected_date"]
         lab_name = lab_map.get(dd_lab.value, "(Selecciona Lab)")
-        # Actualizamos el label del header al nuevo formato de un solo día
-        head_label.value = f"{selected_date.strftime('%A %d/%m')} · {lab_name}"
+        
+        # --- ¡CORRECCIÓN DE IDIOMA! ---
+        dia_es = DIAS_SEMANA[selected_date.weekday()]
+        head_label.value = f"{dia_es} {selected_date.strftime('%d/%m')} · {lab_name}"
         
         if head_label.page: head_label.update()
         if info.page: info.update()
-        render_grid(selected_date) # Le pasamos el día seleccionado
+        
+        # ...y LUEGO manda a llamar la carga de datos en un hilo separado.
+        page.run_thread(render_grid_async, args=(selected_date,))
+
 
     def on_change_plantel(e: ft.ControlEvent):
         pid_str = e.control.value
@@ -268,7 +273,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         dd_lab.value = str(filtered_labs[0]["id"]) if filtered_labs else None
         state["confirm_for"] = None
         if dd_lab.page: dd_lab.update()
-        render()
+        render() # <-- Esto ahora es asíncrono
 
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = lambda e: (state.update({"confirm_for": None}), render())
@@ -425,6 +430,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 if first_plantel_id_str:
                     dd_plantel.value = first_plantel_id_str
                     if dd_plantel.page: dd_plantel.update()
+                    # Simulamos el evento para cargar los labs y renderizar
                     on_change_plantel(SimpleControlEvent(control=dd_plantel)) 
                 else:
                     info.value = "El primer plantel no tiene un ID válido."
