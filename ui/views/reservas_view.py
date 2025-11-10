@@ -15,7 +15,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     user_session = page.session.get("user_session") or {}
     user_data = user_session
     
-    # --- MODIFICACIÓN 1: Detección de móvil dinámica ---
     def detect_mobile() -> bool:
         width = getattr(page, "window_width", None)
         return (width is not None and width < 700) or getattr(page.platform, "name", "").lower() in ("android", "ios")
@@ -24,7 +23,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         "confirm_for": None,
         "is_mobile": detect_mobile()
     }
-    # --- FIN MODIFICACIÓN 1 ---
 
     # --- Controles de Filtros ---
     dd_plantel = ft.Dropdown(label="Plantel", options=[])
@@ -32,16 +30,18 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # --- Estado y UI ---
     info = ft.Text("")
-    # El grid se expandirá para llenar el espacio
-    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True) 
+    
+    # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+    # El grid es scrollable, PERO NO expandible.
+    # El Container que lo rodea será el que se expanda.
+    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
+    # --- FIN DE LA CORRECCIÓN ---
 
     # --- Catálogos cacheados (inicializados vacíos) ---
     planteles_cache = []
     labs_cache = []
     lab_map: dict[str, str] = {}
     
-    # --- MODIFICACIÓN 2: Se ELIMINA el bloque try/except que cargaba datos aquí ---
-
     # --- Lógica del Calendario BASE ---
     def is_weekend(d: date) -> bool: return d.weekday() >= 5
     def next_weekday(d: date, step: int = 1):
@@ -229,11 +229,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
             else:
                 tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50));
 
-        # --- MODIFICACIÓN 3: Layout de tarjetas de día ---
-        # En móvil, los slots van en una Columna. En escritorio, en una Fila.
         slot_container = ft.Column(tiles, spacing=10) if state["is_mobile"] else ft.Row(tiles, scroll=ft.ScrollMode.AUTO, wrap=False)
         day_column = ft.Column([title, slot_container], spacing=10)
-        # --- FIN MODIFICACIÓN 3 ---
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         return ft.Container(content=Card(day_column, padding=card_padding))
@@ -249,7 +246,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if grid.page: grid.update()
             return
 
-        # Ponemos el indicador de carga DENTRO del grid
         grid.controls.append(
             ft.Row([ft.ProgressRing(), ft.Text("Cargando horario...")], 
                    alignment=ft.MainAxisAlignment.CENTER, height=200)
@@ -301,12 +297,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
             except (ValueError, TypeError) as e:
                 print(f"Error parsing date {r.get('inicio')} in render_grid: {e} for reserva {r.get('id')}")
 
-        # Limpiamos el indicador de carga
         grid.controls.clear()
         
-        # --- MODIFICACIÓN 4: Layout del grid ---
-        # En móvil, el grid es una Columna (un día sobre otro).
-        # En escritorio, es una Fila (un día al lado del otro).
         grid_controls = []
         for d in days_to_display:
             slots_for_day = horario_result.get(d.isoformat(), [])
@@ -316,10 +308,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
             ))
         
         if state["is_mobile"]:
-            # En móvil, los controles se añaden directamente al grid (que es una Columna)
             grid.controls = grid_controls
         else:
-            # En escritorio, los metemos en una Fila con scroll
             grid.controls = [
                 ft.Row(
                     controls=grid_controls,
@@ -328,7 +318,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
                     vertical_alignment=ft.CrossAxisAlignment.START
                 )
             ]
-        # --- FIN MODIFICACIÓN 4 ---
 
         if grid.page: grid.update()
 
@@ -359,7 +348,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
     dd_plantel.on_change = on_change_plantel
     dd_lab.on_change = lambda e: (state.update({"confirm_for": None}), render())
 
-    # --- MODIFICACIÓN 5: BottomSheet para filtros móviles ---
     def close_filter_sheet(e):
         bs_filtros.open = False
         if bs_filtros.page: bs_filtros.update()
@@ -391,9 +379,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def open_filter_sheet(e):
         bs_filtros.open = True
         if bs_filtros.page: bs_filtros.update()
-    # --- FIN MODIFICACIÓN 5 ---
 
-    # --- MODIFICACIÓN 6: Lógica de estilos y resize ---
     def apply_filter_styles():
         is_mobile_now = state["is_mobile"]
         dd_plantel.width = None if is_mobile_now else 260
@@ -401,8 +387,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         dd_lab.width = None if is_mobile_now else 320
         dd_lab.expand = is_mobile_now
         
-        # Ajustamos el grid
-        grid.scroll = ft.ScrollMode.ADAPTIVE # Siempre vertical
+        grid.scroll = ft.ScrollMode.ADAPTIVE 
         
         if dd_plantel.page: dd_plantel.update()
         if dd_lab.page: dd_lab.update()
@@ -413,15 +398,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if new_mobile != state["is_mobile"]:
             state["is_mobile"] = new_mobile
             apply_filter_styles()
-            render() # Volver a renderizar todo
+            render() 
             if page: page.update()
 
     page.on_resize = _on_resize
-    # --- FIN MODIFICACIÓN 6 ---
 
     # --- Layout Final ---
     def build_header_controls():
-        # Construye la barra de cabecera de forma dinámica
         common_controls = [
             Icon(ft.Icons.CHEVRON_LEFT, "Semana anterior", on_click=lambda e: goto_prev()),
             head_label,
@@ -430,14 +413,13 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ]
         
         if not state["is_mobile"]:
-            # En escritorio, añadimos los dropdowns aquí
             common_controls.extend([dd_plantel, dd_lab])
 
         return ft.Row(
             common_controls,
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN, 
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            wrap=True, # Permitir que se ajuste si la pantalla es pequeña
+            wrap=True,
             spacing=10
         )
     
@@ -445,9 +427,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ft.Chip(label=ft.Text("Disponible"), leading=ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE)),
         ft.Chip(label=ft.Text("Reservado"), leading=ft.Icon(ft.Icons.BLOCK)), 
         ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE))
-    ], spacing=8, wrap=True) # Permitir que se ajuste
+    ], spacing=8, wrap=True) 
 
-    # --- MODIFICACIÓN 7: Layout dinámico (Column vs Stack) ---
     def mobile_layout():
         main_column = ft.Column(
             [
@@ -456,10 +437,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 legend,
                 info,
                 ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+                # Este Container se expande para llenar el espacio
                 ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
             ],
             expand=True,
-            scroll=None, # El scroll lo maneja el 'grid' interno
+            scroll=None, 
             spacing=15
         )
         
@@ -471,6 +453,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             bottom=10,
         )
         
+        # El Stack permite superponer el FAB sobre el contenido
         return ft.Stack([main_column, fab], expand=True)
 
     def desktop_layout():
@@ -480,15 +463,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
             legend,
             info,
             ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+            # Este Container se expande para llenar el espacio
             ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
         ],
         expand=True,
         scroll=None,
         spacing=15
         )
-    # --- FIN MODIFICACIÓN 7 ---
 
-    # --- MODIFICACIÓN 8: Carga asíncrona de datos ---
     def load_initial_data(e=None):
         nonlocal planteles_cache, labs_cache, lab_map
         
@@ -517,13 +499,11 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if error_msg:
                 raise Exception(error_msg)
 
-            # Lógica de inicialización (del final del script original)
             if planteles_cache:
                 first_plantel_id_str = str(planteles_cache[0].get("id","")) if planteles_cache else ""
                 if first_plantel_id_str:
                     dd_plantel.value = first_plantel_id_str
                     if dd_plantel.page: dd_plantel.update()
-                    # Simulamos el evento para cargar los labs y renderizar
                     on_change_plantel(SimpleControlEvent(control=dd_plantel)) 
                 else:
                     info.value = "El primer plantel no tiene un ID válido."
@@ -534,7 +514,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
                 info.color = ft.Colors.ERROR
                 if info.page: info.update()
                 
-            # Actualizamos los dropdowns en la UI
             if dd_plantel.page:
                 dd_plantel.update()
 
@@ -544,11 +523,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
             info.color = ft.Colors.ERROR
             if info.page: info.update()
 
-    # --- FIN MODIFICACIÓN 8 ---
-
     # Aplicamos estilos y cargamos datos
     apply_filter_styles()
-    page.run_thread(load_initial_data) # <-- Ejecutamos la carga
+    page.run_thread(load_initial_data)
 
     if state["is_mobile"]:
         return mobile_layout()
