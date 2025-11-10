@@ -78,7 +78,8 @@ def ReservasView(page: ft.Page, api: ApiClient):
         bs_filters.update()
 
     fab_filter = ft.FloatingActionButton(
-        icon=ft.icons.FILTER_ALT_OUTLINED,
+        # --- ¡CORRECCIÓN! ft.icons -> ft.Icons ---
+        icon=ft.Icons.FILTER_ALT_OUTLINED,
         tooltip="Filtrar laboratorios",
         on_click=open_filters,
         visible=False # Empezará oculto
