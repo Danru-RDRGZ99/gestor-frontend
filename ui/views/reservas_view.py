@@ -46,7 +46,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Estado y UI ---
     info = ft.Text("")
     
-    # --- ¡CORRECCIÓN! Simplificamos el grid. El centrado lo hará el hijo. ---
+    # Simplificamos el grid. El centrado lo hará el hijo.
     grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
     # --- NUEVO: Definición del BottomSheet para filtros ---
@@ -317,20 +317,26 @@ def ReservasView(page: ft.Page, api: ApiClient):
         
         card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
         
-        # --- ¡INICIO DE LA CORRECCIÓN DE CENTRADO! ---
-        # Creamos el contenido de la tarjeta
+        # --- ¡INICIO DE LA CORRECCIÓN DE OCUPAR TODO EL ANCHO! ---
         card_content = Card(day_column, padding=card_padding)
 
         if is_mobile_view:
-            # En móvil, envolvemos la tarjeta en un Row que la centrará
+            # En móvil, envolvemos la tarjeta en un Row que se expande
+            # y que la tarjeta dentro también se expande.
             return ft.Row(
-                controls=[card_content],
-                alignment=ft.MainAxisAlignment.CENTER
+                controls=[
+                    ft.Container(
+                        content=card_content,
+                        expand=True, # La tarjeta ahora se expandirá dentro de este Container
+                        padding=ft.padding.symmetric(horizontal=10) # Añade un pequeño padding lateral
+                    )
+                ],
+                expand=True # El Row se expande para llenar el ancho
             )
         else:
-            # En web, la devolvemos como estaba
-            return ft.Container(content=card_content)
-        # --- ¡FIN DE LA CORRECCIÓN DE CENTRADO! ---
+            # En web, la devolvemos como estaba. También la expandimos para consistencia.
+            return ft.Container(content=card_content, expand=True)
+        # --- ¡FIN DE LA CORRECCIÓN DE OCUPAR TODO EL ANCHO! ---
 
 
     # --- Renderizado del Grid (Contenedor de días) ---
