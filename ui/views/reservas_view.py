@@ -154,14 +154,15 @@ def ReservasView(page: ft.Page, api: ApiClient):
         if state["is_mobile"]: return [cur]
         else: return five_weekdays_from(cur)
 
-    def goto_next():
+    # --- ¡INICIO DE LA CORRECCIÓN! ---
+    def goto_next(e): # <-- AÑADIDO (e)
         days = get_days_in_window(window["start"]) 
         last_day = days[-1]
         window["start"] = next_weekday(last_day) 
         state["confirm_for"] = None
         render()
 
-    def goto_prev():
+    def goto_prev(e): # <-- AÑADIDO (e)
         if state["is_mobile"]:
             window["start"] = next_weekday(window["start"], step=-1)
         else:
@@ -169,6 +170,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             window["start"] = prev_days[0]
         state["confirm_for"] = None
         render()
+    # --- ¡FIN DE LA CORRECCIÓN! ---
 
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
 
@@ -389,14 +391,12 @@ def ReservasView(page: ft.Page, api: ApiClient):
             page.floating_action_button = None # Quitar FAB
             fab_filter.visible = False
         
-        # --- ¡INICIO DE LA CORRECCIÓN! ---
         if filter_group.page: filter_group.update()
         
         # En lugar de actualizar el FAB, actualizamos la PÁGINA
         # para registrar el cambio de (añadir/quitar) el FAB.
         if page: # 'page' siempre existe en este contexto
             page.update()
-        # --- ¡FIN DE LA CORRECCIÓN! ---
 
         # 5. Deshabilitar el grid (mostrará "cargando") y llamar a render_grid
         grid.disabled = True
