@@ -1,8 +1,6 @@
-
 name: Construir Flet APK
 
 on:
-  # Se ejecuta cada vez que haces push a la rama 'main'
   push:
     branches: [ "main" ] # O "master", si usas esa
 
@@ -15,17 +13,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Construir app Flet (APK)
-        uses: flet-dev/flet-build-action@v1 # <--- ¡Esta es la línea correcta!
+        # --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+        # Usamos una versión específica en lugar de @v1
+        uses: flet-dev/flet-build-action@v1.0.3
         with:
           platform: apk
-          # Opcional: Si tu 'flet.yml' está en otra ruta, especifícala
-          # project_path: . 
-
-          # Opcional: Si quieres pasar la versión desde aquí
-          # version: 1.0.0
-
+          
       - name: Subir APK como Artefacto
-        # Este paso toma la APK compilada y la adjunta a la ejecución
         uses: actions/upload-artifact@v4
         with:
           name: gestor-de-laboratorios-apk
