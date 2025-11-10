@@ -33,7 +33,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # --- Estado y UI ---
     info = ft.Text("")
-    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE)
+    # El grid es una Columna simple. Su contenido cambiará.
+    # En escritorio, contendrá una Fila. En móvil, una Columna.
+    grid = ft.Column(spacing=12, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
     # --- Catálogos cacheados (inicializados vacíos) ---
     planteles_cache = []
@@ -48,21 +50,50 @@ def ReservasView(page: ft.Page, api: ApiClient):
         return n
 
     today = date.today()
-    window = {"selected_date": today if not is_weekend(today) else next_weekday(today)}
+    # 'start_date' es el Lunes de la semana (en web) o el día actual (en móvil)
+    window = {"start_date": today if not is_weekend(today) else next_weekday(today)}
     head_label = ft.Text("Cargando...", size=18, weight=ft.FontWeight.W_600)
 
+    # --- Lógica Híbrida de Navegación ---
+    def five_weekdays_from(d: date):
+        days = []; cur = d
+        if is_weekend(cur): cur = next_weekday(cur)
+        while len(days) < 5:
+            if not is_weekend(cur): days.append(cur)
+            cur += timedelta(days=1)
+        return days
+
+    def five_weekdays_before(end_exclusive: date):
+        days = []; cur = end_exclusive - timedelta(days=1)
+        while len(days) < 5:
+            if not is_weekend(cur): days.insert(0, cur)
+            cur -= timedelta(days=1)
+        return days
+
     def goto_next(e=None):
-        window["selected_date"] = next_weekday(window["selected_date"], step=1)
+        if state["is_mobile"]:
+            # En móvil, avanza 1 día
+            window["start_date"] = next_weekday(window["start_date"], step=1)
+        else:
+            # En web, avanza 1 semana
+            days = five_weekdays_from(window["start_date"])
+            window["start_date"] = next_weekday(days[-1])
         state["confirm_for"] = None
         render()
 
     def goto_prev(e=None):
-        window["selected_date"] = next_weekday(window["selected_date"], step=-1)
+        if state["is_mobile"]:
+            # En móvil, retrocede 1 día
+            window["start_date"] = next_weekday(window["start_date"], step=-1)
+        else:
+            # En web, retrocede 1 semana
+            prev_days = five_weekdays_before(window["start_date"])
+            window["start_date"] = prev_days[0]
         state["confirm_for"] = None
         render()
 
     def slot_label(s: datetime, f: datetime): return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
-    # --- FIN Lógica Base ---
+    # --- FIN Lógica Híbrida ---
 
     # --- Acciones (Ahora asíncronas) ---
     def do_create_reservation(lab_id: int, s: datetime, f: datetime):
@@ -82,12 +113,10 @@ def ReservasView(page: ft.Page, api: ApiClient):
             "inicio": s.isoformat(), 
             "fin": f.isoformat()
         }
-        # --- ¡CORRECCIÓN 1! (Quitado 'target=' y 'args=') ---
         page.run_thread(run_create_reservation, payload)
 
     def run_create_reservation(payload: dict):
         result = api.create_reserva(payload)
-        
         grid.disabled = False
         info.color = None
 
@@ -100,20 +129,17 @@ def ReservasView(page: ft.Page, api: ApiClient):
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
             info.value = f"Error al crear la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-        page.update(info, grid)
+        if page: page.update(info, grid)
 
     def do_cancel_reservation(rid: int):
         info.value = "Cancelando reserva, por favor espera..."
         info.color = ft.Colors.AMBER_700
         grid.disabled = True
         page.update(info, grid)
-        
-        # --- ¡CORRECCIÓN 2! (Quitado 'target=' y 'args=') ---
         page.run_thread(run_cancel_reservation, rid)
 
     def run_cancel_reservation(rid: int):
         result = api.delete_reserva(rid)
-
         grid.disabled = False
         info.color = None
         state["confirm_for"] = None
@@ -126,7 +152,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
             error_detail = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
             info.value = f"Error al cancelar la reserva: {error_detail}"
             info.color = ft.Colors.ERROR
-        page.update(info, grid)
+        if page: page.update(info, grid)
 
     def ask_inline_cancel(rid: int, etiqueta: str):
         state["confirm_for"] = rid
@@ -134,17 +160,94 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    def render_grid_in_thread(d: date):
+    # --- Función de renderizado de 1 día (para móvil y escritorio) ---
+    def build_day_slots(lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
+        tiles = []
+        reservas_map = {}
+        for r in day_reserveds:
+            try:
+                start_str = r.get('inicio')
+                if start_str:
+                    dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
+                    dt_aware_local = dt_aware_utc.astimezone(None)
+                    reservas_map[dt_aware_local.replace(tzinfo=None)] = r
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing date for reservation {r.get('id')}: {e}")
+
+        if not slots_calculados:
+            tiles.append(ft.Text("No hay horarios habilitados para este día.", style=ft.TextThemeStyle.BODY_SMALL, italic=True))
+
+        for slot in slots_calculados:
+            try:
+                s_dt = datetime.fromisoformat(str(slot.get('inicio'))).replace(tzinfo=None)
+                f_dt = datetime.fromisoformat(str(slot.get('fin'))).replace(tzinfo=None)
+                k_tipo = slot.get('tipo', 'no_habilitado')
+                label = slot_label(s_dt, f_dt)
+                found_res_data = reservas_map.get(s_dt)
+            except Exception as e:
+                print(f"WARN: Skipping slot due to invalid date: {slot} | Error: {e}") 
+                continue
+
+            if found_res_data:
+                rid = found_res_data.get('id')
+                user_info = found_res_data.get('usuario', {}) 
+                nombre = user_info.get('nombre', 'N/A')
+                current_user_id = user_data.get("id")
+                current_user_rol = user_data.get("rol")
+                is_owner = (str(current_user_id) == str(user_info.get('id')))
+                is_admin = (current_user_rol == "admin")
+                can_manage = is_owner or is_admin
+                label = f"Reservado por {nombre}"
+
+                if can_manage and state["confirm_for"] == rid:
+                    tiles.append(ft.Row([
+                        Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, width=120, height=44),
+                        Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render())),
+                    ]))
+                else:
+                    tiles.append(Tonal(
+                        label,
+                        tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
+                        on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
+                        disabled=not can_manage, 
+                        width=220, height=50
+                    ))
+            elif k_tipo in ["disponible", "libre"]:
+                is_allowed_to_create = user_data.get("rol") in ["admin", "docente"]
+                reserve_button = Primary(label,
+                                         on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
+                                         disabled=not is_allowed_to_create,
+                                         width=220, height=50)
+                reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
+                tiles.append(reserve_button)
+            else:
+                tiles.append(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, width=220, height=50))
+        
+        return tiles
+
+    # --- Renderizado de Grid (Hilo de fondo) ---
+    def render_grid_in_thread(start_date: date):
+        
         new_controls = []
         try:
             if not dd_lab.value or not dd_lab.value.isdigit():
                 raise Exception("Selecciona un laboratorio.")
             
             lid = int(dd_lab.value)
-            end_dt = d + timedelta(days=1)
             
-            horario_result = api.get_horario_laboratorio(lid, d, d)
-            api_result = api.get_reservas(lid, d, end_dt)
+            # Determinamos el rango de fechas
+            if state["is_mobile"]:
+                days_to_display = [start_date]
+            else:
+                days_to_display = five_weekdays_from(start_date)
+            
+            start_range = days_to_display[0]
+            end_range = days_to_display[-1]
+            end_api_range = end_range + timedelta(days=1)
+            
+            # Hacemos las llamadas bloqueantes a la API
+            horario_result = api.get_horario_laboratorio(lid, start_range, end_range)
+            api_result = api.get_reservas(lid, start_range, end_api_range)
             
             if isinstance(horario_result, dict) and "error" in horario_result:
                 raise Exception(f"Error al cargar horario: {horario_result.get('error', 'Error')}")
@@ -153,67 +256,62 @@ def ReservasView(page: ft.Page, api: ApiClient):
             if not isinstance(api_result, list):
                 raise Exception(f"Error al cargar reservas: {api_result.get('error', 'Error')}")
 
-            reservas_map = {}
-            for r in api_result: # Cambiado de all_reservas a api_result
-                start_str = r.get('inicio')
-                if start_str:
-                    dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
-                    dt_aware_local = dt_aware_utc.astimezone(None)
-                    reservas_map[dt_aware_local.replace(tzinfo=None)] = r
-
-            slots_for_day = horario_result.get(d.isoformat(), [])
+            # Mapear reservas por *día* y *hora*
+            reservations_by_day = {d: [] for d in days_to_display}
+            for r in api_result:
+                try:
+                    start_str = r.get('inicio')
+                    if start_str:
+                        dt_aware_utc = datetime.fromisoformat(str(start_str).replace('Z', '+00:00'))
+                        dt_aware_local = dt_aware_utc.astimezone(None)
+                        dkey = dt_aware_local.date()
+                        if dkey in reservations_by_day:
+                            reservations_by_day[dkey].append(r)
+                except Exception as e:
+                    print(f"Error parsing date {r.get('inicio')} in render_grid: {e}")
             
-            if not slots_for_day:
-                new_controls.append(ft.Row([ft.Text("No hay horarios habilitados para este día.")], alignment=ft.MainAxisAlignment.CENTER))
+            # --- Lógica de renderizado Híbrida ---
+            if state["is_mobile"]:
+                # VISTA MÓVIL (1 DÍA): Los slots van directos al grid
+                d = start_date
+                slots_for_day = horario_result.get(d.isoformat(), [])
+                reservations_for_day = reservations_by_day.get(d, [])
+                new_controls = build_day_slots(lid, slots_for_day, reservations_for_day)
+                # Envolvemos cada slot en una Card para móvil
+                new_controls = [Card(slot) for slot in new_controls]
+            else:
+                # VISTA WEB (5 DÍAS): Creamos 5 columnas
+                day_columns = []
+                for d in days_to_display:
+                    slots_for_day = horario_result.get(d.isoformat(), [])
+                    reservations_for_day = reservations_by_day.get(d, [])
+                    
+                    slot_tiles = build_day_slots(lid, slots_for_day, reservations_for_day)
+                    
+                    title = ft.Text(f"{DIAS_SEMANA[d.weekday()]} {d.strftime('%d/%m')}", size=16, weight=ft.FontWeight.W_600)
+                    day_col = ft.Column(
+                        [title, ft.Column(slot_tiles, spacing=10)], 
+                        spacing=10
+                    )
+                    card_padding = ft.padding.only(top=14, left=14, right=14, bottom=19)
+                    day_columns.append(ft.Container(content=Card(day_col, padding=card_padding)))
 
-            for slot in slots_for_day:
-                s_dt = datetime.fromisoformat(str(slot.get('inicio'))).replace(tzinfo=None)
-                f_dt = datetime.fromisoformat(str(slot.get('fin'))).replace(tzinfo=None)
-                k_tipo = slot.get('tipo', 'no_habilitado')
-                label = slot_label(s_dt, f_dt)
-                found_res_data = reservas_map.get(s_dt) 
-
-                if found_res_data:
-                    rid = found_res_data.get('id')
-                    user_info = found_res_data.get('usuario', {}) 
-                    reserving_user_id = user_info.get('id')
-                    nombre = user_info.get('nombre', 'N/A')
-                    current_user_id = user_data.get("id")
-                    current_user_rol = user_data.get("rol")
-                    is_owner = (str(current_user_id) == str(reserving_user_id))
-                    is_admin = (current_user_rol == "admin")
-                    can_manage = is_owner or is_admin
-                    label = f"Reservado por {nombre}"
-
-                    if can_manage and state["confirm_for"] == rid:
-                        new_controls.append(Card(ft.Row([
-                            Danger("Confirmar", on_click=lambda _, _rid=rid: do_cancel_reservation(_rid) if _rid else None, expand=True),
-                            Ghost("Volver", on_click=lambda e: (state.update({"confirm_for": None}), render())),
-                        ])))
-                    else:
-                        new_controls.append(Card(Tonal(
-                            label,
-                            tooltip="Haz clic para cancelar" if can_manage else "No puedes cancelar esta reserva",
-                            on_click=lambda _, _rid=rid, _lab=label: ask_inline_cancel(_rid, _lab) if can_manage and _rid else None,
-                            disabled=not can_manage, 
-                            height=50
-                        )))
-                elif k_tipo in ["disponible", "libre"]:
-                    is_allowed_to_create = user_data.get("rol") in ["admin", "docente"]
-                    reserve_button = Primary(label,
-                                             on_click=lambda _, ss=s_dt, ff=f_dt, _lid=lid: do_create_reservation(_lid, ss, ff) if is_allowed_to_create else None,
-                                             disabled=not is_allowed_to_create,
-                                             height=50)
-                    reserve_button.tooltip = "Solo admin/docente pueden reservar" if not is_allowed_to_create else None
-                    new_controls.append(Card(reserve_button))
-                else:
-                    new_controls.append(Card(Tonal(f"{k_tipo.capitalize()} {label}", disabled=True, height=50)))
+                # Metemos las 5 columnas en una Fila con scroll
+                new_controls = [
+                    ft.Row(
+                        controls=day_columns,
+                        scroll=ft.ScrollMode.ADAPTIVE,
+                        expand=True,
+                        vertical_alignment=ft.CrossAxisAlignment.START
+                    )
+                ]
 
         except Exception as e:
             print(f"Error en render_grid_in_thread: {e}")
             traceback.print_exc()
             new_controls = [ft.Text(f"Error al cargar: {e}", color=ft.Colors.ERROR)]
         
+        # Actualizar la UI de golpe
         grid.controls = new_controls
         if grid.page: grid.update()
 
@@ -224,12 +322,17 @@ def ReservasView(page: ft.Page, api: ApiClient):
             info.value = ""
             info.color = None
         
-        selected_date = window["selected_date"]
+        selected_date = window["start_date"]
         lab_name = lab_map.get(dd_lab.value, "(Selecciona Lab)")
         
-        dia_es = DIAS_SEMANA[selected_date.weekday()]
-        head_label.value = f"{dia_es} {selected_date.strftime('%d/%m')} · {lab_name}"
-        
+        # El label del header es dinámico
+        if state["is_mobile"]:
+            dia_es = DIAS_SEMANA[selected_date.weekday()]
+            head_label.value = f"{dia_es} {selected_date.strftime('%d/%m')} · {lab_name}"
+        else:
+            days = five_weekdays_from(selected_date)
+            head_label.value = f"{days[0].strftime('%d/%m')} — {days[-1].strftime('%d/%m')} · {lab_name}"
+
         if head_label.page: head_label.update()
         if info.page: info.update()
         
@@ -240,7 +343,6 @@ def ReservasView(page: ft.Page, api: ApiClient):
         )
         if grid.page: grid.update()
         
-        # --- ¡CORRECCIÓN 3! (Quitado 'target=' y 'args=') ---
         page.run_thread(render_grid_in_thread, selected_date)
 
 
@@ -303,6 +405,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def _on_resize(e):
         new_mobile = detect_mobile()
         if new_mobile != state["is_mobile"]:
+            print(f"CAMBIANDO VISTA A {'MOVIL' if new_mobile else 'ESCRITORIO'}")
             state["is_mobile"] = new_mobile
             apply_filter_styles()
             render() 
@@ -313,9 +416,9 @@ def ReservasView(page: ft.Page, api: ApiClient):
     # --- Layout Final ---
     def build_header_controls():
         common_controls = [
-            Icon(ft.Icons.CHEVRON_LEFT, "Día anterior", on_click=goto_prev),
+            Icon(ft.Icons.CHEVRON_LEFT, "Anterior", on_click=goto_prev),
             head_label,
-            Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente día", on_click=goto_next),
+            Icon(ft.Icons.CHEVRON_RIGHT, "Siguiente", on_click=goto_next),
             ft.Container(expand=True),
         ]
         
@@ -336,46 +439,38 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE))
     ], spacing=8, wrap=True) 
 
-    def mobile_layout():
-        main_column = ft.Column(
-            [
-                ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
-                Card(build_header_controls(), padding=14),
-                legend,
-                info,
-                ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
-                ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
-            ],
-            expand=True,
-            scroll=None, 
-            spacing=15
-        )
-        
-        fab = ft.FloatingActionButton(
-            icon=ft.Icons.FILTER_LIST,
-            tooltip="Filtros",
-            on_click=open_filter_sheet,
-            right=10,
-            bottom=10,
-        )
-        
-        return ft.Stack([main_column, fab], expand=True)
-
-    def desktop_layout():
-        return ft.Column([
+    # Contenido principal, común a ambos layouts
+    main_content_column = ft.Column(
+        [
             ft.Text("Reservas de Laboratorios", size=22, weight=ft.FontWeight.BOLD),
             Card(build_header_controls(), padding=14),
             legend,
             info,
             ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK)),
+            # El Container se expande, y el grid (Columna) hace scroll dentro de él
             ft.Container(content=grid, expand=True, padding=ft.padding.only(top=10))
         ],
         expand=True,
-        scroll=None,
+        scroll=None, 
         spacing=15
-        )
+    )
+        
+    fab = ft.FloatingActionButton(
+        icon=ft.Icons.FILTER_LIST,
+        tooltip="Filtros",
+        on_click=open_filter_sheet,
+        right=10,
+        bottom=10,
+    )
+        
+    def mobile_layout():
+        return ft.Stack([main_content_column, fab], expand=True)
 
-    def load_initial_data_in_thread(): # Ya no necesita 'e=None'
+    def desktop_layout():
+        return main_content_column # Sin el FAB
+
+    # --- Carga Asíncrona de Catálogos ---
+    def load_initial_data_in_thread():
         nonlocal planteles_cache, labs_cache, lab_map
         
         try:
@@ -424,8 +519,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
     # Aplicamos estilos y cargamos datos
     apply_filter_styles()
-    # --- ¡CORRECCIÓN 4! (Quitado 'target=') ---
-    page.run_thread(load_initial_data_in_thread)
+    page.run_thread(load_initial_data_in_thread) # <-- Corrección de sintaxis
 
     if state["is_mobile"]:
         return mobile_layout()
