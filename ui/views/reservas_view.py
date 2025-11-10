@@ -1,4 +1,4 @@
-# CODIGO COMPLEMENTARIO MODIFICADO (reservas_view.py) - VERSIÓN MÓVIL OPTIMIZADA
+# CODIGO CORREGIDO - VERSIÓN MÓVIL OPTIMIZADA (reservas_view.py)
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -141,7 +141,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         date_picker.pick_date()
         page.update()
 
-    # CARGAR DATOS INICIALES (igual que antes)
+    # CARGAR DATOS INICIALES
     planteles_cache = []
     labs_cache = []
     lab_map = {}
@@ -279,7 +279,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
     def slot_label(s: datetime, f: datetime):
         return f"{s.strftime('%H:%M')}–{f.strftime('%H:%M')}"
 
-    # FUNCIONES DE RESERVA (igual que antes)
+    # FUNCIONES DE RESERVA
     def do_create_reservation(lab_id: int, s: datetime, f: datetime):
         if user_data.get("rol") not in ["admin", "docente"]:
             info.value = "Solo administradores y docentes pueden crear reservas."
@@ -350,7 +350,7 @@ def ReservasView(page: ft.Page, api: ApiClient):
         info.color = ft.Colors.AMBER_700
         render()
 
-    # SECCIÓN DE DÍA MEJORADA PARA MÓVIL
+    # SECCIÓN DE DÍA MEJORADA PARA MÓVIL - CORREGIDA
     def day_section(d: date, lid: int, slots_calculados: list[dict], day_reserveds: list[dict]):
         is_mobile_view = state["is_mobile"]
         
@@ -484,13 +484,16 @@ def ReservasView(page: ft.Page, api: ApiClient):
 
         day_content = ft.Column([day_header, tiles_container], spacing=0)
 
-        card = Card(
-            day_content,
-            padding=0,
-            margin=ft.margin.only(bottom=12) if is_mobile_view else None
-        )
+        # CORRECCIÓN: Usar Container en lugar de Card para aplicar margin
+        if is_mobile_view:
+            card_container = ft.Container(
+                content=Card(day_content, padding=0),
+                margin=ft.margin.only(bottom=12)
+            )
+        else:
+            card_container = Card(day_content, padding=0)
 
-        return card
+        return card_container
 
     def render_grid():
         grid.controls.clear()
