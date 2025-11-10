@@ -1,4 +1,4 @@
-# VERSIÓN MEJORADA - SOLO CORRECCIONES NECESARIAS
+# VERSIÓN CORREGIDA - ERROR on_resize SOLUCIONADO
 
 import flet as ft
 from datetime import datetime, date, time, timedelta
@@ -735,13 +735,14 @@ def ReservasView(page: ft.Page, api: ApiClient):
         ft.Chip(label=ft.Text("Descanso"), leading=ft.Icon(ft.Icons.SCHEDULE)),
     ], spacing=8, scroll=ft.ScrollMode.ADAPTIVE)
 
-    def on_page_resize(e):
+    # CORRECCIÓN: FUNCIÓN on_resize DEFINIDA CORRECTAMENTE
+    def handle_page_resize(e):
         current_is_mobile = state["is_mobile"]
         new_is_mobile = get_is_mobile()
         if current_is_mobile != new_is_mobile:
             render()
 
-    page.on_resize = on_resize
+    page.on_resize = handle_page_resize
 
     # INTERFAZ DE USUARIO FINAL
     ui = ft.Column(
