@@ -368,16 +368,29 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             hora_inicio_str = format_time_str(horario.get('hora_inicio'))
             hora_fin_str = format_time_str(horario.get('hora_fin'))
             
+            # Función auxiliar para cerrar diálogo y editar
+            def edit_and_close(h):
+                page.dialog.open = False
+                page.update()
+                edit_horario_click(h)
+            
+            # Función auxiliar para cerrar diálogo y eliminar
+            def delete_and_close(hid):
+                page.dialog.open = False
+                page.update()
+                if hid:
+                    delete_horario_click(hid)
+            
             individual_list.controls.append(
                 ft.ListTile(
                     title=ft.Text(f"{dia_nombre}"),
                     subtitle=ft.Text(f"{hora_inicio_str} - {hora_fin_str}"),
                     trailing=ft.Row([
                         Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
-                             on_click=lambda e, h=horario: (edit_horario_click(h), page.dialog.open=False, page.update()),
+                             on_click=lambda e, h=horario: edit_and_close(h),
                              icon_color=ft.Colors.BLUE, icon_size=20),
                         Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
-                             on_click=lambda e, hid=horario.get('id'): (delete_horario_click(hid), page.dialog.open=False, page.update()) if hid else None,
+                             on_click=lambda e, hid=horario.get('id'): delete_and_close(hid) if hid else None,
                              icon_color=ft.Colors.RED, icon_size=20),
                     ], spacing=4)
                 )
@@ -392,7 +405,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 height=300
             ),
             actions=[
-                ft.TextButton("Cerrar", on_click=lambda e: (setattr(page.dialog, "open", False), page.update())),
+                ft.TextButton("Cerrar", on_click=lambda e: setattr(page.dialog, 'open', False) or page.update()),
             ],
         )
         page.dialog.open = True
@@ -427,15 +440,12 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             title=ft.Text("Confirmar eliminación"),
             content=ft.Text(f"¿Estás seguro de que quieres eliminar {len(horario_grupo.get('ids', []))} horarios?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: (setattr(page.dialog, "open", False), page.update())),
+                ft.TextButton("Cancelar", on_click=lambda e: setattr(page.dialog, 'open', False) or page.update()),
                 Danger("Eliminar grupo", on_click=confirm_delete),
             ],
         )
         page.dialog.open = True
         page.update()
-
-    # ... (las funciones edit_horario_click, delete_horario_click, clear_form, save_horario, 
-    # update_controls permanecen igual que en la versión anterior)
 
     def edit_horario_click(horario: dict):
         state["editing_rule_id"] = horario.get("id")
@@ -473,7 +483,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             title=ft.Text("Confirmar eliminación"),
             content=ft.Text("¿Estás seguro de que quieres eliminar este horario?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: (setattr(page.dialog, "open", False), page.update())),
+                ft.TextButton("Cancelar", on_click=lambda e: setattr(page.dialog, 'open', False) or page.update()),
                 Danger("Eliminar", on_click=confirm_delete),
             ],
         )
