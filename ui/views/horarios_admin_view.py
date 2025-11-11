@@ -35,26 +35,109 @@ def format_time_str(time_str: Optional[str]) -> str:
         return str(time_str)
 
 def HorariosAdminView(page: ft.Page, api: ApiClient):
-    # CORRECCIÓN: Manejar correctamente la sesión del usuario
-    user_session = page.session.get("user_session")
+    # DEBUG: Verificar qué hay en la sesión
+    print("🔍 DEBUG - Contenido completo de page.session:")
+    for key in page.session.keys():
+        print(f"   {key}: {page.session.get(key)}")
+    
+    # CORRECCIÓN: Buscar la sesión del usuario en diferentes lugares posibles
+    user_session = None
+    
+    # Intentar diferentes posibles ubicaciones de la sesión
+    possible_keys = ["user_session", "user", "usuario", "current_user", "user_data"]
+    
+    for key in possible_keys:
+        if key in page.session.keys():
+            user_session = page.session.get(key)
+            print(f"✅ Encontrada sesión en clave: {key}")
+            break
+    
+    # Si no se encontró en ninguna clave específica, buscar cualquier dato de usuario
+    if user_session is None:
+        print("🔍 Buscando datos de usuario en toda la sesión...")
+        for key in page.session.keys():
+            value = page.session.get(key)
+            if isinstance(value, (dict, str)) and any(user_field in str(value).lower() for user_field in ['user', 'usuario', 'nombre', 'correo', 'rol', 'admin']):
+                user_session = value
+                print(f"✅ Encontrados datos de usuario en clave: {key}")
+                break
     
     # Si user_session es un string, intentar parsearlo como JSON
     if isinstance(user_session, str):
         try:
             user_session = json.loads(user_session)
+            print("✅ Sesión parseada de JSON string")
         except:
             user_session = {}
+            print("❌ No se pudo parsear la sesión como JSON")
     # Si no es un diccionario, inicializar como vacío
     elif not isinstance(user_session, dict):
         user_session = {}
+        print("❌ La sesión no es un diccionario")
     
-    # Verificar permisos de administrador
+    print(f"🔍 user_session final: {user_session}")
+    
+    # Verificar permisos de administrador - MÚLTIPLES FORMAS
     user_data = user_session.get("user", {})
     if not isinstance(user_data, dict):
-        user_data = {}
+        # Intentar acceder directamente a los campos
+        user_data = user_session
     
-    if user_data.get("rol") != "admin":
-        return ft.Text("Acceso denegado. Solo para administradores.")
+    print(f"🔍 user_data final: {user_data}")
+    
+    # Verificar rol de múltiples formas
+    user_role = None
+    
+    # Intentar diferentes nombres de campo para el rol
+    role_fields = ["rol", "role", "tipo", "type", "user_rol"]
+    for field in role_fields:
+        if user_data.get(field):
+            user_role = user_data.get(field)
+            print(f"✅ Rol encontrado en campo '{field}': {user_role}")
+            break
+    
+    # Si no se encontró en campos específicos, buscar en toda la estructura
+    if user_role is None:
+        # Buscar recursivamente en la estructura
+        def find_role(obj, path=""):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if key.lower() in ["rol", "role", "tipo", "type"] and value:
+                        return value
+                    if isinstance(value, (dict, list)):
+                        result = find_role(value, f"{path}.{key}")
+                        if result:
+                            return result
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    result = find_role(item, f"{path}[{i}]")
+                    if result:
+                        return result
+            return None
+        
+        user_role = find_role(user_data)
+        if user_role:
+            print(f"✅ Rol encontrado recursivamente: {user_role}")
+    
+    print(f"🔍 Rol final determinado: {user_role}")
+    
+    # Si no es administrador, mostrar mensaje de acceso denegado
+    if user_role != "admin":
+        print(f"❌ Acceso denegado. Rol del usuario: {user_role}, se esperaba: admin")
+        
+        # Mostrar información de debug para ayudar
+        debug_info = ft.Column([
+            ft.Text("Acceso denegado. Solo para administradores.", color=ft.Colors.ERROR, size=16),
+            ft.Text("Información de debug:", weight=ft.FontWeight.BOLD),
+            ft.Text(f"Rol detectado: {user_role}"),
+            ft.Text(f"Session keys: {list(page.session.keys())}"),
+            ft.Text(f"User session type: {type(user_session)}"),
+            ft.Text(f"User data: {user_data}"),
+        ])
+        return debug_info
+
+    # Si llegamos aquí, el usuario es administrador
+    print("✅ Acceso concedido - usuario es administrador")
 
     # Modified state to track group editing
     state = {
