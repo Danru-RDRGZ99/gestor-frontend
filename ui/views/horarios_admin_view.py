@@ -5,14 +5,15 @@ from ui.components.inputs import TextField, Dropdown, generate_time_options
 from ui.components.buttons import Primary, Danger, Icon, Ghost
 from datetime import time, date, datetime, timedelta
 import traceback
-from typing import Dict, List, Tuple, Optional # Added more types
-from collections import defaultdict # For grouping
+from typing import Dict, List, Tuple, Optional
+from collections import defaultdict
+import json
 
 # --- Constantes ---
 DIAS_SEMANA: Dict[int, str] = {
     0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"
 }
-DIAS_SEMANA_SHORT: Dict[int, str] = {k: v[:3] for k, v in DIAS_SEMANA.items()} # Lun, Mar, etc.
+DIAS_SEMANA_SHORT: Dict[int, str] = {k: v[:3] for k, v in DIAS_SEMANA.items()}
 
 HORA_INICIO_DIA = time(0, 0)
 HORA_FIN_DIA = time(23, 59)
@@ -29,25 +30,39 @@ TIPO_OPTIONS = [
 def format_time_str(time_str: Optional[str]) -> str:
     if not time_str: return "N/A"
     try:
-        # Assuming input is HH:MM:SS
-        return time_str[:5] # Return HH:MM
+        return time_str[:5]
     except:
-        return str(time_str) # Fallback
+        return str(time_str)
 
 def HorariosAdminView(page: ft.Page, api: ApiClient):
-
-    user_session = page.session.get("user_session") or {}
-    if user_session.get("user", {}).get("rol") != "admin":
+    # CORRECCIÓN: Manejar correctamente la sesión del usuario
+    user_session = page.session.get("user_session")
+    
+    # Si user_session es un string, intentar parsearlo como JSON
+    if isinstance(user_session, str):
+        try:
+            user_session = json.loads(user_session)
+        except:
+            user_session = {}
+    # Si no es un diccionario, inicializar como vacío
+    elif not isinstance(user_session, dict):
+        user_session = {}
+    
+    # Verificar permisos de administrador
+    user_data = user_session.get("user", {})
+    if not isinstance(user_data, dict):
+        user_data = {}
+    
+    if user_data.get("rol") != "admin":
         return ft.Text("Acceso denegado. Solo para administradores.")
 
     # Modified state to track group editing
     state = {
-        "editing_group_rules": None, # List of rules in the group being edited
-        "editing_single_rule_id": None, # ID of single rule being edited
+        "editing_group_rules": None,
+        "editing_single_rule_id": None,
     }
 
     # --- Catálogos y Datos ---
-    # (No changes here)
     planteles_data = api.get_planteles()
     labs_data = api.get_laboratorios()
     if not isinstance(planteles_data, list): planteles_data = []
@@ -97,8 +112,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         # Use the first rule for common data
         first_rule = group_rules[0]
-        state["editing_group_rules"] = group_rules # Store the whole group
-        state["editing_single_rule_id"] = None # Not editing single
+        state["editing_group_rules"] = group_rules
+        state["editing_single_rule_id"] = None
 
         dd_lab.value = str(first_rule.get("laboratorio_id")) if first_rule.get("laboratorio_id") is not None else "general"
 
@@ -131,8 +146,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         nonlocal state, dd_lab, dias_checkboxes, dd_inicio, dd_fin, dd_tipo, btn_save, btn_cancel, info_txt
 
         dia_a_editar = regla.get("dia_semana")
-        state["editing_single_rule_id"] = regla.get("id") # Store single ID
-        state["editing_group_rules"] = None # Not editing group
+        state["editing_single_rule_id"] = regla.get("id")
+        state["editing_group_rules"] = None
 
         dd_lab.value = str(regla.get("laboratorio_id")) if regla.get("laboratorio_id") is not None else "general"
 
@@ -145,7 +160,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         dd_fin.value = str(regla.get("hora_fin"))
         dd_tipo.value = regla.get("tipo_intervalo", "disponible")
 
-        btn_save.text = f"Actualizar {DIAS_SEMANA_SHORT.get(dia_a_editar, '')}" # Single day
+        btn_save.text = f"Actualizar {DIAS_SEMANA_SHORT.get(dia_a_editar, '')}"
         btn_cancel.visible = True
         info_txt.value = f"Editando Regla ID: {regla.get('id')} ({DIAS_SEMANA_SHORT.get(dia_a_editar, '')})"
 
@@ -186,7 +201,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             render_reglas()
         else:
             info_txt.value = f"Error al eliminar grupo. {success_count} éxito(s), {error_count} error(es). Último error: {last_error}"
-            render_reglas() # Render anyway to show partial deletions
+            render_reglas()
         info_txt.update()
 
     # --- MODIFIED: Delete Single Rule Function ---
@@ -203,7 +218,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     # --- NEW: Group Card ---
     def group_card(group_rules: List[dict]) -> ft.Control:
         nonlocal lab_map
-        if not group_rules: return ft.Container() # Return empty if no rules
+        if not group_rules: return ft.Container()
 
         first_rule = group_rules[0]
         lab_id = first_rule.get('laboratorio_id')
@@ -213,7 +228,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         dias_str = ", ".join(DIAS_SEMANA_SHORT.get(d, '?') for d in group_dias)
 
         title = ft.Text(
-            f"{lab_name} - {dias_str}", # Show grouped days
+            f"{lab_name} - {dias_str}",
             size=15, weight=ft.FontWeight.W_600
         )
 
@@ -232,8 +247,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                               height=28)
 
         btns = ft.Row([
-            Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", on_click=lambda e, grp=group_rules: edit_group_click(grp)), # Edit Group Icon
-            Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", icon_color=ft.Colors.ERROR, on_click=lambda e, grp=group_rules: delete_group_click(grp)), # Delete Group Icon
+            Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", on_click=lambda e, grp=group_rules: edit_group_click(grp)),
+            Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", icon_color=ft.Colors.ERROR, on_click=lambda e, grp=group_rules: delete_group_click(grp)),
         ], spacing=6)
 
         header = ft.Row([
@@ -271,8 +286,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                               height=28)
 
         btns = ft.Row([
-            Icon(ft.Icons.EDIT_OUTLINED, "Editar", on_click=lambda e, r=regla: edit_regla_click(r)), # Edit Single Icon
-            Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", icon_color=ft.Colors.ERROR, on_click=lambda e, rid=regla.get('id'): delete_regla_click(rid) if rid else None), # Delete Single Icon
+            Icon(ft.Icons.EDIT_OUTLINED, "Editar", on_click=lambda e, r=regla: edit_regla_click(r)),
+            Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", icon_color=ft.Colors.ERROR, on_click=lambda e, rid=regla.get('id'): delete_regla_click(rid) if rid else None),
         ], spacing=6)
 
         header = ft.Row([
@@ -317,19 +332,11 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 else:
                     rendered_items.append(regla_card(rules_in_group[0]))
 
-            # =========================================================================
-            # --- INICIO DE LA CORRECCIÓN (Sort Key) ---
-            # =========================================================================
             # Sort rendered cards
             rendered_items.sort(key=lambda card: (
-                # Check if title starts with "General", accessing title directly
-                not card.content.controls[0].controls[0].value.startswith("General (Todos)"), # Sort General first (True comes after False)
-                # Then sort by the full title string
+                not card.content.controls[0].controls[0].value.startswith("General (Todos)"),
                 card.content.controls[0].controls[0].value
             ))
-            # =========================================================================
-            # --- FIN DE LA CORRECCIÓN ---
-            # =========================================================================
 
             reglas_list_panel.controls.extend(rendered_items)
 
@@ -373,7 +380,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         inicio_str = dd_inicio.value
         fin_str = dd_fin.value
         tipo_seleccionado = dd_tipo.value.strip() if dd_tipo.value else None
-        selected_dias_nums = {num for num, cb in dias_checkboxes.items() if cb.value} # Use a set
+        selected_dias_nums = {num for num, cb in dias_checkboxes.items() if cb.value}
 
         # --- Basic Validation ---
         if not all([selected_dias_nums, inicio_str, fin_str, tipo_seleccionado]):
@@ -405,7 +412,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         if state["editing_group_rules"]:
             action_summary = "Actualizando Grupo: "
             original_rules = state["editing_group_rules"]
-            original_rule_map = {r.get("dia_semana"): r for r in original_rules} # Map day to rule dict
+            original_rule_map = {r.get("dia_semana"): r for r in original_rules}
             original_dias_nums = set(original_rule_map.keys())
 
             dias_to_update = original_dias_nums.intersection(selected_dias_nums)
@@ -433,7 +440,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                  if rule_to_delete and rule_to_delete.get("id"):
                     try:
                         result = api.delete_regla_horario(rule_to_delete["id"])
-                        if result is True: delete_count += 1 # Count deletions separately
+                        if result is True: delete_count += 1
                         else: error_count += 1; last_error = result.get("detail", "Delete failed") if isinstance(result, dict) else "Delete failed"
                     except Exception as ex: error_count += 1; last_error = f"Delete Ex: {ex}"
 
@@ -453,7 +460,6 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         # Mode 2: Editing a Single Rule
         elif state["editing_single_rule_id"]:
             action_summary = "Actualizando Regla Individual: "
-            # Should only have one day selected if UI logic worked
             if len(selected_dias_nums) != 1:
                  info_txt.value = "Error: Al editar una regla individual, solo debe seleccionar un día."
                  info_txt.color=ft.Colors.ERROR
@@ -493,14 +499,13 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             final_message += f"{error_count} error(es). Último: {last_error}"
             info_txt.color = ft.Colors.WARNING if success_count > 0 or delete_count > 0 else ft.Colors.ERROR
         else:
-            info_txt.color = ft.Colors.GREEN # Success
-            clear_form() # Clear form only on full success
+            info_txt.color = ft.Colors.GREEN
+            clear_form()
 
         info_txt.value = final_message
-        render_reglas() # Always re-render
+        render_reglas()
         info_txt.update()
         print(f"Save results: {final_message}")
-
 
     # --- 4. Definir botones y formulario ---
     btn_save = Primary("Agregar Regla(s)", on_click=save_regla, col={"sm": 6, "md": 2})
