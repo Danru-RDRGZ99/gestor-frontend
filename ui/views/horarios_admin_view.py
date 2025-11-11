@@ -1,7 +1,7 @@
 import flet as ft
 from api_client import ApiClient
 from ui.components.cards import Card
-from ui.components.inputs import TextField, Dropdown, generate_time_options
+from ui.components.inputs import TextField, Dropdown # Quitamos generate_time_options
 from ui.components.buttons import Primary, Danger, Icon, Ghost
 from datetime import time, date, datetime, timedelta
 import traceback
@@ -17,7 +17,6 @@ DIAS_SEMANA_SHORT: Dict[int, str] = {k: v[:3] for k, v in DIAS_SEMANA.items()}
 HORA_INICIO_DIA = time(7, 0)
 HORA_FIN_DIA = time(21, 0)
 INTERVALO_MINUTOS = 30
-HORA_OPTIONS = generate_time_options(HORA_INICIO_DIA, HORA_FIN_DIA, INTERVALO_MINUTOS)
 
 TIPO_OPTIONS = [
     ("disponible", "🟢 Disponible"),
@@ -25,9 +24,42 @@ TIPO_OPTIONS = [
     ("mantenimiento", "🔴 Mantenimiento"),
 ]
 
+# --- INICIO DE CORRECCIÓN "DESDE CERO" ---
+# Incluimos la función aquí para garantizar el formato
+def generate_time_options(start_time: time, end_time: time, interval_minutes: int) -> List[ft.dropdown.Option]:
+    """
+    Genera opciones de dropdown para un rango de tiempo.
+    El 'key' (valor) será HH:MM:SS, el 'text' (visible) será HH:MM.
+    """
+    options = []
+    try:
+        current_dt = datetime.combine(date.today(), start_time)
+        end_dt = datetime.combine(date.today(), end_time)
+        
+        while current_dt <= end_dt:
+            # El valor (key) debe ser HH:MM:SS para ser compatible con strptime
+            time_key = current_dt.strftime("%H:%M:%S")
+            # El texto visible puede ser más corto
+            time_text = current_dt.strftime("%H:%M") 
+            
+            options.append(ft.dropdown.Option(key=time_key, text=time_text))
+            current_dt += timedelta(minutes=interval_minutes)
+    except Exception as e:
+        print(f"Error generando opciones de tiempo: {e}")
+        # Añadir una opción de fallback en caso de error
+        options.append(ft.dropdown.Option(key="08:00:00", text="08:00"))
+
+    return options
+
+# Generamos las opciones una vez
+HORA_OPTIONS = generate_time_options(HORA_INICIO_DIA, HORA_FIN_DIA, INTERVALO_MINUTOS)
+# --- FIN DE CORRECCIÓN "DESDE CERO" ---
+
+
 def format_time_str(time_str: Optional[str]) -> str:
     if not time_str: return "N/A"
     try:
+        # Corta a HH:MM
         return time_str[:5]
     except:
         return str(time_str)
@@ -187,7 +219,6 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             grouped_horarios = group_horarios(filtered_horarios)
             state["grouped_horarios"] = grouped_horarios
 
-            # Ya no filtramos por día, solo mostramos los del lab
             display_horarios = grouped_horarios
 
             if not display_horarios:
@@ -226,7 +257,6 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         tipo = horario.get('tipo_intervalo', 'disponible')
         es_grupo = horario.get('es_grupo', False)
         
-        # Colores y texto de estado
         status_map = {
             "disponible": ("Disponible", ft.Colors.GREEN_600, ft.Icons.CHECK_CIRCLE_OUTLINED),
             "descanso": ("Descanso", ft.Colors.ORANGE_600, ft.Icons.FREE_BREAKFAST_OUTLINED),
@@ -238,11 +268,6 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             "disponible": ft.colors.GREEN_200,
             "descanso": ft.colors.ORANGE_200,
             "mantenimiento": ft.colors.RED_200,
-        }
-        badge_text_color = {
-            "disponible": ft.colors.GREEN_900,
-            "descanso": ft.colors.ORANGE_900,
-            "mantenimiento": ft.colors.RED_900,
         }
         
         badge = ft.Container(
@@ -259,7 +284,6 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             dia_num = horario.get('dia_semana')
             dias_display = DIAS_SEMANA.get(dia_num, 'N/A')
 
-        # Contenido de la tarjeta
         content = ft.Row(
             [
                 ft.Column(
@@ -271,12 +295,11 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                     spacing=2
                 ),
                 badge,
-                # Botones
                 Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
                      on_click=lambda e, h=horario: edit_horario_click(h),
                      icon_color=ft.Colors.BLUE),
                 Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
-                     on_click=lambda e, h=horario: delete_horario_click(h), # Pasar el 'horario' completo
+                     on_click=lambda e, h=horario: delete_horario_click(h),
                      icon_color=ft.Colors.RED),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -417,11 +440,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     def edit_horario_click(horario: dict):
         if horario.get('es_grupo', False):
-            # Si es un grupo, mostrar los individuales
             show_individual_horarios(horario)
             return
 
-        # Si es individual, rellenar formulario
         state["editing_rule_id"] = horario.get("id")
         state["editing_rule_dia"] = horario.get("dia_semana")
         
@@ -430,10 +451,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         dd_fin.value = str(horario.get("hora_fin"))
         dd_tipo.value = horario.get("tipo_intervalo", "disponible")
 
-        # Desmarcar todos los checkboxes y marcar solo el de este horario
         for cb in day_checkboxes:
             cb.value = (cb.data == state["editing_rule_dia"])
-            cb.disabled = True # Deshabilitar checkboxes en modo edición
+            cb.disabled = True 
             cb.update()
         
         btn_save.text = "💾 Actualizar Horario"
@@ -448,12 +468,10 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         state["editing_rule_id"] = None
         state["editing_rule_dia"] = None
         
-        # No resetear laboratorio
         dd_inicio.value = None
         dd_fin.value = None
         dd_tipo.value = "disponible"
 
-        # Limpiar y habilitar checkboxes
         for cb in day_checkboxes:
             cb.value = False
             cb.disabled = False
@@ -474,10 +492,12 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             return
 
         try:
+            # Esta validación ahora es SEGURA porque HORA_OPTIONS
+            # garantiza que dd_inicio.value es "HH:MM:SS"
             inicio = datetime.strptime(dd_inicio.value, "%H:%M:%S").time()
             fin = datetime.strptime(dd_fin.value, "%H:%M:%S").time()
         except (ValueError, TypeError):
-            info_txt.value = "❌ Formato de hora inválido"
+            info_txt.value = "❌ Formato de hora inválido. (Error: {e})"
             info_txt.color = ft.Colors.RED
             info_txt.update()
             return
@@ -551,7 +571,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 clear_form()
                 safe_render_horarios()
             else:
-                info_txt.value = "❌ Error al crear los horarios"
+                # Si 'result' no está vacío, es un dict de error
+                error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error al crear"
+                info_txt.value = f"❌ Error al crear los horarios: {error_msg}"
                 info_txt.color = ft.Colors.RED
 
         info_txt.update()
@@ -593,15 +615,15 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     list_section = ft.Column(
         [
             ft.Divider(),
-            ft.Text("Horarios Configurados", size=18, weight=ft.FontWeight.BOLD),
+            ft.Text("Horarios Configurados", size=18, weight=f"t.FontWeight.BOLD"),
             horarios_list_panel
         ],
         expand=True
     )
 
-    # --- INICIO DE LA CORRECCIÓN ---
-
-    # 1. Define tu Columna principal sin padding
+    # --- CORRECCIÓN DE LAYOUT (TypeError por 'padding' en Column) ---
+    
+    # 1. Define la Columna principal (sin padding)
     main_column = ft.Column(
         [
             header_section,
@@ -611,17 +633,15 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         expand=True,
         scroll=ft.ScrollMode.ADAPTIVE,
         spacing=20
-        # 'padding' se elimina de aquí
     )
 
-    # 2. Envuelve la columna en un Container y aplica el padding allí
+    # 2. Envuelve la columna en un Container para aplicar el padding
     main_content = ft.Container(
         content=main_column,
-        padding=20, # <--- El padding ahora está en el Container
+        padding=20, # Padding aplicado al contenedor
         expand=True 
     )
-    
-    # --- FIN DE LA CORRECCIÓN ---
+    # --- FIN DE CORRECCIÓN DE LAYOUT ---
     
     # Inicialización
     state["initialized"] = True
