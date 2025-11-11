@@ -599,18 +599,29 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         expand=True
     )
 
-    # Contenedor principal
-    main_content = ft.Column(
+    # --- INICIO DE LA CORRECCIÓN ---
+
+    # 1. Define tu Columna principal sin padding
+    main_column = ft.Column(
         [
             header_section,
             form_section,
             list_section,
         ],
         expand=True,
-        scroll=ft.ScrollMode.ADAPTIVE, # Permite scroll si el contenido es muy largo
-        spacing=20,
-        padding=20 # Añade padding general
+        scroll=ft.ScrollMode.ADAPTIVE,
+        spacing=20
+        # 'padding' se elimina de aquí
     )
+
+    # 2. Envuelve la columna en un Container y aplica el padding allí
+    main_content = ft.Container(
+        content=main_column,
+        padding=20, # <--- El padding ahora está en el Container
+        expand=True 
+    )
+    
+    # --- FIN DE LA CORRECCIÓN ---
     
     # Inicialización
     state["initialized"] = True
