@@ -35,32 +35,49 @@ def format_time_str(time_str: Optional[str]) -> str:
         return str(time_str)
 
 def HorariosAdminView(page: ft.Page, api: ApiClient):
-    # DEBUG: Verificar qué hay en la sesión
-    print("🔍 DEBUG - Contenido completo de page.session:")
-    for key in page.session.keys():
-        print(f"   {key}: {page.session.get(key)}")
+    # CORRECCIÓN: Manejar correctamente SessionStorage de Flet
+    print("🔍 DEBUG - Iniciando verificación de sesión...")
     
-    # CORRECCIÓN: Buscar la sesión del usuario en diferentes lugares posibles
+    # CORRECCIÓN: No podemos usar .keys() en SessionStorage, necesitamos un enfoque diferente
     user_session = None
     
     # Intentar diferentes posibles ubicaciones de la sesión
     possible_keys = ["user_session", "user", "usuario", "current_user", "user_data"]
     
+    # Método 1: Buscar en claves conocidas
     for key in possible_keys:
-        if key in page.session.keys():
-            user_session = page.session.get(key)
-            print(f"✅ Encontrada sesión en clave: {key}")
-            break
-    
-    # Si no se encontró en ninguna clave específica, buscar cualquier dato de usuario
-    if user_session is None:
-        print("🔍 Buscando datos de usuario en toda la sesión...")
-        for key in page.session.keys():
+        try:
             value = page.session.get(key)
-            if isinstance(value, (dict, str)) and any(user_field in str(value).lower() for user_field in ['user', 'usuario', 'nombre', 'correo', 'rol', 'admin']):
+            if value is not None:
                 user_session = value
-                print(f"✅ Encontrados datos de usuario en clave: {key}")
+                print(f"✅ Encontrada sesión en clave: {key}")
                 break
+        except:
+            continue
+    
+    # Método 2: Si no se encontró, intentar obtener directamente user_session
+    if user_session is None:
+        try:
+            user_session = page.session.get("user_session")
+            if user_session is not None:
+                print("✅ Sesión encontrada en 'user_session'")
+        except:
+            pass
+    
+    # Método 3: Si aún no se encuentra, buscar cualquier dato que parezca de usuario
+    if user_session is None:
+        print("🔍 Buscando datos de usuario en claves conocidas...")
+        # Probar todas las claves posibles una por una
+        test_keys = possible_keys + ["session", "auth", "login", "token"]
+        for key in test_keys:
+            try:
+                value = page.session.get(key)
+                if value is not None and (isinstance(value, (dict, str)) and any(user_field in str(value).lower() for user_field in ['user', 'usuario', 'nombre', 'correo', 'rol', 'admin'])):
+                    user_session = value
+                    print(f"✅ Encontrados datos de usuario en clave: {key}")
+                    break
+            except:
+                continue
     
     # Si user_session es un string, intentar parsearlo como JSON
     if isinstance(user_session, str):
@@ -130,7 +147,6 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             ft.Text("Acceso denegado. Solo para administradores.", color=ft.Colors.ERROR, size=16),
             ft.Text("Información de debug:", weight=ft.FontWeight.BOLD),
             ft.Text(f"Rol detectado: {user_role}"),
-            ft.Text(f"Session keys: {list(page.session.keys())}"),
             ft.Text(f"User session type: {type(user_session)}"),
             ft.Text(f"User data: {user_data}"),
         ])
