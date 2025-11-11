@@ -12,6 +12,7 @@ def SettingsView(page: ft.Page, api: ApiClient):
     """
     Vista para que el usuario actualice su perfil/contraseña
     y para que el admin gestione usuarios, con feedback visual mejorado.
+    Versión adaptada para móvil.
     """
     # --- INICIO DE LA CORRECCIÓN ---
     # 'user_session' ES el diccionario de datos del usuario.
@@ -52,22 +53,50 @@ def SettingsView(page: ft.Page, api: ApiClient):
         page.update()
 
     # -------------------------------------
-    # --- Pestaña: Mi Perfil y Contraseña ---
+    # --- Pestaña: Mi Perfil y Contraseña - VERSIÓN MÓVIL ---
     # -------------------------------------
-    # (Esta sección no tiene cambios)
-    tf_nombre = TextField(label="Nombre", value=me.get("nombre", ""), width=360)
-    tf_user = TextField(label="Usuario", value=me.get("user", ""), width=240)
-    tf_correo = TextField(label="Correo", value=me.get("correo", ""), width=300)
-    tf_pwd_actual = TextField(label="Contraseña actual", password=True, width=280)
+    # Campos adaptados para móvil
+    tf_nombre = TextField(
+        label="Nombre", 
+        value=me.get("nombre", ""), 
+        col={"xs": 12, "sm": 12, "md": 6}
+    )
+    tf_user = TextField(
+        label="Usuario", 
+        value=me.get("user", ""), 
+        col={"xs": 12, "sm": 12, "md": 6}
+    )
+    tf_correo = TextField(
+        label="Correo", 
+        value=me.get("correo", ""), 
+        col={"xs": 12}
+    )
+    
+    # Campos de contraseña responsivos
+    tf_pwd_actual = TextField(
+        label="Contraseña actual", 
+        password=True, 
+        col={"xs": 12, "sm": 12, "md": 4}
+    )
     tf_pwd_actual.can_reveal_password = True
-    tf_pwd_nueva = TextField(label="Nueva contraseña", password=True, width=280)
+    tf_pwd_nueva = TextField(
+        label="Nueva contraseña", 
+        password=True, 
+        col={"xs": 12, "sm": 12, "md": 4}
+    )
     tf_pwd_nueva.can_reveal_password = True
-    tf_pwd_conf = TextField(label="Confirmar nueva", password=True, width=280)
+    tf_pwd_conf = TextField(
+        label="Confirmar nueva", 
+        password=True, 
+        col={"xs": 12, "sm": 12, "md": 4}
+    )
     tf_pwd_conf.can_reveal_password = True
+    
     pr_profile = ft.ProgressRing(width=18, height=18, stroke_width=2.5, visible=False)
     btn_save_profile = Primary("Guardar Perfil", on_click=lambda e: save_profile())
     pr_password = ft.ProgressRing(width=18, height=18, stroke_width=2.5, visible=False)
     btn_change_password = Primary("Actualizar Contraseña", on_click=lambda e: change_password())
+    
     def save_profile():
         btn_save_profile.disabled = True
         pr_profile.visible = True
@@ -89,6 +118,7 @@ def SettingsView(page: ft.Page, api: ApiClient):
         btn_save_profile.disabled = False
         pr_profile.visible = False
         page.update()
+        
     def change_password():
         btn_change_password.disabled = True
         pr_password.visible = True
@@ -108,28 +138,54 @@ def SettingsView(page: ft.Page, api: ApiClient):
         btn_change_password.disabled = False
         pr_password.visible = False
         page.update()
+
+    # Layout responsivo para perfil
     perfil_card = Card(
-        ft.Column([
-            ft.Text("Mi Perfil", size=16, weight=ft.FontWeight.W_600),
-            ft.Row([tf_nombre, tf_user], spacing=12, wrap=True),
-            ft.Row([tf_correo], spacing=12, wrap=True),
-            ft.Row([pr_profile, btn_save_profile], alignment=ft.MainAxisAlignment.END, spacing=10),
-        ], spacing=12)
+        ft.ResponsiveRow([
+            ft.Column([
+                ft.Text("Mi Perfil", size=16, weight=ft.FontWeight.W_600),
+                tf_nombre,
+                tf_user,
+                tf_correo,
+                ft.Container(
+                    ft.Row([pr_profile, btn_save_profile], 
+                          alignment=ft.MainAxisAlignment.END, 
+                          spacing=10),
+                    padding=ft.padding.only(top=10)
+                )
+            ], col={"xs": 12})
+        ], spacing=12, run_spacing=12)
     )
+
+    # Layout responsivo para contraseña
     pass_card = Card(
-        ft.Column([
-            ft.Text("Cambiar Contraseña", size=16, weight=ft.FontWeight.W_600),
-            ft.Row([tf_pwd_actual, tf_pwd_nueva, tf_pwd_conf], spacing=12, wrap=True),
-            ft.Row([pr_password, btn_change_password], alignment=ft.MainAxisAlignment.END, spacing=10),
-        ], spacing=12)
+        ft.ResponsiveRow([
+            ft.Column([
+                ft.Text("Cambiar Contraseña", size=16, weight=ft.FontWeight.W_600),
+                tf_pwd_actual,
+                tf_pwd_nueva,
+                tf_pwd_conf,
+                ft.Container(
+                    ft.Row([pr_password, btn_change_password], 
+                          alignment=ft.MainAxisAlignment.END, 
+                          spacing=10),
+                    padding=ft.padding.only(top=10)
+                )
+            ], col={"xs": 12})
+        ], spacing=12, run_spacing=12)
     )
+    
     personal_settings_content = ft.Column([perfil_card, pass_card], spacing=20)
 
     # -------------------------------------
-    # --- Pestaña: Administrar Usuarios (Admin Only) ---
+    # --- Pestaña: Administrar Usuarios (Admin Only) - VERSIÓN MÓVIL ---
     # -------------------------------------
-    admin_search_tf = TextField(label="Buscar por nombre, usuario o correo", width=400)
+    admin_search_tf = TextField(
+        label="Buscar por nombre, usuario o correo", 
+        col={"xs": 12, "sm": 8, "md": 6}
+    )
     admin_search_tf.prefix_icon = ft.Icons.SEARCH
+    
     admin_role_dd = ft.Dropdown(
         label="Filtrar por Rol",
         options=[
@@ -138,7 +194,7 @@ def SettingsView(page: ft.Page, api: ApiClient):
             ft.dropdown.Option("docente", "Docente"),
             ft.dropdown.Option("estudiante", "Estudiante"),
         ],
-        width=200,
+        col={"xs": 12, "sm": 4, "md": 3}
     )
     
     admin_users_list = ft.ListView(spacing=10, expand=True)
@@ -148,24 +204,28 @@ def SettingsView(page: ft.Page, api: ApiClient):
         query = admin_search_tf.value or ""
         role = admin_role_dd.value or ""
         users = api.get_users(q=query, rol=role) or []
-        if not users: admin_users_list.controls.append(ft.Text("No se encontraron usuarios."))
+        if not users: 
+            admin_users_list.controls.append(
+                ft.Container(
+                    ft.Text("No se encontraron usuarios.", text_align=ft.TextAlign.CENTER),
+                    padding=20,
+                    alignment=ft.alignment.center
+                )
+            )
         else:
             for user in users:
                 if user.get('id') != me.get('id'): 
                     admin_users_list.controls.append(user_tile(user))
         if admin_users_list.page: admin_users_list.update()
 
-
-    # --- MODIFICACIÓN TOTAL: 'user_tile' ---
-    # Esta función ahora crea la tarjeta, el formulario de edición Y la confirmación de borrado.
-    
+    # --- MODIFICACIÓN: 'user_tile' adaptada para móvil ---
     def user_tile(u: dict):
         user_id = u.get('id')
 
         # --- Controles de edición (específicos para esta tarjeta) ---
-        tf_nombre_inline = TextField(label="Nombre", value=u.get('nombre'))
-        tf_user_inline = TextField(label="Usuario", value=u.get('user'))
-        tf_correo_inline = TextField(label="Correo", value=u.get('correo'))
+        tf_nombre_inline = TextField(label="Nombre", value=u.get('nombre'), col={"xs": 12})
+        tf_user_inline = TextField(label="Usuario", value=u.get('user'), col={"xs": 12})
+        tf_correo_inline = TextField(label="Correo", value=u.get('correo'), col={"xs": 12})
         rol_inline_dd = ft.Dropdown(
             label="Rol",
             value=u.get('rol'),
@@ -173,7 +233,8 @@ def SettingsView(page: ft.Page, api: ApiClient):
                 ft.dropdown.Option("admin", "Admin"),
                 ft.dropdown.Option("docente", "Docente"),
                 ft.dropdown.Option("estudiante", "Estudiante"),
-            ]
+            ],
+            col={"xs": 12}
         )
         pr_inline = ft.ProgressRing(width=16, height=16, stroke_width=2, visible=False)
         save_btn_inline = Primary("Guardar", on_click=lambda e: save_inline_edit(e))
@@ -185,36 +246,46 @@ def SettingsView(page: ft.Page, api: ApiClient):
         cancel_btn_delete = Tonal("Cancelar", on_click=lambda e: cancel_inline_delete(e))
 
         # --- Contenedor del formulario de edición (oculto) ---
-        edit_form_container = ft.Column(
+        edit_form_container = ft.ResponsiveRow(
             controls=[
-                ft.Divider(height=10),
-                tf_nombre_inline,
-                tf_user_inline,
-                tf_correo_inline,
-                rol_inline_dd,
-                ft.Row(
-                    [pr_inline, cancel_btn_inline, save_btn_inline], 
-                    alignment=ft.MainAxisAlignment.END,
-                    spacing=10
-                )
+                ft.Column([
+                    ft.Divider(height=10),
+                    tf_nombre_inline,
+                    tf_user_inline,
+                    tf_correo_inline,
+                    rol_inline_dd,
+                    ft.Container(
+                        ft.Row(
+                            [pr_inline, cancel_btn_inline, save_btn_inline], 
+                            alignment=ft.MainAxisAlignment.END,
+                            spacing=10,
+                            wrap=True
+                        ),
+                        padding=ft.padding.only(top=10)
+                    )
+                ], col={"xs": 12})
             ],
             visible=False,
             opacity=0,
             animate_opacity=200,
             animate_size=200,
-            spacing=10
+            spacing=10,
+            run_spacing=10
         )
 
-        # --- NUEVO: Contenedor de confirmación de borrado (oculto) ---
+        # --- Contenedor de confirmación de borrado (oculto) ---
         delete_confirm_container = ft.Container(
             content=ft.Column(
                 [
                     ft.Text("¿Seguro que quieres eliminar a este usuario? Esta acción no se puede deshacer.",
-                            style=ft.TextThemeStyle.BODY_MEDIUM, color=ft.Colors.ERROR, weight=ft.FontWeight.BOLD),
+                            style=ft.TextThemeStyle.BODY_MEDIUM, 
+                            color=ft.Colors.ERROR, 
+                            weight=ft.FontWeight.BOLD),
                     ft.Row(
                         [pr_delete_inline, cancel_btn_delete, confirm_btn_delete],
                         alignment=ft.MainAxisAlignment.END,
-                        spacing=10
+                        spacing=10,
+                        wrap=True
                     )
                 ],
                 spacing=10
@@ -227,46 +298,60 @@ def SettingsView(page: ft.Page, api: ApiClient):
             border=ft.border.only(top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT))
         )
         
-        # --- Fila de información (la que se ve siempre) ---
+        # --- Fila de información (la que se ve siempre) - Adaptada para móvil ---
         info_column = ft.Column(
             [
-                ft.Text(f"{u.get('nombre', '')}", weight=ft.FontWeight.BOLD),
-                ft.Text(f"Usuario: {u.get('user', '')} | Correo: {u.get('correo', '')}"),
-                ft.Chip(ft.Text(f"Rol: {u.get('rol', '').capitalize()}"))
+                ft.Text(f"{u.get('nombre', '')}", 
+                       weight=ft.FontWeight.BOLD,
+                       size=16),
+                ft.Text(f"Usuario: {u.get('user', '')}", size=14),
+                ft.Text(f"Correo: {u.get('correo', '')}", size=14),
+                ft.Container(
+                    ft.Chip(
+                        label=ft.Text(f"Rol: {u.get('rol', '').capitalize()}"),
+                        padding=5
+                    ),
+                    padding=ft.padding.only(top=5)
+                )
             ], 
             expand=True, 
-            spacing=2
+            spacing=4
         )
         
         edit_btn_inline = ft.IconButton(
             ft.Icons.EDIT_OUTLINED,
             tooltip="Editar Usuario",
-            on_click=lambda e: toggle_edit(e)
+            on_click=lambda e: toggle_edit(e),
+            icon_size=20
         )
         delete_btn_inline = ft.IconButton(
             ft.Icons.DELETE_OUTLINE,
             tooltip="Eliminar Usuario",
             icon_color=ft.Colors.ERROR,
-            on_click=lambda e: toggle_delete(e) # --- CAMBIADO ---
+            on_click=lambda e: toggle_delete(e),
+            icon_size=20
         )
         
-        info_row = ft.Row(
-            [info_column, edit_btn_inline, delete_btn_inline],
-            vertical_alignment=ft.CrossAxisAlignment.CENTER
-        )
+        # Layout responsivo para la fila de información
+        info_row = ft.ResponsiveRow([
+            ft.Column([info_column], col={"xs": 8, "sm": 9}, expand=True),
+            ft.Column([
+                ft.Row([edit_btn_inline, delete_btn_inline], spacing=5)
+            ], col={"xs": 4, "sm": 3}, 
+               horizontal_alignment=ft.CrossAxisAlignment.END)
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         # --- Contenedor principal de la tarjeta ---
         card_content = ft.Column(
             [
                 info_row, 
                 edit_form_container,
-                delete_confirm_container # --- AÑADIDO ---
+                delete_confirm_container
             ],
             spacing=0
         )
 
         # --- Funciones de Lógica Interna (Closures) ---
-        
         def toggle_edit(e):
             """Muestra/oculta el formulario de edición. Oculta el de borrado."""
             was_visible = edit_form_container.visible
@@ -335,7 +420,6 @@ def SettingsView(page: ft.Page, api: ApiClient):
                     cancel_btn_inline.disabled = False
                     card_content.update()
 
-        # --- NUEVAS FUNCIONES PARA BORRADO INLINE ---
         def toggle_delete(e):
             """Muestra/oculta la confirmación de borrado. Oculta la de edición."""
             was_visible = delete_confirm_container.visible
@@ -380,47 +464,46 @@ def SettingsView(page: ft.Page, api: ApiClient):
                 confirm_btn_delete.disabled = False
                 cancel_btn_delete.disabled = False
                 card_content.update()
-        # --- FIN NUEVAS FUNCIONES ---
 
-        # Usamos ft.Card estándar (de intentos anteriores, esto es correcto)
         return ft.Card(
             content=ft.Container(
                 content=card_content,
-                padding=12
+                padding=16,
+                margin=ft.margin.symmetric(vertical=4)
             ),
-            elevation=1.5,
-            margin=ft.margin.symmetric(vertical=4)
+            elevation=2.0
         )
-    # --- FIN MODIFICACIÓN 'user_tile' ---
 
     def handle_search_change(e): render_user_list()
     admin_search_tf.on_change = handle_search_change
     admin_role_dd.on_change = lambda e: render_user_list()
 
-    # --- Lógica de Diálogos Eliminada (ya no se usa) ---
-    # open_edit_user_dialog()
-    # save_user_edit()
-    # confirm_delete_user()
-    # open_delete_user_dialog()
-
-    # --- Admin Tab Content (Sin cambios) ---
+    # --- Admin Tab Content - Versión Móvil ---
     admin_settings_content = ft.Column(
         [
-            ft.Row([admin_search_tf, admin_role_dd], wrap=True, spacing=10, alignment=ft.MainAxisAlignment.START),
-            ft.Divider(height=10),
+            ft.ResponsiveRow([
+                ft.Column([admin_search_tf], col={"xs": 12, "sm": 8}),
+                ft.Column([admin_role_dd], col={"xs": 12, "sm": 4})
+            ], spacing=10, run_spacing=10),
+            ft.Divider(height=20),
             admin_users_list
         ],
         expand=True
     )
 
     # -------------------------------------
-    # --- Layout General con Tabs ---
+    # --- Layout General con Tabs - Versión Móvil ---
     # -------------------------------------
     tabs_list = [
         ft.Tab(
             text="Mi Cuenta",
             icon=ft.Icons.PERSON_OUTLINE,
-            content=ft.Container(personal_settings_content, padding=ft.padding.symmetric(vertical=10))
+            content=ft.Container(
+                ft.Column([
+                    personal_settings_content
+                ], scroll=ft.ScrollMode.ADAPTIVE),
+                padding=ft.padding.symmetric(vertical=10, horizontal=5)
+            )
         ),
     ]
 
@@ -429,25 +512,35 @@ def SettingsView(page: ft.Page, api: ApiClient):
             ft.Tab(
                 text="Administrar Usuarios",
                 icon=ft.Icons.PEOPLE_ALT_OUTLINED,
-                content=ft.Container(admin_settings_content, padding=ft.padding.symmetric(vertical=10))
+                content=ft.Container(
+                    ft.Column([
+                        admin_settings_content
+                    ], scroll=ft.ScrollMode.ADAPTIVE),
+                    padding=ft.padding.symmetric(vertical=10, horizontal=5)
+                )
             )
         )
         render_user_list()
 
-    # Dejamos el clip_behavior, no hace daño.
     tabs = ft.Tabs(
         selected_index=0, 
         tabs=tabs_list, 
         expand=1,
-        clip_behavior=ft.ClipBehavior.NONE
+        scrollable=True  # Tabs scrollables en móvil
     )
 
-    return ft.Column(
-        [
-            ft.Text("Ajustes", size=22, weight=ft.FontWeight.BOLD),
-            tabs,
-        ],
-        expand=True,
-        spacing=15,
-        alignment=ft.MainAxisAlignment.START
+    return ft.Container(
+        ft.Column(
+            [
+                ft.Container(
+                    ft.Text("Ajustes", size=22, weight=ft.FontWeight.BOLD),
+                    padding=ft.padding.symmetric(horizontal=10, vertical=5),
+                    alignment=ft.alignment.center
+                ),
+                tabs,
+            ],
+            expand=True,
+            spacing=15,
+        ),
+        padding=ft.padding.symmetric(horizontal=5)
     )
