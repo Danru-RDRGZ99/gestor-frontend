@@ -187,7 +187,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     def safe_render_horarios():
         """Renderiza horarios solo si los controles ya están en la página"""
-        if state["initialized"]:
+        if state["initialized"] and horarios_list_panel in page.controls:
             render_horarios()
 
     def render_horarios():
@@ -201,7 +201,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             if not isinstance(all_horarios, list):
                 detail = all_horarios.get("error", "Error") if isinstance(all_horarios, dict) else "Error desconocido"
                 horarios_list_panel.controls.append(ft.Text(f"Error al cargar horarios: {detail}", color=ft.Colors.ERROR))
-                if state["initialized"]:
+                if state["initialized"] and horarios_list_panel in page.controls:
                     horarios_list_panel.update()
                 return
 
@@ -262,8 +262,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 for horario in display_horarios:
                     horarios_list_panel.controls.append(horario_card(horario))
 
-            # Solo actualizar si ya está inicializado
-            if state["initialized"]:
+            # Solo actualizar si ya está inicializado y en la página
+            if state["initialized"] and horarios_list_panel in page.controls:
                 horarios_list_panel.update()
 
         except Exception as e:
@@ -374,12 +374,21 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                     title=ft.Text(f"{dia_nombre}"),
                     subtitle=ft.Text(f"{hora_inicio_str} - {hora_fin_str}"),
                     trailing=ft.Row([
-                        Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
-                             on_click=lambda e, h=horario: close_dialog_and_edit(h),
-                             icon_color=ft.Colors.BLUE, icon_size=20),
-                        Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
-                             on_click=lambda e, h=horario: close_dialog_and_delete(h.get('id')),
-                             icon_color=ft.Colors.RED, icon_size=20),
+                        # CORREGIDO: Usar ft.IconButton en lugar de Icon con icon_size
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT_OUTLINED,
+                            icon_color=ft.Colors.BLUE,
+                            tooltip="Editar",
+                            on_click=lambda e, h=horario: close_dialog_and_edit(h),
+                            icon_size=20
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINED,
+                            icon_color=ft.Colors.RED,
+                            tooltip="Eliminar",
+                            on_click=lambda e, h=horario: close_dialog_and_delete(h.get('id')),
+                            icon_size=20
+                        ),
                     ], spacing=4)
                 )
             )
@@ -696,8 +705,12 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         # Marcar como inicializado después de construir el layout
         state["initialized"] = True
         
-        # Cargar datos iniciales
-        safe_render_horarios()
+        # Cargar datos iniciales después de un pequeño delay para asegurar que los controles están en la página
+        def delayed_render():
+            safe_render_horarios()
+        
+        import threading
+        threading.Timer(0.1, delayed_render).start()
 
     # Construir layout inicial
     build_layout()
