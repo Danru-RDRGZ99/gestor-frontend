@@ -172,24 +172,60 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     lab_map = {str(l["id"]): l["nombre"] for l in labs_cache}
     lab_map["general"] = "General (Todos)"
 
-    # --- 1. Definir Controles ---
-    dd_lab = Dropdown(label="Laboratorio", options=lab_options, value="general", col={"md": 4})
+    # --- 1. Definir Controles - VERSIÓN MÓVIL MEJORADA ---
+    dd_lab = Dropdown(
+        label="Laboratorio", 
+        options=lab_options, 
+        value="general", 
+        col={"xs": 12, "sm": 12, "md": 4}  # Ocupa toda la fila en móvil
+    )
 
     dias_checkboxes: Dict[int, ft.Checkbox] = {}
     checkbox_controls = []
     for dia_num, dia_nombre_short in DIAS_SEMANA_SHORT.items():
-        cb = ft.Checkbox(label=dia_nombre_short, data=dia_num, tooltip=DIAS_SEMANA[dia_num])
+        cb = ft.Checkbox(
+            label=dia_nombre_short, 
+            data=dia_num, 
+            tooltip=DIAS_SEMANA[dia_num]
+        )
         dias_checkboxes[dia_num] = cb
         checkbox_controls.append(cb)
-    dias_checkboxes_row_control = ft.Row(checkbox_controls, spacing=5, wrap=True, run_spacing=0, alignment=ft.MainAxisAlignment.START)
-    dias_checkboxes_container = ft.Column(
-         [ft.Text("Días:", weight=ft.FontWeight.BOLD, size=12), dias_checkboxes_row_control],
-         col={"md": 8}, spacing=2
+    
+    # Contenedor responsivo para checkboxes
+    dias_checkboxes_row_control = ft.ResponsiveRow(
+        checkbox_controls, 
+        spacing=5, 
+        run_spacing=5,  # Más espacio entre filas en móvil
+        alignment=ft.MainAxisAlignment.START
+    )
+    
+    dias_checkboxes_container = ft.ResponsiveRow(
+        [
+            ft.Column([
+                ft.Text("Días:", weight=ft.FontWeight.BOLD, size=12),
+                dias_checkboxes_row_control
+            ], col={"xs": 12, "sm": 12, "md": 8})
+        ],
+        spacing=2
     )
 
-    dd_inicio = Dropdown(label="Hora Inicio", options=HORA_OPTIONS, col={"sm": 6, "md": 3})
-    dd_fin = Dropdown(label="Hora Fin", options=HORA_OPTIONS, col={"sm": 6, "md": 3})
-    dd_tipo = Dropdown(label="Tipo", options=TIPO_OPTIONS, value="disponible", col={"sm": 12, "md": 3})
+    # Dropdowns con breakpoints móviles
+    dd_inicio = Dropdown(
+        label="Hora Inicio", 
+        options=HORA_OPTIONS, 
+        col={"xs": 6, "sm": 6, "md": 3}
+    )
+    dd_fin = Dropdown(
+        label="Hora Fin", 
+        options=HORA_OPTIONS, 
+        col={"xs": 6, "sm": 6, "md": 3}
+    )
+    dd_tipo = Dropdown(
+        label="Tipo", 
+        options=TIPO_OPTIONS, 
+        value="disponible", 
+        col={"xs": 12, "sm": 12, "md": 3}
+    )
 
     info_txt = ft.Text("")
     reglas_list_panel = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
@@ -199,7 +235,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     btn_cancel = None
     form_row = None
 
-    # --- 3. Definir Funciones ---
+    # --- 3. Definir Funciones (MANTENIDAS IGUAL) ---
 
     def load_reglas_for_render():
         return api.get_reglas_horario()
@@ -314,7 +350,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             info_txt.value = result.get("detail", "Error al eliminar.") if isinstance(result, dict) else "Error desconocido al eliminar."
         info_txt.update()
 
-    # --- NEW: Group Card ---
+    # --- MODIFIED: Group Card para móvil ---
     def group_card(group_rules: List[dict]) -> ft.Control:
         nonlocal lab_map
         if not group_rules: return ft.Container()
@@ -341,24 +377,41 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         subtitle = ft.Text(f"Horario: {hora_str}", size=12, opacity=0.8)
 
-        status_chip = ft.Chip(label=ft.Text(tipo_str, size=11, color=status_color),
-                              bgcolor=ft.Colors.with_opacity(0.1, status_color),
-                              height=28)
+        status_chip = ft.Chip(
+            label=ft.Text(tipo_str, size=11, color=status_color),
+            bgcolor=ft.Colors.with_opacity(0.1, status_color),
+            height=28
+        )
 
-        btns = ft.Row([
-            Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", on_click=lambda e, grp=group_rules: edit_group_click(grp)),
-            Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", icon_color=ft.Colors.ERROR, on_click=lambda e, grp=group_rules: delete_group_click(grp)),
-        ], spacing=6)
+        # Botones adaptados para móvil
+        btns = ft.ResponsiveRow([
+            ft.Column([
+                ft.Row([
+                    Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", 
+                         on_click=lambda e, grp=group_rules: edit_group_click(grp)),
+                    Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", 
+                         icon_color=ft.Colors.ERROR, 
+                         on_click=lambda e, grp=group_rules: delete_group_click(grp)),
+                ], spacing=6)
+            ], col={"xs": 12, "sm": 12})
+        ])
 
-        header = ft.Row([
-            ft.Column([title, subtitle], spacing=2, expand=True),
-            status_chip,
-            btns
+        # Layout responsivo
+        header = ft.ResponsiveRow([
+            ft.Column([
+                title,
+                subtitle,
+                ft.Row([status_chip], wrap=True)
+            ], col={"xs": 12, "sm": 8, "md": 6}),
+            ft.Column([
+                btns
+            ], col={"xs": 12, "sm": 4, "md": 6}, 
+               horizontal_alignment=ft.CrossAxisAlignment.END)
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         return Card(header, padding=14)
 
-    # --- MODIFIED: Single Rule Card ---
+    # --- MODIFIED: Single Rule Card para móvil ---
     def regla_card(regla: dict) -> ft.Control:
         nonlocal lab_map
         lab_id = regla.get('laboratorio_id')
@@ -380,19 +433,36 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         subtitle = ft.Text(f"Horario: {hora_str}", size=12, opacity=0.8)
 
-        status_chip = ft.Chip(label=ft.Text(tipo_str, size=11, color=status_color),
-                              bgcolor=ft.Colors.with_opacity(0.1, status_color),
-                              height=28)
+        status_chip = ft.Chip(
+            label=ft.Text(tipo_str, size=11, color=status_color),
+            bgcolor=ft.Colors.with_opacity(0.1, status_color),
+            height=28
+        )
 
-        btns = ft.Row([
-            Icon(ft.Icons.EDIT_OUTLINED, "Editar", on_click=lambda e, r=regla: edit_regla_click(r)),
-            Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", icon_color=ft.Colors.ERROR, on_click=lambda e, rid=regla.get('id'): delete_regla_click(rid) if rid else None),
-        ], spacing=6)
+        # Botones adaptados para móvil
+        btns = ft.ResponsiveRow([
+            ft.Column([
+                ft.Row([
+                    Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
+                         on_click=lambda e, r=regla: edit_regla_click(r)),
+                    Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
+                         icon_color=ft.Colors.ERROR, 
+                         on_click=lambda e, rid=regla.get('id'): delete_regla_click(rid) if rid else None),
+                ], spacing=6)
+            ], col={"xs": 12, "sm": 12})
+        ])
 
-        header = ft.Row([
-            ft.Column([title, subtitle], spacing=2, expand=True),
-            status_chip,
-            btns
+        # Layout responsivo
+        header = ft.ResponsiveRow([
+            ft.Column([
+                title,
+                subtitle,
+                ft.Row([status_chip], wrap=True)
+            ], col={"xs": 12, "sm": 8, "md": 6}),
+            ft.Column([
+                btns
+            ], col={"xs": 12, "sm": 4, "md": 6}, 
+               horizontal_alignment=ft.CrossAxisAlignment.END)
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         return Card(header, padding=14)
@@ -606,38 +676,60 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         info_txt.update()
         print(f"Save results: {final_message}")
 
-    # --- 4. Definir botones y formulario ---
-    btn_save = Primary("Agregar Regla(s)", on_click=save_regla, col={"sm": 6, "md": 2})
-    btn_cancel = Ghost("Cancelar", on_click=clear_form, visible=False, col={"sm": 6, "md": 1})
-    buttons_container = ft.Column(
+    # --- 4. Definir botones y formulario - VERSIÓN MÓVIL ---
+    btn_save = Primary("Agregar Regla(s)", on_click=save_regla, 
+                      col={"xs": 12, "sm": 6, "md": 2})
+    btn_cancel = Ghost("Cancelar", on_click=clear_form, visible=False, 
+                      col={"xs": 12, "sm": 6, "md": 1})
+    
+    # Contenedor de botones responsivo
+    buttons_container = ft.ResponsiveRow(
         [btn_save, btn_cancel],
-        col={"sm": 12, "md": 3},
         alignment=ft.MainAxisAlignment.END,
-        horizontal_alignment=ft.CrossAxisAlignment.END,
-        spacing=5
+        vertical_alignment=ft.CrossAxisAlignment.END,
+        spacing=10, 
+        run_spacing=10
     )
+
+    # Formulario completamente responsivo
     form_row = ft.ResponsiveRow(
         [
-            dd_lab, dias_checkboxes_container,
-            dd_inicio, dd_fin, dd_tipo,
+            dd_lab, 
+            dias_checkboxes_container,
+            dd_inicio, 
+            dd_fin, 
+            dd_tipo,
             buttons_container,
         ],
         vertical_alignment=ft.CrossAxisAlignment.END,
-        spacing=10, run_spacing=15
+        spacing=10, 
+        run_spacing=15  # Más espacio entre filas en móvil
     )
+    
     form_card = Card(form_row, padding=14)
 
     # --- 5. Carga inicial ---
     render_reglas()
 
-    # --- 6. Layout Final ---
+    # --- 6. Layout Final MEJORADO PARA MÓVIL ---
     return ft.Column(
         [
-            ft.Text("Gestión de Reglas de Horario", size=22, weight=ft.FontWeight.BOLD),
+            ft.Container(
+                ft.Text("Gestión de Reglas de Horario", 
+                       size=22, weight=ft.FontWeight.BOLD,
+                       text_align=ft.TextAlign.CENTER),
+                padding=10
+            ),
             form_card,
             info_txt,
             ft.Divider(height=10),
-            reglas_list_panel,
+            ft.Container(
+                reglas_list_panel,
+                padding=ft.padding.only(bottom=20)  # Padding extra para móvil
+            ),
         ],
-        expand=True, alignment=ft.MainAxisAlignment.START, spacing=15
+        expand=True, 
+        alignment=ft.MainAxisAlignment.START, 
+        spacing=15,
+        scroll=ft.ScrollMode.ADAPTIVE  # Scroll suave en móvil
     )
