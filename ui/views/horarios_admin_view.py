@@ -44,7 +44,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     state = {
         "editing_rule_id": None,
-        "editing_rule_dia": None,  # <--- AÑADIDO
+        "editing_rule_dia": None,  # <--- CORRECCIÓN DE EDICIÓN
         "is_mobile": get_is_mobile(),
         "selected_lab": "general",
         "selected_day": None,
@@ -83,7 +83,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     # Selector de día simple
     day_buttons = []
-    for dia_num in range(7):
+    # <--- NUEVA FUNCIÓN: MOSTRAR 7 DÍAS ---
+    for dia_num in range(7):  # 0 (Lunes) a 6 (Domingo)
         btn = ft.TextButton(
             DIAS_SEMANA_SHORT[dia_num],
             style=ft.ButtonStyle(
@@ -169,10 +170,14 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         
         dias_list = sorted(dias_list)
         
-        # Si son días consecutivos de Lunes a Viernes
+        # Casos especiales comunes
         if dias_list == [0, 1, 2, 3, 4]:
             return "Lunes a Viernes"
-        
+        if dias_list == [5, 6]:
+            return "Fin de Semana"
+        if dias_list == list(range(7)):
+            return "Toda la Semana"
+
         # Si son días consecutivos
         if len(dias_list) > 1 and all(dias_list[i] + 1 == dias_list[i+1] for i in range(len(dias_list)-1)):
             return f"{DIAS_SEMANA[dias_list[0]]} a {DIAS_SEMANA[dias_list[-1]]}"
@@ -202,7 +207,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             if not isinstance(all_horarios, list):
                 detail = all_horarios.get("error", "Error") if isinstance(all_horarios, dict) else "Error desconocido"
                 horarios_list_panel.controls.append(ft.Text(f"Error al cargar horarios: {detail}", color=ft.Colors.ERROR))
-                if state["initialized"]:
+                # <--- CORRECCIÓN 3: ASSERTION ERROR ---
+                if horarios_list_panel.page:
                     horarios_list_panel.update()
                 return
 
@@ -263,8 +269,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 for horario in display_horarios:
                     horarios_list_panel.controls.append(horario_card(horario))
 
-            # Solo actualizar si ya está inicializado
-            if state["initialized"]:
+            # <--- CORRECCIÓN 3: ASSERTION ERROR ---
+            # Solo actualizar si el control ya existe en la página
+            if horarios_list_panel.page:
                 horarios_list_panel.update()
 
         except Exception as e:
@@ -387,12 +394,14 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                     title=ft.Text(f"{dia_nombre}"),
                     subtitle=ft.Text(f"{hora_inicio_str} - {hora_fin_str}"),
                     trailing=ft.Row([
+                        # <--- CORRECCIÓN 4: TYPE ERROR ---
                         Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
                              on_click=lambda e, h=horario: edit_and_close(h),
-                             icon_color=ft.Colors.BLUE, icon_size=20),
+                             icon_color=ft.Colors.BLUE), # Se quitó 'icon_size=20'
                         Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
                              on_click=lambda e, hid=horario.get('id'): delete_and_close(hid) if hid else None,
-                             icon_color=ft.Colors.RED, icon_size=20),
+                             icon_color=ft.Colors.RED), # Se quitó 'icon_size=20'
+                        # <--- FIN DE CORRECCIÓN 4 ---
                     ], spacing=4)
                 )
             )
@@ -424,14 +433,13 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             for horario_id in individual_ids:
                 result = api.delete_regla_horario(horario_id)
                 
-                # <--- LÓGICA MODIFICADA ---
+                # <--- CORRECCIÓN 2: LÓGICA DE ELIMINACIÓN ---
                 # Si 'result' NO es un diccionario, asumimos éxito (204 No Content)
                 if not isinstance(result, dict):
                     success_count += 1
                 else:
-                    # Opcional: registrar el error si 'result' es un dict de error
                     print(f"Error eliminando ID {horario_id}: {result.get('detail', 'Error')}")
-                # <--- FIN DE MODIFICACIÓN ---
+                # <--- FIN DE CORRECCIÓN 2 ---
             
             if success_count == len(individual_ids):
                 info_txt.value = f"✅ {success_count} horarios eliminados correctamente"
@@ -457,7 +465,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     def edit_horario_click(horario: dict):
         state["editing_rule_id"] = horario.get("id")
-        state["editing_rule_dia"] = horario.get("dia_semana") # <--- AÑADIDO
+        state["editing_rule_dia"] = horario.get("dia_semana") # <--- CORRECCIÓN 1: GUARDAR DÍA
         
         # Rellenar formulario con datos existentes
         dd_lab.value = str(horario.get("laboratorio_id")) if horario.get("laboratorio_id") is not None else "general"
@@ -478,7 +486,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             
             result = api.delete_regla_horario(horario_id)
             
-            # <--- LÓGICA MODIFICADA ---
+            # <--- CORRECCIÓN 2: LÓGICA DE ELIMINACIÓN ---
             # Si 'result' NO es un diccionario (es None, True, etc.), asumimos éxito (204)
             if not isinstance(result, dict):
                 info_txt.value = "✅ Horario eliminado correctamente"
@@ -489,7 +497,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 error_msg = result.get("detail", "Error desconocido")
                 info_txt.value = f"❌ Error al eliminar: {error_msg}"
                 info_txt.color = ft.Colors.RED
-            # <--- FIN DE MODIFICACIÓN ---
+            # <--- FIN DE CORRECCIÓN 2 ---
             
             info_txt.update()
 
@@ -507,7 +515,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     def clear_form():
         state["editing_rule_id"] = None
-        state["editing_rule_dia"] = None # <--- AÑADIDO
+        state["editing_rule_dia"] = None # <--- CORRECCIÓN 1: LIMPIAR DÍA
         
         # No resetear laboratorio y día para mantener contexto
         dd_inicio.value = None
@@ -551,8 +559,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         # Si estamos editando, actualizar
         if state["editing_rule_id"]:
             
-            # <--- LÓGICA MODIFICADA ---
-            # Validar que tengamos el día guardado en el estado
+            # <--- CORRECCIÓN 1: LÓGICA DE EDICIÓN ---
             if state["editing_rule_dia"] is None:
                 info_txt.value = "❌ Error: No se encontró el día de la semana para editar. Refresca la página."
                 info_txt.color = ft.Colors.RED
@@ -580,11 +587,12 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
                 info_txt.value = f"❌ Error al actualizar: {error_msg}"
                 info_txt.color = ft.Colors.RED
-            # <--- FIN DE MODIFICACIÓN ---
+            # <--- FIN DE CORRECCIÓN 1 ---
 
         else:
             # Crear nuevos horarios para todos los días seleccionados o el día actual
-            dias_a_crear = [state["selected_day"]] if state["selected_day"] is not None else list(range(5))
+            # <--- NUEVA FUNCIÓN: CREAR PARA 7 DÍAS ---
+            dias_a_crear = [state["selected_day"]] if state["selected_day"] is not None else list(range(7))
             
             success_count = 0
             for dia_num in dias_a_crear:
