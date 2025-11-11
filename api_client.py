@@ -277,5 +277,18 @@ class ApiClient:
     def delete_regla_horario(self, regla_id: int):
         """Elimina una regla de horario (Admin)."""
         return self._make_request("DELETE", f"/admin/horarios/reglas/{regla_id}")
-
-    # --- FIN DE MÉTODOS PARA HORARIOS_ADMIN_VIEW ---
+    
+    def delete_plantel(self, plantel_id: int) -> bool:
+        try:
+            response = self.session.delete(f"{self.base_url}/planteles/{plantel_id}")
+            if response.status_code == 200:
+                return True
+            elif response.status_code == 404:
+                print(f"❌ Plantel con ID {plantel_id} no encontrado")
+                return False
+            else:
+                print(f"❌ Error al eliminar plantel: {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"❌ Excepción al eliminar plantel: {e}")
+            return False
