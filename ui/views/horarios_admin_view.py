@@ -194,6 +194,59 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     info_txt = ft.Text("")
     reglas_list_panel = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
+    # --- NUEVO: Snackbar para feedback ---
+    def show_snackbar(message: str, color: str = ft.Colors.GREEN):
+        """Muestra un mensaje de feedback temporal"""
+        snackbar = ft.SnackBar(
+            content=ft.Text(message, color=ft.Colors.WHITE),
+            bgcolor=color,
+            duration=3000,
+            show_close_icon=True,
+            close_icon_color=ft.Colors.WHITE
+        )
+        page.snack_bar = snackbar
+        snackbar.open = True
+        page.update()
+
+    # --- NUEVO: Diálogo de confirmación ---
+    def show_confirmation_dialog(title: str, content: str, on_confirm, confirm_text: str = "Eliminar", cancel_text: str = "Cancelar"):
+        """Muestra un diálogo de confirmación para eliminaciones"""
+        
+        def handle_confirm(e):
+            dialog.open = False
+            page.update()
+            on_confirm()
+        
+        def handle_cancel(e):
+            dialog.open = False
+            page.update()
+        
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(title, weight=ft.FontWeight.BOLD),
+            content=ft.Text(content),
+            actions=[
+                ft.TextButton(
+                    cancel_text,
+                    on_click=handle_cancel,
+                    style=ft.ButtonStyle(color=ft.Colors.PRIMARY)
+                ),
+                ft.TextButton(
+                    confirm_text,
+                    on_click=handle_confirm,
+                    style=ft.ButtonStyle(
+                        color=ft.Colors.WHITE,
+                        bgcolor=ft.Colors.ERROR
+                    )
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        
+        page.dialog = dialog
+        dialog.open = True
+        page.update()
+
     # --- 2. Declarar variables ---
     btn_save = None
     btn_cancel = None
@@ -272,47 +325,81 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         btn_cancel.update()
         info_txt.update()
 
-    # --- NEW: Delete Group Function ---
+    # --- MODIFICADO: Delete Group Function con confirmación ---
     def delete_group_click(group_rules: List[dict]):
-        nonlocal info_txt
         if not group_rules: return
 
-        rule_ids_to_delete = [rule.get("id") for rule in group_rules if rule.get("id")]
-        if not rule_ids_to_delete:
-            info_txt.value = "Error: No se encontraron IDs válidos en el grupo para eliminar."
-            info_txt.update()
-            return
+        first_rule = group_rules[0]
+        lab_name = lab_map.get(str(first_rule.get('laboratorio_id')), "General")
+        dias_str = ", ".join(DIAS_SEMANA_SHORT.get(r.get('dia_semana'), '?') for r in group_rules)
+        
+        def confirm_delete():
+            nonlocal info_txt
+            rule_ids_to_delete = [rule.get("id") for rule in group_rules if rule.get("id")]
+            if not rule_ids_to_delete:
+                show_snackbar("Error: No se encontraron IDs válidos en el grupo para eliminar.", ft.Colors.ERROR)
+                return
 
-        success_count = 0
-        error_count = 0
-        last_error = ""
+            success_count = 0
+            error_count = 0
+            last_error = ""
 
-        for rule_id in rule_ids_to_delete:
-            result = api.delete_regla_horario(rule_id)
-            if result is True:
-                success_count += 1
+            for rule_id in rule_ids_to_delete:
+                result = api.delete_regla_horario(rule_id)
+                if result is True:
+                    success_count += 1
+                else:
+                    error_count += 1
+                    last_error = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
+
+            if error_count == 0:
+                message = f"✅ Grupo eliminado ({success_count} reglas)"
+                show_snackbar(message, ft.Colors.GREEN)
+                info_txt.value = message
             else:
-                error_count += 1
-                last_error = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
+                message = f"Error al eliminar grupo. {success_count} éxito(s), {error_count} error(es)"
+                show_snackbar(message, ft.Colors.ORANGE)
+                info_txt.value = f"{message}. Último error: {last_error}"
+            
+            render_reglas()
+            info_txt.update()
 
-        if error_count == 0:
-            info_txt.value = f"Grupo ({success_count} reglas) eliminado con éxito."
-            render_reglas()
-        else:
-            info_txt.value = f"Error al eliminar grupo. {success_count} éxito(s), {error_count} error(es). Último error: {last_error}"
-            render_reglas()
-        info_txt.update()
+        # Mostrar diálogo de confirmación
+        show_confirmation_dialog(
+            title="Eliminar Grupo de Reglas",
+            content=f"¿Estás seguro de que quieres eliminar el grupo de {lab_name} para los días {dias_str}? Esta acción no se puede deshacer.",
+            on_confirm=confirm_delete
+        )
 
-    # --- MODIFIED: Delete Single Rule Function ---
-    def delete_regla_click(regla_id: int):
-        nonlocal info_txt
-        result = api.delete_regla_horario(regla_id)
-        if result is True:
-            info_txt.value = "Regla eliminada."
+    # --- MODIFICADO: Delete Single Rule Function con confirmación ---
+    def delete_regla_click(regla: dict):
+        regla_id = regla.get('id')
+        if not regla_id: return
+
+        lab_name = lab_map.get(str(regla.get('laboratorio_id')), "General")
+        dia_nombre = DIAS_SEMANA.get(regla.get('dia_semana'), 'N/A')
+        
+        def confirm_delete():
+            nonlocal info_txt
+            result = api.delete_regla_horario(regla_id)
+            if result is True:
+                message = f"✅ Regla eliminada correctamente"
+                show_snackbar(message, ft.Colors.GREEN)
+                info_txt.value = message
+            else:
+                message = "❌ Error al eliminar la regla"
+                show_snackbar(message, ft.Colors.ERROR)
+                info_txt.value = result.get("detail", "Error al eliminar.") if isinstance(result, dict) else "Error desconocido al eliminar."
+            
             render_reglas()
-        else:
-            info_txt.value = result.get("detail", "Error al eliminar.") if isinstance(result, dict) else "Error desconocido al eliminar."
-        info_txt.update()
+            info_txt.update()
+
+        # Mostrar diálogo de confirmación
+        show_confirmation_dialog(
+            title="Eliminar Regla de Horario",
+            content=f"¿Estás seguro de que quieres eliminar la regla de {lab_name} para el {dia_nombre}? Esta acción no se puede deshacer.",
+            on_confirm=confirm_delete
+        )
 
     # --- NEW: Group Card ---
     def group_card(group_rules: List[dict]) -> ft.Control:
@@ -347,7 +434,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         btns = ft.Row([
             Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", on_click=lambda e, grp=group_rules: edit_group_click(grp)),
-            Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", icon_color=ft.Colors.ERROR, on_click=lambda e, grp=group_rules: delete_group_click(grp)),
+            Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", 
+                 icon_color=ft.Colors.ERROR, 
+                 on_click=lambda e, grp=group_rules: delete_group_click(grp)),
         ], spacing=6)
 
         header = ft.Row([
@@ -386,7 +475,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         btns = ft.Row([
             Icon(ft.Icons.EDIT_OUTLINED, "Editar", on_click=lambda e, r=regla: edit_regla_click(r)),
-            Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", icon_color=ft.Colors.ERROR, on_click=lambda e, rid=regla.get('id'): delete_regla_click(rid) if rid else None),
+            Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
+                 icon_color=ft.Colors.ERROR, 
+                 on_click=lambda e, r=regla: delete_regla_click(r)),
         ], spacing=6)
 
         header = ft.Row([
@@ -483,20 +574,17 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
         # --- Basic Validation ---
         if not all([selected_dias_nums, inicio_str, fin_str, tipo_seleccionado]):
-            info_txt.value = "Completa Laboratorio, al menos un Día, Hora Inicio, Hora Fin y Tipo."
-            info_txt.color=ft.Colors.ERROR
-            info_txt.update(); return
+            show_snackbar("Completa Laboratorio, al menos un Día, Hora Inicio, Hora Fin y Tipo.", ft.Colors.ERROR)
+            return
         try:
             inicio = datetime.strptime(inicio_str, "%H:%M:%S").time()
             fin = datetime.strptime(fin_str, "%H:%M:%S").time()
         except (ValueError, TypeError):
-            info_txt.value = "Error: Formato de hora inválido."
-            info_txt.color=ft.Colors.ERROR
-            info_txt.update(); return
+            show_snackbar("Error: Formato de hora inválido.", ft.Colors.ERROR)
+            return
         if inicio >= fin:
-            info_txt.value = "Error: Hora inicio debe ser anterior a Hora fin."
-            info_txt.color=ft.Colors.ERROR
-            info_txt.update(); return
+            show_snackbar("Error: Hora inicio debe ser anterior a Hora fin.", ft.Colors.ERROR)
+            return
 
         # --- Determine Mode and Execute ---
         success_count = 0
@@ -560,9 +648,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         elif state["editing_single_rule_id"]:
             action_summary = "Actualizando Regla Individual: "
             if len(selected_dias_nums) != 1:
-                 info_txt.value = "Error: Al editar una regla individual, solo debe seleccionar un día."
-                 info_txt.color=ft.Colors.ERROR
-                 info_txt.update(); return
+                 show_snackbar("Error: Al editar una regla individual, solo debe seleccionar un día.", ft.Colors.ERROR)
+                 return
             dia_num = list(selected_dias_nums)[0]
             payload = {
                 "laboratorio_id": lab_id, "dia_semana": dia_num,
@@ -596,9 +683,9 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         if delete_count > 0: final_message += f"{delete_count} eliminada(s). "
         if error_count > 0:
             final_message += f"{error_count} error(es). Último: {last_error}"
-            info_txt.color = ft.Colors.WARNING if success_count > 0 or delete_count > 0 else ft.Colors.ERROR
+            show_snackbar(final_message, ft.Colors.WARNING if success_count > 0 or delete_count > 0 else ft.Colors.ERROR)
         else:
-            info_txt.color = ft.Colors.GREEN
+            show_snackbar("✅ Operación completada con éxito", ft.Colors.GREEN)
             clear_form()
 
         info_txt.value = final_message
