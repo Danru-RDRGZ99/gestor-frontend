@@ -83,7 +83,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     # Selector de día simple
     day_buttons = []
-    for dia_num in range(5):  # Solo Lunes a Viernes
+    for dia_num in range(7):
         btn = ft.TextButton(
             DIAS_SEMANA_SHORT[dia_num],
             style=ft.ButtonStyle(
