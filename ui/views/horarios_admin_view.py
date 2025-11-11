@@ -1,650 +1,539 @@
 import flet as ft
 from api_client import ApiClient
 from ui.components.cards import Card
-from ui.components.inputs import TextField, Dropdown # Quitamos generate_time_options
+from ui.components.inputs import TextField, Dropdown, generate_time_options
 from ui.components.buttons import Primary, Danger, Icon, Ghost
 from datetime import time, date, datetime, timedelta
 import traceback
-from typing import Dict, List, Tuple, Optional, Any
-from collections import defaultdict
+from typing import Dict, List, Tuple, Optional # Added more types
+from collections import defaultdict # For grouping
 
 # --- Constantes ---
 DIAS_SEMANA: Dict[int, str] = {
     0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"
 }
-DIAS_SEMANA_SHORT: Dict[int, str] = {k: v[:3] for k, v in DIAS_SEMANA.items()}
+DIAS_SEMANA_SHORT: Dict[int, str] = {k: v[:3] for k, v in DIAS_SEMANA.items()} # Lun, Mar, etc.
 
-HORA_INICIO_DIA = time(7, 0)
-HORA_FIN_DIA = time(21, 0)
+HORA_INICIO_DIA = time(0, 0)
+HORA_FIN_DIA = time(23, 59)
 INTERVALO_MINUTOS = 30
+HORA_OPTIONS = generate_time_options(HORA_INICIO_DIA, HORA_FIN_DIA, INTERVALO_MINUTOS)
 
 TIPO_OPTIONS = [
-    ("disponible", "🟢 Disponible"),
-    ("descanso", "🟡 Descanso"),
-    ("mantenimiento", "🔴 Mantenimiento"),
+    ("disponible", "Disponible"),
+    ("descanso", "Descanso"),
+    ("mantenimiento", "Mantenimiento"),
 ]
 
-# --- INICIO DE CORRECCIÓN "DESDE CERO" ---
-# Incluimos la función aquí para garantizar el formato
-def generate_time_options(start_time: time, end_time: time, interval_minutes: int) -> List[ft.dropdown.Option]:
-    """
-    Genera opciones de dropdown para un rango de tiempo.
-    El 'key' (valor) será HH:MM:SS, el 'text' (visible) será HH:MM.
-    """
-    options = []
-    try:
-        current_dt = datetime.combine(date.today(), start_time)
-        end_dt = datetime.combine(date.today(), end_time)
-        
-        while current_dt <= end_dt:
-            # El valor (key) debe ser HH:MM:SS para ser compatible con strptime
-            time_key = current_dt.strftime("%H:%M:%S")
-            # El texto visible puede ser más corto
-            time_text = current_dt.strftime("%H:%M") 
-            
-            options.append(ft.dropdown.Option(key=time_key, text=time_text))
-            current_dt += timedelta(minutes=interval_minutes)
-    except Exception as e:
-        print(f"Error generando opciones de tiempo: {e}")
-        # Añadir una opción de fallback en caso de error
-        options.append(ft.dropdown.Option(key="08:00:00", text="08:00"))
-
-    return options
-
-# Generamos las opciones una vez
-HORA_OPTIONS = generate_time_options(HORA_INICIO_DIA, HORA_FIN_DIA, INTERVALO_MINUTOS)
-# --- FIN DE CORRECCIÓN "DESDE CERO" ---
-
-
+# Helper to format time strings nicely
 def format_time_str(time_str: Optional[str]) -> str:
     if not time_str: return "N/A"
     try:
-        # Corta a HH:MM
-        return time_str[:5]
+        # Assuming input is HH:MM:SS
+        return time_str[:5] # Return HH:MM
     except:
-        return str(time_str)
+        return str(time_str) # Fallback
 
 def HorariosAdminView(page: ft.Page, api: ApiClient):
+
     user_session = page.session.get("user_session") or {}
-    if user_session.get("rol") != "admin":
+    if user_session.get("user", {}).get("rol") != "admin":
         return ft.Text("Acceso denegado. Solo para administradores.")
 
+    # Modified state to track group editing
     state = {
-        "editing_rule_id": None,
-        "editing_rule_dia": None,
-        "selected_lab": "general",
-        "initialized": False,
-        "grouped_horarios": {}
+        "editing_group_rules": None, # List of rules in the group being edited
+        "editing_single_rule_id": None, # ID of single rule being edited
     }
 
     # --- Catálogos y Datos ---
+    # (No changes here)
+    planteles_data = api.get_planteles()
     labs_data = api.get_laboratorios()
+    if not isinstance(planteles_data, list): planteles_data = []
     if not isinstance(labs_data, list): labs_data = []
     labs_cache = labs_data
-    lab_options = [("general", "🌐 General (Todos los Laboratorios)")] + \
-                  [(str(l["id"]), f"🔬 {l['nombre']}") for l in labs_cache if l.get("id")]
+    lab_options = [("general", "General (Todos los Laboratorios)")] + \
+                  [(str(l["id"]), l["nombre"]) for l in labs_cache if l.get("id")]
     lab_map = {str(l["id"]): l["nombre"] for l in labs_cache}
     lab_map["general"] = "General (Todos)"
 
-    # --- CONTROLES DEL FORMULARIO ---
-    
-    # Laboratorio
-    dd_lab = Dropdown(
-        label="Laboratorio", 
-        options=lab_options, 
-        value="general",
-        on_change=lambda e: (state.update({"selected_lab": dd_lab.value}), safe_render_horarios()),
-        col={"sm": 12, "md": 4} # Asignación de columna
+    # --- 1. Definir Controles ---
+    dd_lab = Dropdown(label="Laboratorio", options=lab_options, value="general", col={"md": 4})
+
+    dias_checkboxes: Dict[int, ft.Checkbox] = {}
+    checkbox_controls = []
+    for dia_num, dia_nombre_short in DIAS_SEMANA_SHORT.items():
+        cb = ft.Checkbox(label=dia_nombre_short, data=dia_num, tooltip=DIAS_SEMANA[dia_num])
+        dias_checkboxes[dia_num] = cb
+        checkbox_controls.append(cb)
+    dias_checkboxes_row_control = ft.Row(checkbox_controls, spacing=5, wrap=True, run_spacing=0, alignment=ft.MainAxisAlignment.START)
+    dias_checkboxes_container = ft.Column(
+         [ft.Text("Días:", weight=ft.FontWeight.BOLD, size=12), dias_checkboxes_row_control],
+         col={"md": 8}, spacing=2
     )
 
-    # Checkboxes de Días
-    day_checkboxes = []
-    for dia_num, dia_nombre in DIAS_SEMANA.items():
-        cb = ft.Checkbox(label=dia_nombre, data=dia_num)
-        day_checkboxes.append(cb)
-    
-    days_container = ft.Column(
-        controls=[ft.Text("Días:", weight=ft.FontWeight.BOLD)] + day_checkboxes,
-        col={"sm": 12, "md": 2} # Asignación de columna
-    )
+    dd_inicio = Dropdown(label="Hora Inicio", options=HORA_OPTIONS, col={"sm": 6, "md": 3})
+    dd_fin = Dropdown(label="Hora Fin", options=HORA_OPTIONS, col={"sm": 6, "md": 3})
+    dd_tipo = Dropdown(label="Tipo", options=TIPO_OPTIONS, value="disponible", col={"sm": 12, "md": 3})
 
-    # Horas y Tipo
-    dd_inicio = Dropdown(label="Hora Inicio", options=HORA_OPTIONS, filled=True)
-    dd_fin = Dropdown(label="Hora Fin", options=HORA_OPTIONS, filled=True)
-    dd_tipo = Dropdown(label="Tipo", options=TIPO_OPTIONS, value="disponible", filled=True)
+    info_txt = ft.Text("")
+    reglas_list_panel = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
-    time_type_container = ft.Column(
-        controls=[
-            dd_inicio,
-            dd_fin,
-            dd_tipo,
-        ],
-        spacing=10,
-        col={"sm": 12, "md": 4} # Asignación de columna
-    )
+    # --- 2. Declarar variables ---
+    btn_save = None
+    btn_cancel = None
+    form_row = None
 
-    # Botones
-    btn_save = Primary("➕ Agregar Regla(s)", on_click=lambda e: save_horario())
-    btn_cancel = Ghost("❌ Cancelar", on_click=lambda e: clear_form(), visible=False)
-    
-    buttons_container = ft.Column(
-        controls=[
-            btn_save,
-            btn_cancel
-        ],
-        col={"sm": 12, "md": 2}, # Asignación de columna
-        alignment=ft.MainAxisAlignment.START,
-    )
-    
-    info_txt = ft.Text("", size=14)
-    horarios_list_panel = ft.Column(spacing=8, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    # --- 3. Definir Funciones ---
 
-    # --- FUNCIONES PARA AGRUPAR HORARIOS ---
-    def group_horarios(horarios: List[Dict]) -> List[Dict]:
-        grouped = defaultdict(list)
-        for horario in horarios:
-            key = (
-                horario.get('hora_inicio'),
-                horario.get('hora_fin'),
-                horario.get('tipo_intervalo'),
-                horario.get('laboratorio_id')
-            )
-            grouped[key].append(horario)
-        
-        result = []
-        for key, horarios_group in grouped.items():
-            if len(horarios_group) == 1:
-                result.append(horarios_group[0])
-            else:
-                first_horario = horarios_group[0]
-                grouped_horario = {
-                    **first_horario,
-                    'dias_semana': sorted(list(set(h.get('dia_semana') for h in horarios_group))),
-                    'es_grupo': True,
-                    'ids': [h.get('id') for h in horarios_group],
-                    'count': len(horarios_group)
-                }
-                result.append(grouped_horario)
-        return result
-
-    def format_dias_semana(dias_list: List[int]) -> str:
-        if not dias_list:
-            return "Ningún día"
-        
-        dias_list = sorted(dias_list)
-        
-        if dias_list == [0, 1, 2, 3, 4]:
-            return "Lunes a Viernes"
-        if dias_list == [0, 1, 2, 3, 4, 5, 6]:
-            return "Toda la semana"
-        if dias_list == [5, 6]:
-            return "Fin de semana"
-        
-        if len(dias_list) > 1 and all(dias_list[i] + 1 == dias_list[i+1] for i in range(len(dias_list)-1)):
-            return f"{DIAS_SEMANA[dias_list[0]]} a {DIAS_SEMANA[dias_list[-1]]}"
-        
-        if len(dias_list) <= 3:
-            return ", ".join(DIAS_SEMANA[dia] for dia in dias_list)
-        else:
-            return f"{len(dias_list)} días"
-
-    def load_horarios():
+    def load_reglas_for_render():
         return api.get_reglas_horario()
 
-    def safe_render_horarios():
-        if state["initialized"]:
-            render_horarios()
+    # --- NEW: Edit Group Function ---
+    def edit_group_click(group_rules: List[dict]):
+        nonlocal state, dd_lab, dias_checkboxes, dd_inicio, dd_fin, dd_tipo, btn_save, btn_cancel, info_txt
+        if not group_rules: return
 
-    def render_horarios():
-        try:
-            horarios_list_panel.controls.clear()
-            
-            all_horarios = load_horarios()
+        # Use the first rule for common data
+        first_rule = group_rules[0]
+        state["editing_group_rules"] = group_rules # Store the whole group
+        state["editing_single_rule_id"] = None # Not editing single
 
-            if not isinstance(all_horarios, list):
-                detail = all_horarios.get("error", "Error") if isinstance(all_horarios, dict) else "Error desconocido"
-                horarios_list_panel.controls.append(ft.Text(f"Error al cargar horarios: {detail}", color=ft.Colors.ERROR))
-                if horarios_list_panel.page:
-                    horarios_list_panel.update()
-                return
+        dd_lab.value = str(first_rule.get("laboratorio_id")) if first_rule.get("laboratorio_id") is not None else "general"
 
-            # Filtrar por laboratorio seleccionado
-            filtered_horarios = []
-            for horario in all_horarios:
-                lab_id = str(horario.get('laboratorio_id')) if horario.get('laboratorio_id') is not None else "general"
-                if lab_id == state["selected_lab"]:
-                    filtered_horarios.append(horario)
+        # Check all days present in the group
+        group_dias = {rule.get("dia_semana") for rule in group_rules}
+        for dia_num, cb in dias_checkboxes.items():
+            cb.value = (dia_num in group_dias)
+            cb.update()
 
-            # Agrupar horarios
-            grouped_horarios = group_horarios(filtered_horarios)
-            state["grouped_horarios"] = grouped_horarios
+        dd_inicio.value = str(first_rule.get("hora_inicio"))
+        dd_fin.value = str(first_rule.get("hora_fin"))
+        dd_tipo.value = first_rule.get("tipo_intervalo", "disponible")
 
-            display_horarios = grouped_horarios
+        btn_save.text = "Actualizar Grupo"
+        btn_cancel.visible = True
+        dias_str = ", ".join(DIAS_SEMANA_SHORT.get(d, '?') for d in sorted(group_dias) if d is not None)
+        info_txt.value = f"Editando Grupo ({dias_str})"
 
-            if not display_horarios:
-                lab_nombre = lab_map.get(state["selected_lab"], "Laboratorio")
-                horarios_list_panel.controls.append(
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
-                            ft.Text(f"No hay horarios para {lab_nombre}", size=16, color=ft.Colors.GREY_600),
-                            ft.Text("Agrega el primer horario usando el formulario", size=12, color=ft.Colors.GREY_500),
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-                        padding=40,
-                        alignment=ft.alignment.center
-                    )
-                )
-            else:
-                display_horarios.sort(key=lambda x: x.get('hora_inicio', ''))
-                
-                for horario in display_horarios:
-                    horarios_list_panel.controls.append(horario_card(horario))
-
-            if horarios_list_panel.page:
-                horarios_list_panel.update()
-
-        except Exception as e:
-            print(f"Error en render_horarios: {e}")
-            traceback.print_exc()
-
-    def horario_card(horario: Dict) -> ft.Control:
-        lab_id = horario.get('laboratorio_id')
-        lab_name = lab_map.get(str(lab_id)) if lab_id is not None else lab_map["general"]
-        
-        hora_inicio_str = format_time_str(horario.get('hora_inicio'))
-        hora_fin_str = format_time_str(horario.get('hora_fin'))
-        
-        tipo = horario.get('tipo_intervalo', 'disponible')
-        es_grupo = horario.get('es_grupo', False)
-        
-        status_map = {
-            "disponible": ("Disponible", ft.Colors.GREEN_600, ft.Icons.CHECK_CIRCLE_OUTLINED),
-            "descanso": ("Descanso", ft.Colors.ORANGE_600, ft.Icons.FREE_BREAKFAST_OUTLINED),
-            "mantenimiento": ("Mantenimiento", ft.Colors.RED_600, ft.Icons.BUILD_CIRCLE_OUTLINED),
-        }
-        status_text, color, icon = status_map.get(tipo, ("Desconocido", ft.Colors.GREY, ft.Icons.HELP_OUTLINE))
-        
-        badge_color = {
-            "disponible": ft.colors.GREEN_200,
-            "descanso": ft.colors.ORANGE_200,
-            "mantenimiento": ft.colors.RED_200,
-        }
-        
-        badge = ft.Container(
-            content=ft.Text(status_text.upper(), size=10, weight=ft.FontWeight.BOLD),
-            bgcolor=badge_color.get(tipo, ft.colors.GREY_200),
-            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-            border_radius=10
-        )
-
-        if es_grupo:
-            dias_info = format_dias_semana(horario.get('dias_semana', []))
-            dias_display = f"{dias_info} ({horario.get('count', 0)} reglas)"
-        else:
-            dia_num = horario.get('dia_semana')
-            dias_display = DIAS_SEMANA.get(dia_num, 'N/A')
-
-        content = ft.Row(
-            [
-                ft.Column(
-                    [
-                        ft.Text(f"{lab_name} - {dias_display}", size=14, weight=ft.FontWeight.BOLD),
-                        ft.Text(f"Horario: {hora_inicio_str} - {hora_fin_str}", size=12, color=ft.Colors.GREY_600),
-                    ],
-                    expand=True,
-                    spacing=2
-                ),
-                badge,
-                Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
-                     on_click=lambda e, h=horario: edit_horario_click(h),
-                     icon_color=ft.Colors.BLUE),
-                Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
-                     on_click=lambda e, h=horario: delete_horario_click(h),
-                     icon_color=ft.Colors.RED),
-            ],
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=10
-        )
-        
-        return Card(content, padding=16)
-
-
-    def show_individual_horarios(horario_grupo: Dict):
-        individual_ids = horario_grupo.get('ids', [])
-        all_horarios = load_horarios()
-        
-        individual_horarios = [
-            h for h in all_horarios 
-            if h.get('id') in individual_ids
-        ]
-        
-        individual_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE)
-        
-        for horario in individual_horarios:
-            dia_num = horario.get('dia_semana')
-            dia_nombre = DIAS_SEMANA.get(dia_num, 'N/A')
-            hora_inicio_str = format_time_str(horario.get('hora_inicio'))
-            hora_fin_str = format_time_str(horario.get('hora_fin'))
-            
-            def edit_and_close(h):
-                page.dialog.open = False
-                page.update()
-                edit_horario_click(h)
-            
-            def delete_and_close(h):
-                page.dialog.open = False
-                page.update()
-                if h:
-                    delete_horario_click(h)
-            
-            individual_list.controls.append(
-                ft.ListTile(
-                    title=ft.Text(f"{dia_nombre}"),
-                    subtitle=ft.Text(f"{hora_inicio_str} - {hora_fin_str}"),
-                    trailing=ft.Row([
-                        Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
-                             on_click=lambda e, h=horario: edit_and_close(h),
-                             icon_color=ft.Colors.BLUE),
-                        Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
-                             on_click=lambda e, h=horario: delete_and_close(h),
-                             icon_color=ft.Colors.RED),
-                    ], spacing=4)
-                )
-            )
-
-        page.dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Horarios Individuales"),
-            content=ft.Container(
-                content=individual_list,
-                width=400,
-                height=300
-            ),
-            actions=[
-                ft.TextButton("Cerrar", on_click=lambda e: setattr(page.dialog, 'open', False) or page.update()),
-            ],
-        )
-        page.dialog.open = True
-        page.update()
-
-    def delete_horario_click(horario: Dict):
-        es_grupo = horario.get('es_grupo', False)
-        
-        if es_grupo:
-            confirm_title = "Confirmar eliminación de GRUPO"
-            confirm_content = ft.Text(f"¿Estás seguro de que quieres eliminar {len(horario.get('ids', []))} horarios agrupados?")
-            handler = lambda e: delete_horario_group_confirm(horario)
-        else:
-            confirm_title = "Confirmar eliminación"
-            confirm_content = ft.Text("¿Estás seguro de que quieres eliminar este horario?")
-            handler = lambda e: delete_horario_individual_confirm(horario.get('id'))
-
-        page.dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text(confirm_title),
-            content=confirm_content,
-            actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: setattr(page.dialog, 'open', False) or page.update()),
-                Danger("Eliminar", on_click=handler),
-            ],
-        )
-        page.dialog.open = True
-        page.update()
-
-    def delete_horario_group_confirm(horario_grupo: Dict):
-        page.dialog.open = False
-        page.update()
-        
-        individual_ids = horario_grupo.get('ids', [])
-        success_count = 0
-        
-        for horario_id in individual_ids:
-            result = api.delete_regla_horario(horario_id)
-            if result and result.get("success"):
-                success_count += 1
-            else:
-                print(f"Error eliminando ID {horario_id}: {result.get('error', 'Error')}")
-        
-        if success_count == len(individual_ids):
-            info_txt.value = f"✅ {success_count} horarios eliminados correctamente"
-            info_txt.color = ft.Colors.GREEN
-        else:
-            info_txt.value = f"⚠️ {success_count} de {len(individual_ids)} horarios eliminados"
-            info_txt.color = ft.Colors.ORANGE
-        
+        # Update controls
+        dd_lab.update()
+        dd_inicio.update()
+        dd_fin.update()
+        dd_tipo.update()
+        btn_save.update()
+        btn_cancel.update()
         info_txt.update()
-        safe_render_horarios()
 
-    def delete_horario_individual_confirm(horario_id: int):
-        page.dialog.open = False
-        page.update()
-        
-        if not horario_id:
-            info_txt.value = "❌ Error: ID de horario no encontrado"
-            info_txt.color = ft.Colors.RED
+    # --- MODIFIED: Edit Single Rule Function ---
+    def edit_regla_click(regla: dict):
+        nonlocal state, dd_lab, dias_checkboxes, dd_inicio, dd_fin, dd_tipo, btn_save, btn_cancel, info_txt
+
+        dia_a_editar = regla.get("dia_semana")
+        state["editing_single_rule_id"] = regla.get("id") # Store single ID
+        state["editing_group_rules"] = None # Not editing group
+
+        dd_lab.value = str(regla.get("laboratorio_id")) if regla.get("laboratorio_id") is not None else "general"
+
+        # Check only this specific day
+        for dia_num, cb in dias_checkboxes.items():
+            cb.value = (dia_num == dia_a_editar)
+            cb.update()
+
+        dd_inicio.value = str(regla.get("hora_inicio"))
+        dd_fin.value = str(regla.get("hora_fin"))
+        dd_tipo.value = regla.get("tipo_intervalo", "disponible")
+
+        btn_save.text = f"Actualizar {DIAS_SEMANA_SHORT.get(dia_a_editar, '')}" # Single day
+        btn_cancel.visible = True
+        info_txt.value = f"Editando Regla ID: {regla.get('id')} ({DIAS_SEMANA_SHORT.get(dia_a_editar, '')})"
+
+        # Update controls
+        dd_lab.update()
+        dd_inicio.update()
+        dd_fin.update()
+        dd_tipo.update()
+        btn_save.update()
+        btn_cancel.update()
+        info_txt.update()
+
+    # --- NEW: Delete Group Function ---
+    def delete_group_click(group_rules: List[dict]):
+        nonlocal info_txt
+        if not group_rules: return
+
+        rule_ids_to_delete = [rule.get("id") for rule in group_rules if rule.get("id")]
+        if not rule_ids_to_delete:
+            info_txt.value = "Error: No se encontraron IDs válidos en el grupo para eliminar."
             info_txt.update()
             return
 
-        result = api.delete_regla_horario(horario_id)
-        
-        if result and result.get("success"):
-            info_txt.value = "✅ Horario eliminado correctamente"
-            info_txt.color = ft.Colors.GREEN
-            safe_render_horarios()
+        success_count = 0
+        error_count = 0
+        last_error = ""
+
+        for rule_id in rule_ids_to_delete:
+            result = api.delete_regla_horario(rule_id)
+            if result is True:
+                success_count += 1
+            else:
+                error_count += 1
+                last_error = result.get("detail", "Error desconocido") if isinstance(result, dict) else "Error desconocido"
+
+        if error_count == 0:
+            info_txt.value = f"Grupo ({success_count} reglas) eliminado con éxito."
+            render_reglas()
         else:
-            error_msg = result.get("error", "Error desconocido")
-            info_txt.value = f"❌ Error al eliminar: {error_msg}"
-            info_txt.color = ft.Colors.RED
-        
+            info_txt.value = f"Error al eliminar grupo. {success_count} éxito(s), {error_count} error(es). Último error: {last_error}"
+            render_reglas() # Render anyway to show partial deletions
         info_txt.update()
 
-    def edit_horario_click(horario: dict):
-        if horario.get('es_grupo', False):
-            show_individual_horarios(horario)
-            return
+    # --- MODIFIED: Delete Single Rule Function ---
+    def delete_regla_click(regla_id: int):
+        nonlocal info_txt
+        result = api.delete_regla_horario(regla_id)
+        if result is True:
+            info_txt.value = "Regla eliminada."
+            render_reglas()
+        else:
+            info_txt.value = result.get("detail", "Error al eliminar.") if isinstance(result, dict) else "Error desconocido al eliminar."
+        info_txt.update()
 
-        state["editing_rule_id"] = horario.get("id")
-        state["editing_rule_dia"] = horario.get("dia_semana")
-        
-        dd_lab.value = str(horario.get("laboratorio_id")) if horario.get("laboratorio_id") is not None else "general"
-        dd_inicio.value = str(horario.get("hora_inicio"))
-        dd_fin.value = str(horario.get("hora_fin"))
-        dd_tipo.value = horario.get("tipo_intervalo", "disponible")
+    # --- NEW: Group Card ---
+    def group_card(group_rules: List[dict]) -> ft.Control:
+        nonlocal lab_map
+        if not group_rules: return ft.Container() # Return empty if no rules
 
-        for cb in day_checkboxes:
-            cb.value = (cb.data == state["editing_rule_dia"])
-            cb.disabled = True 
+        first_rule = group_rules[0]
+        lab_id = first_rule.get('laboratorio_id')
+        lab_name = lab_map.get(str(lab_id)) if lab_id is not None else lab_map["general"]
+
+        group_dias = sorted([r.get("dia_semana") for r in group_rules if r.get("dia_semana") is not None])
+        dias_str = ", ".join(DIAS_SEMANA_SHORT.get(d, '?') for d in group_dias)
+
+        title = ft.Text(
+            f"{lab_name} - {dias_str}", # Show grouped days
+            size=15, weight=ft.FontWeight.W_600
+        )
+
+        hora_inicio_str = format_time_str(first_rule.get('hora_inicio'))
+        hora_fin_str = format_time_str(first_rule.get('hora_fin'))
+        hora_str = f"{hora_inicio_str} a {hora_fin_str}"
+
+        tipo_str = str(first_rule.get('tipo_intervalo', 'N/A')).capitalize()
+        es_hab = first_rule.get('es_habilitado', False)
+        status_color = ft.Colors.GREEN_700 if es_hab else ft.Colors.AMBER_700
+
+        subtitle = ft.Text(f"Horario: {hora_str}", size=12, opacity=0.8)
+
+        status_chip = ft.Chip(label=ft.Text(tipo_str, size=11, color=status_color),
+                              bgcolor=ft.Colors.with_opacity(0.1, status_color),
+                              height=28)
+
+        btns = ft.Row([
+            Icon(ft.Icons.EDIT_NOTE_OUTLINED, "Editar Grupo", on_click=lambda e, grp=group_rules: edit_group_click(grp)), # Edit Group Icon
+            Icon(ft.Icons.DELETE_SWEEP_OUTLINED, "Eliminar Grupo", icon_color=ft.Colors.ERROR, on_click=lambda e, grp=group_rules: delete_group_click(grp)), # Delete Group Icon
+        ], spacing=6)
+
+        header = ft.Row([
+            ft.Column([title, subtitle], spacing=2, expand=True),
+            status_chip,
+            btns
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        return Card(header, padding=14)
+
+    # --- MODIFIED: Single Rule Card ---
+    def regla_card(regla: dict) -> ft.Control:
+        nonlocal lab_map
+        lab_id = regla.get('laboratorio_id')
+        lab_name = lab_map.get(str(lab_id)) if lab_id is not None else lab_map["general"]
+        dia_num = regla.get('dia_semana')
+
+        title = ft.Text(
+            f"{lab_name} - {DIAS_SEMANA.get(dia_num, 'N/A')}",
+            size=15, weight=ft.FontWeight.W_600
+        )
+
+        hora_inicio_str = format_time_str(regla.get('hora_inicio'))
+        hora_fin_str = format_time_str(regla.get('hora_fin'))
+        hora_str = f"{hora_inicio_str} a {hora_fin_str}"
+
+        tipo_str = str(regla.get('tipo_intervalo', 'N/A')).capitalize()
+        es_hab = regla.get('es_habilitado', False)
+        status_color = ft.Colors.GREEN_700 if es_hab else ft.Colors.AMBER_700
+
+        subtitle = ft.Text(f"Horario: {hora_str}", size=12, opacity=0.8)
+
+        status_chip = ft.Chip(label=ft.Text(tipo_str, size=11, color=status_color),
+                              bgcolor=ft.Colors.with_opacity(0.1, status_color),
+                              height=28)
+
+        btns = ft.Row([
+            Icon(ft.Icons.EDIT_OUTLINED, "Editar", on_click=lambda e, r=regla: edit_regla_click(r)), # Edit Single Icon
+            Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", icon_color=ft.Colors.ERROR, on_click=lambda e, rid=regla.get('id'): delete_regla_click(rid) if rid else None), # Delete Single Icon
+        ], spacing=6)
+
+        header = ft.Row([
+            ft.Column([title, subtitle], spacing=2, expand=True),
+            status_chip,
+            btns
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        return Card(header, padding=14)
+
+    # --- MODIFIED: Render Function with Grouping ---
+    def render_reglas():
+        nonlocal reglas_list_panel
+        reglas_list_panel.controls.clear()
+        all_reglas = load_reglas_for_render()
+
+        if not isinstance(all_reglas, list):
+            detail = all_reglas.get("detail", "Error") if isinstance(all_reglas, dict) else "Error desconocido"
+            reglas_list_panel.controls.append(ft.Text(f"Error al cargar reglas: {detail}", color=ft.Colors.ERROR))
+        elif not all_reglas:
+            reglas_list_panel.controls.append(ft.Text("No hay reglas de horario definidas."))
+        else:
+            # Group rules
+            grouped_rules = defaultdict(list)
+            for regla in all_reglas:
+                lab_id_key = regla.get('laboratorio_id') if regla.get('laboratorio_id') is not None else "general"
+                group_key = (
+                    lab_id_key,
+                    regla.get('hora_inicio'),
+                    regla.get('hora_fin'),
+                    regla.get('tipo_intervalo'),
+                    regla.get('es_habilitado')
+                )
+                grouped_rules[group_key].append(regla)
+
+            # Render groups and single rules
+            rendered_items = []
+            for group_key, rules_in_group in grouped_rules.items():
+                if len(rules_in_group) > 1:
+                    rules_in_group.sort(key=lambda r: r.get('dia_semana', -1))
+                    rendered_items.append(group_card(rules_in_group))
+                else:
+                    rendered_items.append(regla_card(rules_in_group[0]))
+
+            # =========================================================================
+            # --- INICIO DE LA CORRECCIÓN (Sort Key) ---
+            # =========================================================================
+            # Sort rendered cards
+            rendered_items.sort(key=lambda card: (
+                # Check if title starts with "General", accessing title directly
+                not card.content.controls[0].controls[0].value.startswith("General (Todos)"), # Sort General first (True comes after False)
+                # Then sort by the full title string
+                card.content.controls[0].controls[0].value
+            ))
+            # =========================================================================
+            # --- FIN DE LA CORRECCIÓN ---
+            # =========================================================================
+
+            reglas_list_panel.controls.extend(rendered_items)
+
+        if reglas_list_panel.page: reglas_list_panel.update()
+
+    # --- MODIFIED: Clear Form ---
+    def clear_form(e=None):
+        nonlocal state, dd_lab, dias_checkboxes, dd_inicio, dd_fin, dd_tipo, btn_save, btn_cancel, info_txt
+
+        # Reset state fully
+        state["editing_group_rules"] = None
+        state["editing_single_rule_id"] = None
+
+        dd_lab.value = "general"
+        for cb in dias_checkboxes.values():
+            cb.value = False
             cb.update()
-        
-        btn_save.text = "💾 Actualizar Horario"
-        btn_cancel.visible = True
-        info_txt.value = f"Editando horario del {DIAS_SEMANA.get(horario.get('dia_semana'), 'día')}"
-        info_txt.color = ft.Colors.BLUE
-        info_txt.update()
-
-        update_controls()
-
-    def clear_form():
-        state["editing_rule_id"] = None
-        state["editing_rule_dia"] = None
-        
         dd_inicio.value = None
         dd_fin.value = None
         dd_tipo.value = "disponible"
 
-        for cb in day_checkboxes:
-            cb.value = False
-            cb.disabled = False
-            cb.update()
-
-        btn_save.text = "➕ Agregar Regla(s)"
+        btn_save.text = "Agregar Regla(s)"
         btn_cancel.visible = False
         info_txt.value = ""
 
-        update_controls()
-
-    def save_horario():
-        # Validaciones básicas
-        if not all([dd_inicio.value, dd_fin.value, dd_tipo.value]):
-            info_txt.value = "❌ Completa todos los campos obligatorios"
-            info_txt.color = ft.Colors.RED
-            info_txt.update()
-            return
-
-        try:
-            # Esta validación ahora es SEGURA porque HORA_OPTIONS
-            # garantiza que dd_inicio.value es "HH:MM:SS"
-            inicio = datetime.strptime(dd_inicio.value, "%H:%M:%S").time()
-            fin = datetime.strptime(dd_fin.value, "%H:%M:%S").time()
-        except (ValueError, TypeError):
-            info_txt.value = "❌ Formato de hora inválido. (Error: {e})"
-            info_txt.color = ft.Colors.RED
-            info_txt.update()
-            return
-
-        if inicio >= fin:
-            info_txt.value = "❌ La hora inicio debe ser anterior a la hora fin"
-            info_txt.color = ft.Colors.RED
-            info_txt.update()
-            return
-
-        lab_id = int(dd_lab.value) if dd_lab.value and dd_lab.value != "general" else None
-        tipo = dd_tipo.value
-        es_habilitado = (tipo == "disponible")
-
-        if state["editing_rule_id"]:
-            # --- MODO EDICIÓN ---
-            if state["editing_rule_dia"] is None:
-                info_txt.value = "❌ Error: No se encontró el día de la semana para editar."
-                info_txt.color = ft.Colors.RED
-                info_txt.update()
-                return
-
-            payload = {
-                "laboratorio_id": lab_id,
-                "hora_inicio": inicio.isoformat(),
-                "hora_fin": fin.isoformat(),
-                "es_habilitado": es_habilitado,
-                "tipo_intervalo": tipo,
-                "dia_semana": state["editing_rule_dia"]
-            }
-            
-            result = api.update_regla_horario(state["editing_rule_id"], payload)
-            
-            if result and result.get("id"):
-                info_txt.value = "✅ Horario actualizado correctamente"
-                info_txt.color = ft.Colors.GREEN
-                clear_form()
-                safe_render_horarios()
-            else:
-                error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
-                info_txt.value = f"❌ Error al actualizar: {error_msg}"
-                info_txt.color = ft.Colors.RED
-        else:
-            # --- MODO CREACIÓN ---
-            dias_a_crear = [cb.data for cb in day_checkboxes if cb.value]
-            
-            if not dias_a_crear:
-                info_txt.value = "❌ Debes seleccionar al menos un día de la semana"
-                info_txt.color = ft.Colors.RED
-                info_txt.update()
-                return
-
-            success_count = 0
-            for dia_num in dias_a_crear:
-                payload = {
-                    "laboratorio_id": lab_id,
-                    "dia_semana": dia_num,
-                    "hora_inicio": inicio.isoformat(),
-                    "hora_fin": fin.isoformat(),
-                    "es_habilitado": es_habilitado,
-                    "tipo_intervalo": tipo,
-                }
-                
-                result = api.create_regla_horario(payload)
-                if result and result.get("id"):
-                    success_count += 1
-
-            if success_count > 0:
-                info_txt.value = f"✅ {success_count} horario(s) creado(s) correctamente"
-                info_txt.color = ft.Colors.GREEN
-                clear_form()
-                safe_render_horarios()
-            else:
-                # Si 'result' no está vacío, es un dict de error
-                error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error al crear"
-                info_txt.value = f"❌ Error al crear los horarios: {error_msg}"
-                info_txt.color = ft.Colors.RED
-
+        # Update controls
+        dd_lab.update()
+        dd_inicio.update()
+        dd_fin.update()
+        dd_tipo.update()
+        btn_save.update()
+        btn_cancel.update()
         info_txt.update()
 
-    def update_controls():
-        if state["initialized"]:
+    # --- HEAVILY MODIFIED: Save Function ---
+    def save_regla(e):
+        nonlocal state, dd_lab, dias_checkboxes, dd_inicio, dd_fin, dd_tipo, info_txt
+
+        # --- Get common data from form ---
+        lab_id = int(dd_lab.value) if dd_lab.value and dd_lab.value != "general" else None
+        inicio_str = dd_inicio.value
+        fin_str = dd_fin.value
+        tipo_seleccionado = dd_tipo.value.strip() if dd_tipo.value else None
+        selected_dias_nums = {num for num, cb in dias_checkboxes.items() if cb.value} # Use a set
+
+        # --- Basic Validation ---
+        if not all([selected_dias_nums, inicio_str, fin_str, tipo_seleccionado]):
+            info_txt.value = "Completa Laboratorio, al menos un Día, Hora Inicio, Hora Fin y Tipo."
+            info_txt.color=ft.Colors.ERROR
+            info_txt.update(); return
+        try:
+            inicio = datetime.strptime(inicio_str, "%H:%M:%S").time()
+            fin = datetime.strptime(fin_str, "%H:%M:%S").time()
+        except (ValueError, TypeError):
+            info_txt.value = "Error: Formato de hora inválido."
+            info_txt.color=ft.Colors.ERROR
+            info_txt.update(); return
+        if inicio >= fin:
+            info_txt.value = "Error: Hora inicio debe ser anterior a Hora fin."
+            info_txt.color=ft.Colors.ERROR
+            info_txt.update(); return
+
+        # --- Determine Mode and Execute ---
+        success_count = 0
+        error_count = 0
+        delete_count = 0
+        last_error = ""
+        action_summary = ""
+
+        es_habilitado_auto = (tipo_seleccionado == "disponible")
+
+        # Mode 1: Editing a Group
+        if state["editing_group_rules"]:
+            action_summary = "Actualizando Grupo: "
+            original_rules = state["editing_group_rules"]
+            original_rule_map = {r.get("dia_semana"): r for r in original_rules} # Map day to rule dict
+            original_dias_nums = set(original_rule_map.keys())
+
+            dias_to_update = original_dias_nums.intersection(selected_dias_nums)
+            dias_to_delete = original_dias_nums.difference(selected_dias_nums)
+            dias_to_create = selected_dias_nums.difference(original_dias_nums)
+
+            # Update existing days
+            for dia_num in dias_to_update:
+                rule_to_update = original_rule_map.get(dia_num)
+                if rule_to_update and rule_to_update.get("id"):
+                    payload = {
+                        "laboratorio_id": lab_id, "dia_semana": dia_num,
+                        "hora_inicio": inicio.isoformat(), "hora_fin": fin.isoformat(),
+                        "es_habilitado": es_habilitado_auto, "tipo_intervalo": tipo_seleccionado,
+                    }
+                    try:
+                        result = api.update_regla_horario(rule_to_update["id"], payload)
+                        if result and result.get("id"): success_count += 1
+                        else: error_count += 1; last_error = result.get("detail", "Update failed") if isinstance(result, dict) else "Update failed"
+                    except Exception as ex: error_count += 1; last_error = f"Update Ex: {ex}"
+
+            # Delete removed days
+            for dia_num in dias_to_delete:
+                 rule_to_delete = original_rule_map.get(dia_num)
+                 if rule_to_delete and rule_to_delete.get("id"):
+                    try:
+                        result = api.delete_regla_horario(rule_to_delete["id"])
+                        if result is True: delete_count += 1 # Count deletions separately
+                        else: error_count += 1; last_error = result.get("detail", "Delete failed") if isinstance(result, dict) else "Delete failed"
+                    except Exception as ex: error_count += 1; last_error = f"Delete Ex: {ex}"
+
+            # Create added days
+            for dia_num in dias_to_create:
+                payload = {
+                    "laboratorio_id": lab_id, "dia_semana": dia_num,
+                    "hora_inicio": inicio.isoformat(), "hora_fin": fin.isoformat(),
+                    "es_habilitado": es_habilitado_auto, "tipo_intervalo": tipo_seleccionado,
+                }
+                try:
+                    result = api.create_regla_horario(payload)
+                    if result and result.get("id"): success_count += 1
+                    else: error_count += 1; last_error = result.get("detail", "Create failed") if isinstance(result, dict) else "Create failed"
+                except Exception as ex: error_count += 1; last_error = f"Create Ex: {ex}"
+
+        # Mode 2: Editing a Single Rule
+        elif state["editing_single_rule_id"]:
+            action_summary = "Actualizando Regla Individual: "
+            # Should only have one day selected if UI logic worked
+            if len(selected_dias_nums) != 1:
+                 info_txt.value = "Error: Al editar una regla individual, solo debe seleccionar un día."
+                 info_txt.color=ft.Colors.ERROR
+                 info_txt.update(); return
+            dia_num = list(selected_dias_nums)[0]
+            payload = {
+                "laboratorio_id": lab_id, "dia_semana": dia_num,
+                "hora_inicio": inicio.isoformat(), "hora_fin": fin.isoformat(),
+                "es_habilitado": es_habilitado_auto, "tipo_intervalo": tipo_seleccionado,
+            }
             try:
-                dd_inicio.update()
-                dd_fin.update()
-                dd_tipo.update()
-                btn_save.update()
-                btn_cancel.update()
-            except Exception as e:
-                print(f"Error actualizando controles: {e}")
+                result = api.update_regla_horario(state["editing_single_rule_id"], payload)
+                if result and result.get("id"): success_count += 1
+                else: error_count += 1; last_error = result.get("detail", "Update failed") if isinstance(result, dict) else "Update failed"
+            except Exception as ex: error_count += 1; last_error = f"Update Ex: {ex}"
 
-    # --- DISEÑO DE LA VISTA (LAYOUT) ---
-    
-    # Header
-    header_section = ft.Text("Gestión de Reglas de Horario", size=24, weight=ft.FontWeight.BOLD)
+        # Mode 3: Creating New Rule(s)
+        else:
+            action_summary = "Creando Nueva(s) Regla(s): "
+            for dia_num in selected_dias_nums:
+                payload = {
+                    "laboratorio_id": lab_id, "dia_semana": dia_num,
+                    "hora_inicio": inicio.isoformat(), "hora_fin": fin.isoformat(),
+                    "es_habilitado": es_habilitado_auto, "tipo_intervalo": tipo_seleccionado,
+                }
+                try:
+                    result = api.create_regla_horario(payload)
+                    if result and result.get("id"): success_count += 1
+                    else: error_count += 1; last_error = result.get("detail", "Create failed") if isinstance(result, dict) else "Create failed"
+                except Exception as ex: error_count += 1; last_error = f"Create Ex: {ex}"
 
-    # Formulario
-    form_section = Card(
-        ft.Column([
-            ft.ResponsiveRow(
-                [
-                    dd_lab,
-                    days_container,
-                    time_type_container,
-                    buttons_container,
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                spacing=20
-            ),
-            info_txt
-        ])
+        # --- Final Feedback ---
+        final_message = action_summary
+        if success_count > 0: final_message += f"{success_count} éxito(s). "
+        if delete_count > 0: final_message += f"{delete_count} eliminada(s). "
+        if error_count > 0:
+            final_message += f"{error_count} error(es). Último: {last_error}"
+            info_txt.color = ft.Colors.WARNING if success_count > 0 or delete_count > 0 else ft.Colors.ERROR
+        else:
+            info_txt.color = ft.Colors.GREEN # Success
+            clear_form() # Clear form only on full success
+
+        info_txt.value = final_message
+        render_reglas() # Always re-render
+        info_txt.update()
+        print(f"Save results: {final_message}")
+
+
+    # --- 4. Definir botones y formulario ---
+    btn_save = Primary("Agregar Regla(s)", on_click=save_regla, col={"sm": 6, "md": 2})
+    btn_cancel = Ghost("Cancelar", on_click=clear_form, visible=False, col={"sm": 6, "md": 1})
+    buttons_container = ft.Column(
+        [btn_save, btn_cancel],
+        col={"sm": 12, "md": 3},
+        alignment=ft.MainAxisAlignment.END,
+        horizontal_alignment=ft.CrossAxisAlignment.END,
+        spacing=5
     )
-
-    # Lista
-    list_section = ft.Column(
+    form_row = ft.ResponsiveRow(
         [
-            ft.Divider(),
-            ft.Text("Horarios Configurados", size=18, weight=f"t.FontWeight.BOLD"),
-            horarios_list_panel
+            dd_lab, dias_checkboxes_container,
+            dd_inicio, dd_fin, dd_tipo,
+            buttons_container,
         ],
-        expand=True
+        vertical_alignment=ft.CrossAxisAlignment.END,
+        spacing=10, run_spacing=15
     )
+    form_card = Card(form_row, padding=14)
 
-    # --- CORRECCIÓN DE LAYOUT (TypeError por 'padding' en Column) ---
-    
-    # 1. Define la Columna principal (sin padding)
-    main_column = ft.Column(
+    # --- 5. Carga inicial ---
+    render_reglas()
+
+    # --- 6. Layout Final ---
+    return ft.Column(
         [
-            header_section,
-            form_section,
-            list_section,
+            ft.Text("Gestión de Reglas de Horario", size=22, weight=ft.FontWeight.BOLD),
+            form_card,
+            info_txt,
+            ft.Divider(height=10),
+            reglas_list_panel,
         ],
-        expand=True,
-        scroll=ft.ScrollMode.ADAPTIVE,
-        spacing=20
+        expand=True, alignment=ft.MainAxisAlignment.START, spacing=15
     )
-
-    # 2. Envuelve la columna en un Container para aplicar el padding
-    main_content = ft.Container(
-        content=main_column,
-        padding=20, # Padding aplicado al contenedor
-        expand=True 
-    )
-    # --- FIN DE CORRECCIÓN DE LAYOUT ---
-    
-    # Inicialización
-    state["initialized"] = True
-    safe_render_horarios()
-
-    return main_content
