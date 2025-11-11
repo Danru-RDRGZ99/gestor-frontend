@@ -48,7 +48,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         "selected_lab": "general",
         "selected_day": None,
         "initialized": False,
-        "grouped_horarios": {}
+        "grouped_horarios": {}  # Cache para horarios agrupados
     }
 
     def update_mobile_state():
@@ -70,14 +70,14 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     lab_map = {str(l["id"]): l["nombre"] for l in labs_cache}
     lab_map["general"] = "General (Todos)"
 
-    # --- CONTROLES PRINCIPALES ---
+    # --- CONTROLES PRINCIPALES SIMPLIFICADOS ---
     dd_lab = Dropdown(
         label="Laboratorio", 
         options=lab_options, 
         value="general",
         expand=True,
         filled=True,
-        on_change=lambda e: on_filters_change()
+        on_change=lambda e: (state.update({"selected_lab": dd_lab.value}), safe_render_horarios())
     )
 
     # Selector de día simple
@@ -90,7 +90,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 bgcolor=ft.Colors.PRIMARY_CONTAINER if state["selected_day"] == dia_num else None,
             ),
             data=dia_num,
-            on_click=lambda e: (state.update({"selected_day": e.control.data}), on_filters_change())
+            on_click=lambda e: (state.update({"selected_day": e.control.data}), safe_render_horarios())
         )
         day_buttons.append(btn)
 
@@ -99,7 +99,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     info_txt = ft.Text("", size=14)
     horarios_list_panel = ft.Column(spacing=8, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
-    # --- FORMULARIO PARA AGREGAR/EDITAR ---
+    # --- FORMULARIO SIMPLE PARA AGREGAR/EDITAR ---
     dd_inicio = Dropdown(
         label="Hora Inicio", 
         options=HORA_OPTIONS, 
@@ -125,9 +125,14 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     # --- FUNCIONES PARA AGRUPAR HORARIOS ---
     def group_horarios(horarios: List[Dict]) -> List[Dict]:
+        """
+        Agrupa horarios que tienen las mismas horas y tipo pero diferentes días
+        Retorna una lista de horarios agrupados
+        """
         grouped = defaultdict(list)
         
         for horario in horarios:
+            # Crear clave única basada en horas, tipo y laboratorio
             key = (
                 horario.get('hora_inicio'),
                 horario.get('hora_fin'),
@@ -136,11 +141,14 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             )
             grouped[key].append(horario)
         
+        # Convertir a lista de horarios agrupados
         result = []
         for key, horarios_group in grouped.items():
             if len(horarios_group) == 1:
+                # Si solo hay uno, mantenerlo individual
                 result.append(horarios_group[0])
             else:
+                # Crear un horario agrupado
                 first_horario = horarios_group[0]
                 grouped_horario = {
                     **first_horario,
@@ -154,17 +162,21 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         return result
 
     def format_dias_semana(dias_list: List[int]) -> str:
+        """Formatea una lista de días de la semana a texto legible"""
         if not dias_list:
             return "Ningún día"
         
         dias_list = sorted(dias_list)
         
+        # Si son días consecutivos de Lunes a Viernes
         if dias_list == [0, 1, 2, 3, 4]:
             return "Lunes a Viernes"
         
+        # Si son días consecutivos
         if len(dias_list) > 1 and all(dias_list[i] + 1 == dias_list[i+1] for i in range(len(dias_list)-1)):
             return f"{DIAS_SEMANA[dias_list[0]]} a {DIAS_SEMANA[dias_list[-1]]}"
         
+        # Si no son consecutivos, listar los días
         if len(dias_list) <= 3:
             return ", ".join(DIAS_SEMANA[dia] for dia in dias_list)
         else:
@@ -173,13 +185,10 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
     def load_horarios():
         return api.get_reglas_horario()
 
-    def on_filters_change():
-        """Se llama cuando cambian los filtros"""
+    def safe_render_horarios():
+        """Renderiza horarios solo si los controles ya están en la página"""
         if state["initialized"]:
-            page.update()
-            # Usar un pequeño delay para asegurar que la UI se actualice primero
-            import threading
-            threading.Timer(0.1, render_horarios).start()
+            render_horarios()
 
     def render_horarios():
         """Función principal para renderizar horarios"""
@@ -192,7 +201,8 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             if not isinstance(all_horarios, list):
                 detail = all_horarios.get("error", "Error") if isinstance(all_horarios, dict) else "Error desconocido"
                 horarios_list_panel.controls.append(ft.Text(f"Error al cargar horarios: {detail}", color=ft.Colors.ERROR))
-                page.update()
+                if state["initialized"]:
+                    horarios_list_panel.update()
                 return
 
             # Filtrar por laboratorio
@@ -226,6 +236,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                                 ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
                                 ft.Text(f"No hay horarios para {dia_nombre}", size=16, color=ft.Colors.GREY_600),
                                 ft.Text(f"Laboratorio: {lab_nombre}", size=12, color=ft.Colors.GREY_500),
+                                ft.Text("Agrega el primer horario usando el formulario", size=12, color=ft.Colors.GREY_500),
                             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
                             padding=40,
                             alignment=ft.alignment.center
@@ -238,7 +249,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                             content=ft.Column([
                                 ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=48, color=ft.Colors.GREY_400),
                                 ft.Text(f"No hay horarios para {lab_nombre}", size=16, color=ft.Colors.GREY_600),
-                                ft.Text("Selecciona un día específico", size=12, color=ft.Colors.GREY_500),
+                                ft.Text("Selecciona un día o agrega horarios", size=12, color=ft.Colors.GREY_500),
                             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
                             padding=40,
                             alignment=ft.alignment.center
@@ -249,15 +260,17 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 display_horarios.sort(key=lambda x: x.get('hora_inicio', ''))
                 
                 for horario in display_horarios:
-                    horarios_list_panel.controls.append(create_horario_card(horario))
+                    horarios_list_panel.controls.append(horario_card(horario))
 
-            page.update()
+            # Solo actualizar si ya está inicializado
+            if state["initialized"]:
+                horarios_list_panel.update()
 
         except Exception as e:
             print(f"Error en render_horarios: {e}")
             traceback.print_exc()
 
-    def create_horario_card(horario: Dict) -> ft.Control:
+    def horario_card(horario: Dict) -> ft.Control:
         """Crea una tarjeta para un horario individual o agrupado"""
         lab_id = horario.get('laboratorio_id')
         lab_name = lab_map.get(str(lab_id)) if lab_id is not None else lab_map["general"]
@@ -266,6 +279,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         hora_fin_str = format_time_str(horario.get('hora_fin'))
         
         tipo = horario.get('tipo_intervalo', 'disponible')
+        es_habilitado = horario.get('es_habilitado', False)
         es_grupo = horario.get('es_grupo', False)
         
         # Colores según tipo
@@ -285,58 +299,53 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         # Información de días
         if es_grupo:
             dias_info = format_dias_semana(horario.get('dias_semana', []))
-            count_info = f"({horario.get('count', 0)} horarios)"
+            count_info = f"({horario.get('count', 0)} horarios combinados)"
             dias_display = f"{dias_info} {count_info}"
         else:
             dia_num = horario.get('dia_semana')
             dias_display = DIAS_SEMANA.get(dia_num, 'N/A')
 
-        # Botones de acción - SIMPLIFICADOS
+        # Header con información básica
+        header = ft.Row([
+            ft.Icon(icon, color=color, size=20),
+            ft.Column([
+                ft.Text(f"{hora_inicio_str} - {hora_fin_str}", 
+                       size=14, weight=ft.FontWeight.W_600),
+                ft.Text(f"{dias_display}", 
+                       size=12, color=ft.Colors.GREY_600),
+                ft.Text(f"{lab_name} • {status_text}", 
+                       size=12, color=ft.Colors.GREY_600),
+            ], spacing=2, expand=True),
+        ], vertical_alignment=ft.CrossAxisAlignment.START)
+
+        # Botones de acción - CORREGIDOS
         if es_grupo:
             actions = ft.Row([
-                ft.IconButton(
-                    icon=ft.Icons.VISIBILITY_OUTLINED,
-                    icon_color=ft.Colors.BLUE,
-                    tooltip="Ver individuales",
-                    on_click=lambda e, h=horario: show_individual_horarios(h)
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.DELETE_OUTLINED,
-                    icon_color=ft.Colors.RED,
-                    tooltip="Eliminar grupo",
-                    on_click=lambda e, h=horario: delete_horario_group_click(h)
-                ),
+                Icon(ft.Icons.VISIBILITY_OUTLINED, "Ver individuales", 
+                     on_click=lambda e, h=horario: show_individual_horarios(h),
+                     icon_color=ft.Colors.BLUE),
+                Icon(ft.Icons.DELETE_OUTLINED, "Eliminar grupo", 
+                     on_click=lambda e, h=horario: delete_horario_group_click(h),
+                     icon_color=ft.Colors.RED),
             ], spacing=8)
         else:
+            # BOTONES PARA HORARIOS INDIVIDUALES - AHORA SÍ VISIBLES
             actions = ft.Row([
-                ft.IconButton(
-                    icon=ft.Icons.EDIT_OUTLINED,
-                    icon_color=ft.Colors.BLUE,
-                    tooltip="Editar",
-                    on_click=lambda e, h=horario: edit_horario_click(h)
-                ),
-                ft.IconButton(
-                    icon=ft.Icons.DELETE_OUTLINED,
-                    icon_color=ft.Colors.RED,
-                    tooltip="Eliminar",
-                    on_click=lambda e, h=horario: delete_horario_click(h.get('id'))
-                ),
+                Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
+                     on_click=lambda e, h=horario: edit_horario_click(h),
+                     icon_color=ft.Colors.BLUE),
+                Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
+                     on_click=lambda e, h=horario: delete_horario_click(h.get('id')),
+                     icon_color=ft.Colors.RED),
             ], spacing=8)
 
         content = ft.Column([
-            ft.Row([
-                ft.Icon(icon, color=color, size=20),
-                ft.Column([
-                    ft.Text(f"{hora_inicio_str} - {hora_fin_str}", 
-                           size=14, weight=ft.FontWeight.W_600),
-                    ft.Text(f"{dias_display}", 
-                           size=12, color=ft.Colors.GREY_600),
-                    ft.Text(f"{lab_name} • {status_text}", 
-                           size=12, color=ft.Colors.GREY_600),
-                ], spacing=2, expand=True),
-            ], vertical_alignment=ft.CrossAxisAlignment.START),
+            header,
             ft.Container(height=8),
-            actions
+            actions if not state["is_mobile"] else ft.Container(
+                content=actions,
+                margin=ft.margin.only(top=8)
+            )
         ], spacing=0)
 
         return Card(content, padding=16)
@@ -352,7 +361,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         ]
         
         # Crear diálogo con la lista individual
-        individual_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, spacing=5)
+        individual_list = ft.Column(scroll=ft.ScrollMode.ADAPTIVE)
         
         for horario in individual_horarios:
             dia_num = horario.get('dia_semana')
@@ -361,33 +370,17 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             hora_fin_str = format_time_str(horario.get('hora_fin'))
             
             individual_list.controls.append(
-                ft.Card(
-                    ft.Container(
-                        ft.Row([
-                            ft.Column([
-                                ft.Text(f"{dia_nombre}", weight=ft.FontWeight.W_600),
-                                ft.Text(f"{hora_inicio_str} - {hora_fin_str}", size=12),
-                            ], expand=True),
-                            ft.Row([
-                                ft.IconButton(
-                                    icon=ft.Icons.EDIT,
-                                    icon_color=ft.Colors.BLUE,
-                                    icon_size=20,
-                                    tooltip="Editar",
-                                    on_click=lambda e, h=horario: (setattr(page.dialog, 'open', False), page.update(), edit_horario_click(h))
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.DELETE,
-                                    icon_color=ft.Colors.RED,
-                                    icon_size=20,
-                                    tooltip="Eliminar",
-                                    on_click=lambda e, h=horario: (setattr(page.dialog, 'open', False), page.update(), delete_horario_click(h.get('id')))
-                                ),
-                            ], spacing=5)
-                        ]),
-                        padding=10
-                    ),
-                    margin=2
+                ft.ListTile(
+                    title=ft.Text(f"{dia_nombre}"),
+                    subtitle=ft.Text(f"{hora_inicio_str} - {hora_fin_str}"),
+                    trailing=ft.Row([
+                        Icon(ft.Icons.EDIT_OUTLINED, "Editar", 
+                             on_click=lambda e, h=horario: close_dialog_and_edit(h),
+                             icon_color=ft.Colors.BLUE, icon_size=20),
+                        Icon(ft.Icons.DELETE_OUTLINED, "Eliminar", 
+                             on_click=lambda e, h=horario: close_dialog_and_delete(h.get('id')),
+                             icon_color=ft.Colors.RED, icon_size=20),
+                    ], spacing=4)
                 )
             )
 
@@ -400,17 +393,34 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 height=300
             ),
             actions=[
-                ft.TextButton("Cerrar", on_click=lambda e: (setattr(page.dialog, 'open', False), page.update())),
+                ft.TextButton("Cerrar", on_click=lambda e: close_dialog()),
             ],
         )
         page.dialog.open = True
         page.update()
 
+    def close_dialog():
+        """Cierra el diálogo actual"""
+        page.dialog.open = False
+        page.update()
+
+    def close_dialog_and_edit(horario):
+        """Cierra el diálogo y edita el horario"""
+        page.dialog.open = False
+        page.update()
+        edit_horario_click(horario)
+
+    def close_dialog_and_delete(horario_id):
+        """Cierra el diálogo y elimina el horario"""
+        page.dialog.open = False
+        page.update()
+        if horario_id:
+            delete_horario_click(horario_id)
+
     def delete_horario_group_click(horario_grupo: Dict):
         """Elimina todos los horarios de un grupo"""
         def confirm_delete(e):
-            page.dialog.open = False
-            page.update()
+            close_dialog()
             
             individual_ids = horario_grupo.get('ids', [])
             success_count = 0
@@ -421,22 +431,22 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                     success_count += 1
             
             if success_count == len(individual_ids):
-                info_txt.value = f"✅ {success_count} horarios eliminados"
+                info_txt.value = f"✅ {success_count} horarios eliminados correctamente"
                 info_txt.color = ft.Colors.GREEN
             else:
                 info_txt.value = f"⚠️ {success_count} de {len(individual_ids)} horarios eliminados"
                 info_txt.color = ft.Colors.ORANGE
             
             info_txt.update()
-            render_horarios()
+            safe_render_horarios()
 
         page.dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text("Confirmar eliminación"),
-            content=ft.Text(f"¿Eliminar {len(horario_grupo.get('ids', []))} horarios?"),
+            content=ft.Text(f"¿Estás seguro de que quieres eliminar {len(horario_grupo.get('ids', []))} horarios?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: (setattr(page.dialog, 'open', False), page.update())),
-                Danger("Eliminar", on_click=confirm_delete),
+                ft.TextButton("Cancelar", on_click=lambda e: close_dialog()),
+                Danger("Eliminar grupo", on_click=confirm_delete),
             ],
         )
         page.dialog.open = True
@@ -455,20 +465,19 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         btn_cancel.visible = True
         info_txt.value = f"Editando horario del {DIAS_SEMANA.get(horario.get('dia_semana'), 'día')}"
 
-        page.update()
+        update_controls()
 
     def delete_horario_click(horario_id: int):
         def confirm_delete(e):
-            page.dialog.open = False
-            page.update()
+            close_dialog()
             
             result = api.delete_regla_horario(horario_id)
             if result and result.get("success"):
-                info_txt.value = "✅ Horario eliminado"
+                info_txt.value = "✅ Horario eliminado correctamente"
                 info_txt.color = ft.Colors.GREEN
-                render_horarios()
+                safe_render_horarios()
             else:
-                info_txt.value = "❌ Error al eliminar"
+                info_txt.value = "❌ Error al eliminar el horario"
                 info_txt.color = ft.Colors.RED
             
             info_txt.update()
@@ -478,7 +487,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
             title=ft.Text("Confirmar eliminación"),
             content=ft.Text("¿Estás seguro de que quieres eliminar este horario?"),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: (setattr(page.dialog, 'open', False), page.update())),
+                ft.TextButton("Cancelar", on_click=lambda e: close_dialog()),
                 Danger("Eliminar", on_click=confirm_delete),
             ],
         )
@@ -487,20 +496,24 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     def clear_form():
         state["editing_rule_id"] = None
+        
+        # No resetear laboratorio y día para mantener contexto
         dd_inicio.value = None
         dd_fin.value = None
         dd_tipo.value = "disponible"
+
         btn_save.text = "➕ Agregar Horario"
         btn_cancel.visible = False
         info_txt.value = ""
-        page.update()
+
+        update_controls()
 
     def save_horario():
         # Validaciones básicas
         if not all([dd_inicio.value, dd_fin.value, dd_tipo.value]):
-            info_txt.value = "❌ Completa todos los campos"
+            info_txt.value = "❌ Completa todos los campos obligatorios"
             info_txt.color = ft.Colors.RED
-            page.update()
+            info_txt.update()
             return
 
         try:
@@ -509,13 +522,13 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         except (ValueError, TypeError):
             info_txt.value = "❌ Formato de hora inválido"
             info_txt.color = ft.Colors.RED
-            page.update()
+            info_txt.update()
             return
 
         if inicio >= fin:
             info_txt.value = "❌ La hora inicio debe ser anterior a la hora fin"
             info_txt.color = ft.Colors.RED
-            page.update()
+            info_txt.update()
             return
 
         # Preparar datos
@@ -531,22 +544,23 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                 "hora_fin": fin.isoformat(),
                 "es_habilitado": es_habilitado,
                 "tipo_intervalo": tipo,
+                # Mantener el mismo día al editar
                 "dia_semana": next((h.get('dia_semana') for h in load_horarios() 
                                   if h.get('id') == state["editing_rule_id"]), 0)
             }
             
             result = api.update_regla_horario(state["editing_rule_id"], payload)
             if result and result.get("id"):
-                info_txt.value = "✅ Horario actualizado"
+                info_txt.value = "✅ Horario actualizado correctamente"
                 info_txt.color = ft.Colors.GREEN
                 clear_form()
-                render_horarios()
+                safe_render_horarios()
             else:
                 error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else "Error"
-                info_txt.value = f"❌ Error: {error_msg}"
+                info_txt.value = f"❌ Error al actualizar: {error_msg}"
                 info_txt.color = ft.Colors.RED
         else:
-            # Crear nuevos horarios
+            # Crear nuevos horarios para todos los días seleccionados o el día actual
             dias_a_crear = [state["selected_day"]] if state["selected_day"] is not None else list(range(5))
             
             success_count = 0
@@ -565,17 +579,30 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
                     success_count += 1
 
             if success_count > 0:
-                info_txt.value = f"✅ {success_count} horario(s) creado(s)"
+                info_txt.value = f"✅ {success_count} horario(s) creado(s) correctamente"
                 info_txt.color = ft.Colors.GREEN
                 clear_form()
-                render_horarios()
+                safe_render_horarios()
             else:
-                info_txt.value = "❌ Error al crear horarios"
+                info_txt.value = "❌ Error al crear los horarios"
                 info_txt.color = ft.Colors.RED
 
-        page.update()
+        info_txt.update()
 
-    # --- DISEÑO ---
+    def update_controls():
+        """Actualiza controles de forma segura"""
+        if state["initialized"]:
+            try:
+                dd_inicio.update()
+                dd_fin.update()
+                dd_tipo.update()
+                btn_save.update()
+                btn_cancel.update()
+                info_txt.update()
+            except Exception as e:
+                print(f"Error actualizando controles: {e}")
+
+    # --- DISEÑO SIMPLIFICADO ---
     
     # Header con selección
     header_section = ft.Column([
@@ -593,7 +620,7 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
 
     # Formulario para agregar/editar
     form_section = Card(ft.Column([
-        ft.Text("Agregar/Editar Horario:", size=16, weight=ft.FontWeight.W_600),
+        ft.Text("Agregar Nuevo Horario:", size=16, weight=ft.FontWeight.W_600),
         ft.ResponsiveRow([
             ft.Container(dd_inicio, col={"sm": 12, "md": 4}),
             ft.Container(dd_fin, col={"sm": 12, "md": 4}),
@@ -604,65 +631,75 @@ def HorariosAdminView(page: ft.Page, api: ApiClient):
         info_txt,
     ], spacing=12), padding=16)
 
-    # Layout principal
-    def create_layout():
-        update_mobile_state()
-        
-        if state["is_mobile"]:
-            return ft.Column(
-                controls=[
-                    header_section,
-                    form_section,
-                    ft.Divider(height=20),
-                    ft.Text("Horarios:", size=16, weight=ft.FontWeight.W_600),
-                    ft.Container(content=horarios_list_panel, expand=True),
-                ],
-                expand=True,
-                scroll=ft.ScrollMode.ADAPTIVE,
-            )
-        else:
-            return ft.Column(
-                [
-                    header_section,
-                    ft.ResponsiveRow([
-                        ft.Container(form_section, col={"md": 4}),
-                        ft.Container(
-                            ft.Column([
-                                ft.Text("Horarios Configurados", size=18, weight=ft.FontWeight.W_600),
-                                horarios_list_panel,
-                            ], spacing=12),
-                            col={"md": 8},
-                        ),
-                    ]),
-                ],
-                expand=True,
-            )
+    # Layout móvil
+    def mobile_layout():
+        return ft.Column(
+            controls=[
+                header_section,
+                form_section,
+                ft.Divider(height=20),
+                ft.Text("Horarios Configurados:", size=16, weight=ft.FontWeight.W_600),
+                ft.Container(
+                    content=horarios_list_panel, 
+                    expand=True, 
+                    padding=ft.padding.symmetric(horizontal=8)
+                ),
+            ],
+            expand=True,
+            scroll=ft.ScrollMode.ADAPTIVE,
+            spacing=16,
+        )
 
-    # Inicialización
-    main_content = create_layout()
-    state["initialized"] = True
-    
-    # Cargar datos iniciales después de que la página esté lista
-    def on_page_ready():
-        render_horarios()
-    
-    # Usar el evento de resize para inicializar
-    def handle_first_resize(e):
-        page.on_resize = handle_page_resize
-        on_page_ready()
-    
-    page.on_resize = handle_first_resize
-    
+    # Layout escritorio
+    def desktop_layout():
+        return ft.Column(
+            [
+                header_section,
+                ft.ResponsiveRow([
+                    ft.Container(form_section, col={"md": 4}),
+                    ft.Container(
+                        ft.Column([
+                            ft.Text("Horarios Configurados", size=18, weight=ft.FontWeight.W_600),
+                            horarios_list_panel,
+                        ], spacing=12),
+                        col={"md": 8},
+                        padding=ft.padding.only(left=20)
+                    ),
+                ], spacing=0),
+            ],
+            expand=True,
+            spacing=20,
+        )
+
     def handle_page_resize(e):
         current_is_mobile = state["is_mobile"]
         new_is_mobile = get_is_mobile()
         if current_is_mobile != new_is_mobile:
-            state["is_mobile"] = new_is_mobile
-            # Recrear el layout completo
-            nonlocal main_content
-            main_content = create_layout()
-            page.controls.clear()
-            page.add(main_content)
-            render_horarios()
+            # Marcar como inicializado y renderizar
+            state["initialized"] = True
+            safe_render_horarios()
+
+    page.on_resize = handle_page_resize
+
+    # Construir layout principal
+    main_content = ft.Container()
+    
+    def build_layout():
+        update_mobile_state()
+        if state["is_mobile"]:
+            layout_content = mobile_layout()
+        else:
+            layout_content = desktop_layout()
+        
+        main_content.content = layout_content
+        
+        # Marcar como inicializado después de construir el layout
+        state["initialized"] = True
+        
+        # Cargar datos iniciales
+        safe_render_horarios()
+
+    # Construir layout inicial
+    build_layout()
 
     return main_content
