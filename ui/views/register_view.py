@@ -35,6 +35,7 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
         info.value = msg
         info.color = ft.Colors.RED_400 if is_error else ft.Colors.GREEN_600
         info.update()
+        # En desktop además usamos SnackBar
         if not is_mobile:
             page.snack_bar = ft.SnackBar(
                 content=ft.Text(msg),
@@ -54,7 +55,7 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
         confirm_password = confirm_pwd_field.value or ""
 
         missing = []
-        if not nombre: 
+        if not nombre:
             nombre_field.error_text = "Requerido"
             missing.append("nombre")
         if not correo:
@@ -78,7 +79,8 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
         if missing:
             show_alert("Completa los campos requeridos.", is_error=True)
             for f in (nombre_field, correo_field, user_field, pwd_field, confirm_pwd_field, rol_dd):
-                if hasattr(f, "update"): f.update()
+                if hasattr(f, "update"):
+                    f.update()
             return
 
         if not EMAIL_REGEX.match(correo):
@@ -139,9 +141,12 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
             Primary("Registrarse", on_click=do_register, width=260, height=46),
             Ghost("Volver al Login", on_click=lambda e: page.go("/"), width=260, height=40)
         ],
-        spacing=14, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        spacing=14,
+        tight=True,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
+    # --- Contenedor Card (igual que antes) ---
     if is_mobile:
         card_container = ft.Container(
             content=Card(form, padding=18),
@@ -149,7 +154,7 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
             border_radius=16,
             shadow=None
         )
-        view_padding = ft.padding.symmetric(horizontal=12, vertical=20)
+        outer_padding = ft.padding.symmetric(horizontal=12, vertical=12)
     else:
         card_container = ft.Container(
             content=Card(form, padding=22),
@@ -160,19 +165,35 @@ def RegisterView(page: ft.Page, api: ApiClient, on_success):
                 color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)
             ),
         )
-        view_padding = 20
+        outer_padding = 20
+
+    # --- NUEVO: Layout raíz scrollable + SafeArea ---
+    # Hacemos scroll a nivel de la vista para que, al crecer por errores/teclado,
+    # siempre puedas deslizar y alcanzar los botones.
+    content_column = ft.Column(
+        controls=[
+            ft.Row(
+                [card_container],
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            )
+        ],
+        expand=True,
+        scroll=ft.ScrollMode.ADAPTIVE,   # <- scroll vertical
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    safe_root = ft.SafeArea(
+        ft.Container(
+            expand=True,
+            content=content_column,
+            padding=outer_padding
+        )
+    )
 
     return ft.View(
         "/register",
-        [
-            ft.Container(
-                expand=True,
-                content=ft.Row(
-                    [card_container],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER
-                ),
-                padding=view_padding,
-            )
-        ]
+        [safe_root],
+        scroll=ft.ScrollMode.ADAPTIVE,  # <- respaldo: la vista también permite scroll
     )
