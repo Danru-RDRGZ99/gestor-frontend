@@ -103,13 +103,6 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
 
     btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
 
-    btn_google_login = ft.ElevatedButton(
-        text="Entrar con Google",
-        icon=ft.Icons.LOGIN,
-        on_click=login_button_click,
-        width=260,
-    )
-
     btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
 
     def validate(_):
