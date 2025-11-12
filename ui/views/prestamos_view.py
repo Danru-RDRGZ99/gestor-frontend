@@ -50,6 +50,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "filter_tipo": "",
         "active_tab": 0,
         "solicitar_recurso_id": None,
+        "solicitar_recurso_obj": None,
         "editing_recurso_id": None,
         "is_mobile": detect_mobile(),
     }
@@ -60,34 +61,26 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "text_style": ft.TextStyle(size=14),
     }
 
-    # --- INICIO DE LA CORRECCIÓN ---
-
     recursos_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
     solicitudes_list_display = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
-    
     error_display = ft.Text("", color=PAL["error_text"])
 
-    # 1. Definir variables para los caches y las listas de opciones
     planteles_cache = []
     labs_cache = []
     tipos_cache = []
     error_loading_data = None
-    
-    # 2. Preparar las listas de opciones (iniciando con "Todos")
+
     plantel_options = [ft.dropdown.Option("", "Todos")]
-    lab_options = [ft.dropdown.Option("", "Todos")] # Se llena dinámicamente después
+    lab_options = [ft.dropdown.Option("", "Todos")]
     tipo_options = [ft.dropdown.Option("", "Todos")]
 
-    # 3. Mover el bloque try/except aquí, ANTES de definir los Dropdowns
     try:
         planteles_data = api.get_planteles()
         labs_data = api.get_laboratorios()
         tipos_data = api.get_recurso_tipos()
 
-        # --- Carga de Planteles ---
         if isinstance(planteles_data, list):
             planteles_cache = planteles_data
-            # 4. En lugar de modificar el control, poblamos la variable de opciones
             plantel_options.extend([
                 ft.dropdown.Option(str(p["id"]), p["nombre"]) for p in planteles_cache if p.get("id")
             ])
@@ -96,10 +89,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             error_loading_data = f"Error al cargar planteles: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
 
-        # --- Carga de Laboratorios ---
         if isinstance(labs_data, list):
             labs_cache = labs_data
-        elif error_loading_data is None: # Solo si no hay un error previo
+        elif error_loading_data is None:
             detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar laboratorios: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
@@ -107,14 +99,10 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             print(f"ERROR PrestamosView: (secondary) Error al cargar laboratorios: {detail}")
 
-        # --- Carga de Tipos de Recurso ---
         if isinstance(tipos_data, list):
             tipos_cache = tipos_data
-            # 5. Poblamos la variable de opciones para tipos
-            tipo_options.extend([
-                ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t
-            ])
-        elif error_loading_data is None: # Solo si no hay un error previo
+            tipo_options.extend([ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t])
+        elif error_loading_data is None:
             detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar tipos de recurso: {detail}"
             print(f"ERROR PrestamosView: {error_loading_data}")
@@ -127,9 +115,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         print(f"CRITICAL PrestamosView: {error_loading_data}")
         traceback.print_exc()
 
-    # Este bloque detiene la construcción de la vista si los datos fallan
     if error_loading_data:
-        # Se muestra un error más claro en lugar de los dropdowns vacíos
         return ft.Column([
             ft.Text("Préstamos y Recursos", size=22, weight=ft.FontWeight.BOLD),
             ft.Text("Error crítico al cargar datos necesarios:", color=PAL["error_text"], weight=ft.FontWeight.BOLD),
@@ -137,8 +123,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ft.Text("Por favor, recarga la página o contacta a soporte.", color=PAL["text_secondary"]),
         ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True, spacing=10)
 
-
-    # 6. Ahora, definimos los Dropdowns usando las variables de opciones ya pobladas
     dd_plantel_filter = ft.Dropdown(label="Plantel", options=plantel_options, width=220, **small_style)
     dd_lab_filter = ft.Dropdown(label="Laboratorio", options=lab_options, width=220, **small_style)
     dd_estado_filter = ft.Dropdown(
@@ -153,8 +137,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         **small_style
     )
     dd_tipo_filter = ft.Dropdown(label="Tipo", options=tipo_options, width=200, **small_style)
-
-    # --- FIN DE LA CORRECCIÓN ---
 
     tf_recurso_tipo = TextField("Tipo de Recurso (ej: Cable HDMI, Proyector)")
     tf_recurso_tipo.col = {"sm": 12, "md": 4}
@@ -180,7 +162,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             if pid not in labs_grouped:
                 labs_grouped[pid] = []
             labs_grouped[pid].append(lab)
-
     for pid, pname in plantel_map_for_admin.items():
         lab_options_admin.append(ft.dropdown.Option(key=None, text=pname, disabled=True))
         if pid in labs_grouped:
@@ -210,9 +191,23 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         spacing=10,
     )
 
+    def _ids_recursos_con_solicitud_activa():
+        if is_admin:
+            return set()
+        activos = {"pendiente", "aprobado", "entregado"}
+        mis = api.get_mis_prestamos()
+        ids = set()
+        if isinstance(mis, list):
+            for s in mis:
+                r = s.get("recurso") or {}
+                if s.get("estado") in activos and r.get("id"):
+                    ids.add(r["id"])
+        return ids
+
     def render_recursos():
         recursos_list_display.controls.clear()
         error_display.value = ""
+        ya_solicitados = _ids_recursos_con_solicitud_activa()
         recursos_data = api.get_recursos(
             plantel_id=state["filter_plantel_id"],
             lab_id=state["filter_lab_id"],
@@ -222,7 +217,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar recursos: {detail}"
-            print(f"ERROR render_recursos: {error_msg}")
             error_display.value = error_msg
             if error_display.page:
                 error_display.update()
@@ -232,7 +226,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if not isinstance(recursos_data, list):
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar recursos: {detail}"
-            print(f"ERROR render_recursos: {error_msg}")
             error_display.value = error_msg
             if error_display.page:
                 error_display.update()
@@ -250,12 +243,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         else:
             for r in recursos:
                 if isinstance(r, dict):
+                    r["_ya_solicitado"] = r.get("id") in ya_solicitados
                     if state["is_mobile"]:
                         recursos_list_display.controls.append(recurso_tile_mobile(r))
                     else:
                         recursos_list_display.controls.append(recurso_tile(r))
-                else:
-                    print(f"WARN render_recursos: Expected dict for resource, got {type(r)}")
         if page:
             page.update()
 
@@ -266,7 +258,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if isinstance(solicitudes_data, dict) and "error" in solicitudes_data:
             detail = solicitudes_data.get("error", "Error")
             error_msg = f"Error al cargar solicitudes: {detail}"
-            print(f"ERROR render_solicitudes: {error_msg}")
             error_display.value = error_msg
             if error_display.page:
                 error_display.update()
@@ -276,7 +267,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if not isinstance(solicitudes_data, list):
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar solicitudes: {detail}"
-            print(f"ERROR render_solicitudes: {error_msg}")
             error_display.value = error_msg
             if error_display.page:
                 error_display.update()
@@ -286,7 +276,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         solicitudes = solicitudes_data
         if not solicitudes:
             solicitudes_list_display.controls.append(
-                ft.Text("No hay solicitudes para mostrar.", color=PAL["muted_text"]) 
+                ft.Text("No hay solicitudes para mostrar.", color=PAL["muted_text"])
             )
         else:
             for s in solicitudes:
@@ -295,8 +285,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                         solicitudes_list_display.controls.append(solicitud_tile_mobile(s))
                     else:
                         solicitudes_list_display.controls.append(solicitud_tile(s))
-                else:
-                    print(f"WARN render_solicitudes: Expected dict for solicitud, got {type(s)}")
         if page:
             page.update()
 
@@ -307,7 +295,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
             error_msg = f"Error al cargar lista de admin: {detail}"
-            print(f"ERROR render_admin_recursos: {error_msg}")
             error_display.value = error_msg
             if error_display.page:
                 error_display.update()
@@ -317,7 +304,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if not isinstance(recursos_data, list):
             detail = "Respuesta inválida del API"
             error_msg = f"Error al cargar lista de admin: {detail}"
-            print(f"ERROR render_admin_recursos: {error_msg}")
             error_display.value = error_msg
             if error_display.page:
                 error_display.update()
@@ -334,8 +320,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                         recursos_admin_list_display.controls.append(admin_recurso_tile_mobile(r))
                     else:
                         recursos_admin_list_display.controls.append(admin_recurso_tile(r))
-                else:
-                    print(f"WARN render_admin_recursos: Expected dict for resource, got {type(r)}")
         if recursos_admin_list_display.page:
             recursos_admin_list_display.update()
 
@@ -511,17 +495,18 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             size=11,
             opacity=0.85,
         )
-        estado_chip = chip_estado(r.get("estado"))
-        if r.get("estado") == "disponible":
-            btn = Primary("Solicitar", height=34, expand=True, on_click=lambda e, _r=r: open_solicitud_sheet(_r))
+        estado_actual = r.get("estado")
+        if estado_actual != "disponible":
+            btn = ft.OutlinedButton(f"{estado_actual.capitalize()}", height=34, expand=True, disabled=True)
+        elif r.get("_ya_solicitado"):
+            btn = ft.OutlinedButton("Solicitado", height=34, expand=True, disabled=True)
         else:
-            btn = ft.OutlinedButton(
-                f"{r.get('estado', 'No disponible').capitalize()}", height=34, expand=True, disabled=True
-            )
+            btn = Primary("Solicitar", height=34, expand=True, on_click=lambda e, _r=r: open_solicitud_sheet(_r))
+        chip_txt = estado_actual if estado_actual != "disponible" else ("apartado" if r.get("_ya_solicitado") else "disponible")
         return Card(
             ft.Container(
                 ft.Column([
-                    ft.Row([title, estado_chip], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ft.Row([title, chip_estado(chip_txt)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     subtitle,
                     btn,
                 ], spacing=8),
@@ -582,10 +567,13 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             size=12,
             opacity=0.8,
         )
-        if r.get("estado") == "disponible":
-            btn = ft.ElevatedButton("Solicitar", on_click=lambda e, _r=r: open_solicitud_sheet(_r))
+        estado_actual = r.get("estado")
+        if estado_actual != "disponible":
+            btn = ft.OutlinedButton(f"{estado_actual.capitalize()}", disabled=True)
+        elif r.get("_ya_solicitado"):
+            btn = ft.OutlinedButton("Solicitado", disabled=True)
         else:
-            btn = ft.OutlinedButton(f"{r.get('estado', 'No disponible').capitalize()}", disabled=True)
+            btn = ft.ElevatedButton("Solicitar", on_click=lambda e, _r=r: open_solicitud_sheet(_r))
         return ItemCard(
             ft.Row([ft.Column([title, subtitle], spacing=2, expand=True), btn], vertical_alignment=ft.CrossAxisAlignment.CENTER)
         )
@@ -629,7 +617,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             elif current_status == "entregado":
                 menu_items.append(
                     ft.PopupMenuItem(
-                        text="Markar como Devuelto", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "devuelto")
+                        text="Marcar como Devuelto", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "devuelto")
                     )
                 )
             if menu_items:
@@ -671,7 +659,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         lab = next((l for l in labs_cache if l.get("id") == lab_id), {})
         plantel_id = lab.get("plantel_id")
         plantel = next((p for p in planteles_cache if p.get("id") == plantel_id), {})
-        
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
         subtitle = ft.Text(
             f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
@@ -679,7 +666,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             opacity=0.85,
         )
         estado_chip = chip_estado(r.get("estado"))
-
         actions = ft.Row(
             [
                 Tonal("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e, _r=r: edit_recurso_click(_r), height=34, expand=True),
@@ -687,7 +673,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ],
             spacing=6,
         )
-        
         return Card(
             ft.Container(
                 ft.Column([
@@ -707,6 +692,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def open_solicitud_sheet(recurso: dict):
         bs_title.value = f"Solicitar: {recurso.get('tipo','Recurso').capitalize()} #{recurso.get('id')}"
         state["solicitar_recurso_id"] = recurso.get("id")
+        state["solicitar_recurso_obj"] = recurso
         tf_motivo.value = ""
         slider_horas.value = 2
         bs_solicitud.open = True
@@ -722,7 +708,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     def crear_solicitud(e):
         if not state.get("solicitar_recurso_id"):
-            print("ERROR: No resource ID selected for loan request.")
             page.snack_bar = ft.SnackBar(ft.Text("Error interno: No hay recurso seleccionado."), open=True)
             if page:
                 page.update()
@@ -740,6 +725,16 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         }
         result = api.create_prestamo(prestamo_data)
         if result and "error" not in result:
+            r = state.get("solicitar_recurso_obj") or {}
+            rid = r.get("id")
+            if rid is not None:
+                tipo = r.get("tipo", "")
+                lab_id = r.get("laboratorio_id")
+                specs = r.get("specs", "") or ""
+                try:
+                    api.update_recurso(rid, tipo, "apartado", lab_id, specs)
+                except Exception:
+                    pass
             page.snack_bar = ft.SnackBar(ft.Text("Solicitud creada con éxito."), open=True)
             close_solicitud_sheet(None)
             render_recursos()
@@ -784,7 +779,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     ft.Row(
                         [
                             ft.Text("Filtros", size=18, weight=ft.FontWeight.BOLD),
-                            # --- ¡CORRECCIÓN 1 AQUÍ! ---
                             ft.IconButton(icon=ft.Icons.CLOSE, on_click=close_filter_sheet),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -838,8 +832,10 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             color = ft.Colors.GREEN_700
         elif txt == "prestado":
             color = ft.Colors.AMBER_800
-        elif txt == "mantenimiento":
-            color = ft.Colors.PURPLE_700
+        elif txt == "apartado":
+            color = ft.Colors.DEEP_ORANGE_700
+        elif txt == "ocupado":
+            color = ft.Colors.RED_ACCENT_700
         return ft.Container(
             content=ft.Text((txt or "-").capitalize(), size=11, weight=ft.FontWeight.W_500, color=color),
             padding=ft.padding.symmetric(horizontal=8, vertical=3),
@@ -884,7 +880,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 [
                     ft.FilledButton(
                         "Mostrar Filtros",
-                        # --- ¡CORRECCIÓN 2 AQUÍ! ---
                         icon=ft.Icons.FILTER_LIST,
                         on_click=open_filter_sheet,
                         height=40
@@ -930,16 +925,16 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         tabs_list.append(tab_admin_recursos)
 
     tabs = ft.Tabs(
-        selected_index=state["active_tab"], 
-        on_change=on_tabs_change, 
-        tabs=tabs_list, 
+        selected_index=state["active_tab"],
+        on_change=on_tabs_change,
+        tabs=tabs_list,
         expand=1
     )
-    
+
     desktop_tabs = ft.Tabs(
-        selected_index=state["active_tab"], 
-        on_change=on_tabs_change, 
-        tabs=tabs_list, 
+        selected_index=state["active_tab"],
+        on_change=on_tabs_change,
+        tabs=tabs_list,
         expand=1
     )
 
@@ -955,7 +950,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     expand=True,
                     spacing=12,
                 ),
-                padding=10, 
+                padding=10,
                 expand=True
             )
         )
@@ -974,11 +969,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
 
     def _on_resize(e):
         new_mobile = detect_mobile()
-        
         if new_mobile != state["is_mobile"]:
             state["is_mobile"] = new_mobile
             apply_filter_styles()
-            
             if page:
                 page.update()
 
