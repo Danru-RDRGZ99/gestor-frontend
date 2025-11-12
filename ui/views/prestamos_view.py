@@ -13,7 +13,6 @@ CLASS_START = time(7, 0)
 CLASS_END = time(14, 30)
 MAX_LOAN_HOURS = 7
 
-
 def PrestamosView(page: ft.Page, api: ApiClient):
     user_session = page.session.get("user_session") or {}
     user_data = user_session
@@ -50,8 +49,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         "filter_tipo": "",
         "active_tab": 0,
         "solicitar_recurso_id": None,
-        "solicitar_recurso_obj": None,
-        "editing_recurso_id": None,
         "is_mobile": detect_mobile(),
     }
 
@@ -78,7 +75,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         planteles_data = api.get_planteles()
         labs_data = api.get_laboratorios()
         tipos_data = api.get_recurso_tipos()
-
         if isinstance(planteles_data, list):
             planteles_cache = planteles_data
             plantel_options.extend([
@@ -87,32 +83,19 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         else:
             detail = planteles_data.get("error", "Error") if isinstance(planteles_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar planteles: {detail}"
-            print(f"ERROR PrestamosView: {error_loading_data}")
-
         if isinstance(labs_data, list):
             labs_cache = labs_data
         elif error_loading_data is None:
             detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar laboratorios: {detail}"
-            print(f"ERROR PrestamosView: {error_loading_data}")
-        else:
-            detail = labs_data.get("error", "Error") if isinstance(labs_data, dict) else "Respuesta inválida"
-            print(f"ERROR PrestamosView: (secondary) Error al cargar laboratorios: {detail}")
-
         if isinstance(tipos_data, list):
             tipos_cache = tipos_data
             tipo_options.extend([ft.dropdown.Option(t, t.capitalize()) for t in tipos_cache if t])
         elif error_loading_data is None:
             detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
             error_loading_data = f"Error al cargar tipos de recurso: {detail}"
-            print(f"ERROR PrestamosView: {error_loading_data}")
-        else:
-            detail = tipos_data.get("error", "Error") if isinstance(tipos_data, dict) else "Respuesta inválida"
-            print(f"ERROR PrestamosView: (secondary) Error al cargar tipos: {detail}")
-
     except Exception as e:
         error_loading_data = f"Excepción al cargar datos iniciales: {e}"
-        print(f"CRITICAL PrestamosView: {error_loading_data}")
         traceback.print_exc()
 
     if error_loading_data:
@@ -191,23 +174,11 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         spacing=10,
     )
 
-    def _ids_recursos_con_solicitud_activa():
-        if is_admin:
-            return set()
-        activos = {"pendiente", "aprobado", "entregado"}
-        mis = api.get_mis_prestamos()
-        ids = set()
-        if isinstance(mis, list):
-            for s in mis:
-                r = s.get("recurso") or {}
-                if s.get("estado") in activos and r.get("id"):
-                    ids.add(r["id"])
-        return ids
-
     def render_recursos():
         recursos_list_display.controls.clear()
         error_display.value = ""
-        ya_solicitados = _ids_recursos_con_solicitud_activa()
+        ocupados_global = api.get_recursos_ocupados_ids(include_all=True) or set()
+        ocupados_mios = api.get_recursos_ocupados_ids(include_all=False) or set()
         recursos_data = api.get_recursos(
             plantel_id=state["filter_plantel_id"],
             lab_id=state["filter_lab_id"],
@@ -216,17 +187,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         )
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
-            error_msg = f"Error al cargar recursos: {detail}"
-            error_display.value = error_msg
+            error_display.value = f"Error al cargar recursos: {detail}"
             if error_display.page:
                 error_display.update()
             if recursos_list_display.page:
                 recursos_list_display.update()
             return
         if not isinstance(recursos_data, list):
-            detail = "Respuesta inválida del API"
-            error_msg = f"Error al cargar recursos: {detail}"
-            error_display.value = error_msg
+            error_display.value = "Error al cargar recursos: Respuesta inválida del API"
             if error_display.page:
                 error_display.update()
             if recursos_list_display.page:
@@ -235,15 +203,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         recursos = recursos_data
         if not recursos:
             recursos_list_display.controls.append(
-                ft.Text(
-                    "No se encontraron recursos con los filtros seleccionados.",
-                    color=PAL["muted_text"],
-                )
+                ft.Text("No se encontraron recursos con los filtros seleccionados.", color=PAL["muted_text"])
             )
         else:
             for r in recursos:
                 if isinstance(r, dict):
-                    r["_ya_solicitado"] = r.get("id") in ya_solicitados
+                    rid = r.get("id")
+                    r["_ocupado"] = bool(rid in ocupados_global)
+                    r["_ya_solicitado"] = bool(rid in ocupados_mios)
                     if state["is_mobile"]:
                         recursos_list_display.controls.append(recurso_tile_mobile(r))
                     else:
@@ -257,17 +224,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         solicitudes_data = api.get_todos_los_prestamos() if is_admin else api.get_mis_prestamos()
         if isinstance(solicitudes_data, dict) and "error" in solicitudes_data:
             detail = solicitudes_data.get("error", "Error")
-            error_msg = f"Error al cargar solicitudes: {detail}"
-            error_display.value = error_msg
+            error_display.value = f"Error al cargar solicitudes: {detail}"
             if error_display.page:
                 error_display.update()
             if solicitudes_list_display.page:
                 solicitudes_list_display.update()
             return
         if not isinstance(solicitudes_data, list):
-            detail = "Respuesta inválida del API"
-            error_msg = f"Error al cargar solicitudes: {detail}"
-            error_display.value = error_msg
+            error_display.value = "Error al cargar solicitudes: Respuesta inválida del API"
             if error_display.page:
                 error_display.update()
             if solicitudes_list_display.page:
@@ -294,17 +258,14 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         recursos_data = api.get_recursos()
         if isinstance(recursos_data, dict) and "error" in recursos_data:
             detail = recursos_data.get("error", "Error")
-            error_msg = f"Error al cargar lista de admin: {detail}"
-            error_display.value = error_msg
+            error_display.value = f"Error al cargar lista de admin: {detail}"
             if error_display.page:
                 error_display.update()
             if recursos_admin_list_display.page:
                 recursos_admin_list_display.update()
             return
         if not isinstance(recursos_data, list):
-            detail = "Respuesta inválida del API"
-            error_msg = f"Error al cargar lista de admin: {detail}"
-            error_display.value = error_msg
+            error_display.value = "Error al cargar lista de admin: Respuesta inválida del API"
             if error_display.page:
                 error_display.update()
             if recursos_admin_list_display.page:
@@ -330,9 +291,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         else:
             state["filter_plantel_id"] = None
         if state["filter_plantel_id"]:
-            labs_filtrados = [
-                l for l in labs_cache if l.get("plantel_id") == state["filter_plantel_id"]
-            ]
+            labs_filtrados = [l for l in labs_cache if l.get("plantel_id") == state["filter_plantel_id"]]
             dd_lab_filter.options = [ft.dropdown.Option("", "Todos")] + [
                 ft.dropdown.Option(str(l["id"]), l["nombre"]) for l in labs_filtrados if l.get("id")
             ]
@@ -428,7 +387,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                 page.snack_bar = ft.SnackBar(ft.Text(f"Error al guardar el recurso: {detail}"), open=True)
         except Exception as e:
             page.snack_bar = ft.SnackBar(ft.Text(f"Error inesperado al guardar: {e}"), open=True)
-            print(f"ERROR save_recurso: {e}")
             traceback.print_exc()
         if page:
             page.update()
@@ -472,9 +430,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     delete_dialog = ft.AlertDialog(
         modal=True,
         title=ft.Text("Confirmar eliminación"),
-        content=ft.Text(
-            "¿Estás seguro de que quieres eliminar este recurso? Esta acción no se puede deshacer y fallará si tiene préstamos asociados."
-        ),
+        content=ft.Text("¿Estás seguro de que quieres eliminar este recurso? Esta acción no se puede deshacer y fallará si tiene préstamos asociados."),
         actions=[
             ft.TextButton("Cancelar", on_click=lambda e: (setattr(page.dialog, "open", False), page.update())),
             Danger("Eliminar", on_click=confirm_delete_recurso),
@@ -490,19 +446,20 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         plantel_id = lab.get("plantel_id")
         plantel = next((p for p in planteles_cache if p.get("id") == plantel_id), {})
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(
-            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
-            size=11,
-            opacity=0.85,
-        )
+        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}", size=11, opacity=0.85)
         estado_actual = r.get("estado")
         if estado_actual != "disponible":
             btn = ft.OutlinedButton(f"{estado_actual.capitalize()}", height=34, expand=True, disabled=True)
+            chip_txt = estado_actual
+        elif r.get("_ocupado"):
+            btn = ft.OutlinedButton("Ocupado", height=34, expand=True, disabled=True)
+            chip_txt = "ocupado"
         elif r.get("_ya_solicitado"):
             btn = ft.OutlinedButton("Solicitado", height=34, expand=True, disabled=True)
+            chip_txt = "apartado"
         else:
             btn = Primary("Solicitar", height=34, expand=True, on_click=lambda e, _r=r: open_solicitud_sheet(_r))
-        chip_txt = estado_actual if estado_actual != "disponible" else ("apartado" if r.get("_ya_solicitado") else "disponible")
+            chip_txt = "disponible"
         return Card(
             ft.Container(
                 ft.Column([
@@ -522,11 +479,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         recurso_id_val = recurso.get("id", "N/A")
         title = ft.Text(f"Solicitud #{solicitud_id}", size=15, weight=ft.FontWeight.W_600)
         recurso_info = ft.Text(f"{recurso_tipo} #{recurso_id_val}", size=12, opacity=0.85)
-        timeline = ft.Text(
-            f"Pedido: {format_iso_date(s.get('created_at'))}\nDevolución: {format_iso_date(s.get('fin'))}",
-            size=10,
-            opacity=0.7,
-        )
+        timeline = ft.Text(f"Pedido: {format_iso_date(s.get('created_at'))}\nDevolución: {format_iso_date(s.get('fin'))}", size=10, opacity=0.7)
         estado_chip = chip_estado(s.get("estado"))
         admin_info = None
         if is_admin:
@@ -545,13 +498,9 @@ def PrestamosView(page: ft.Page, api: ApiClient):
                     Danger("Rechazar", height=32, expand=True, on_click=lambda _, _id=s["id"]: update_loan_status(_id, "rechazado")),
                 ], spacing=6)
             elif current_status == "aprobado":
-                admin_actions = Primary(
-                    "Marcar Entregado", height=32, expand=True, on_click=lambda _, _id=s["id"]: update_loan_status(_id, "entregado")
-                )
+                admin_actions = Primary("Marcar Entregado", height=32, expand=True, on_click=lambda _, _id=s["id"]: update_loan_status(_id, "entregado"))
             elif current_status == "entregado":
-                admin_actions = Primary(
-                    "Marcar Devuelto", height=32, expand=True, on_click=lambda _, _id=s["id"]: update_loan_status(_id, "devuelto")
-                )
+                admin_actions = Primary("Marcar Devuelto", height=32, expand=True, on_click=lambda _, _id=s["id"]: update_loan_status(_id, "devuelto"))
         if admin_actions:
             content.append(admin_actions)
         return Card(ft.Container(ft.Column(content, spacing=6)), padding=12)
@@ -562,21 +511,21 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         plantel_id = lab.get("plantel_id")
         plantel = next((p for p in planteles_cache if p.get("id") == plantel_id), {})
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(
-            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
-            size=12,
-            opacity=0.8,
-        )
+        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}", size=12, opacity=0.8)
         estado_actual = r.get("estado")
         if estado_actual != "disponible":
             btn = ft.OutlinedButton(f"{estado_actual.capitalize()}", disabled=True)
+            chip_txt = estado_actual
+        elif r.get("_ocupado"):
+            btn = ft.OutlinedButton("Ocupado", disabled=True)
+            chip_txt = "ocupado"
         elif r.get("_ya_solicitado"):
             btn = ft.OutlinedButton("Solicitado", disabled=True)
+            chip_txt = "apartado"
         else:
             btn = ft.ElevatedButton("Solicitar", on_click=lambda e, _r=r: open_solicitud_sheet(_r))
-        return ItemCard(
-            ft.Row([ft.Column([title, subtitle], spacing=2, expand=True), btn], vertical_alignment=ft.CrossAxisAlignment.CENTER)
-        )
+            chip_txt = "disponible"
+        return ItemCard(ft.Row([ft.Column([title, subtitle], spacing=2, expand=True), ft.Row([chip_estado(chip_txt), btn], spacing=8)], vertical_alignment=ft.CrossAxisAlignment.CENTER))
 
     def solicitud_tile(s: dict):
         recurso = s.get("recurso", {})
@@ -584,13 +533,8 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         solicitud_id = s.get("id", "N/A")
         recurso_tipo = recurso.get("tipo", "Recurso").capitalize()
         recurso_id_val = recurso.get("id", "N/A")
-        title = ft.Text(
-            f"Solicitud #{solicitud_id} · {recurso_tipo} #{recurso_id_val}", size=15, weight=ft.FontWeight.W_600
-        )
-        timeline = ft.Text(
-            f"Pedido: {format_iso_date(s.get('created_at'))} · Devolución: {format_iso_date(s.get('fin'))}",
-            size=11,
-        )
+        title = ft.Text(f"Solicitud #{solicitud_id} · {recurso_tipo} #{recurso_id_val}", size=15, weight=ft.FontWeight.W_600)
+        timeline = ft.Text(f"Pedido: {format_iso_date(s.get('created_at'))} · Devolución: {format_iso_date(s.get('fin'))}", size=11)
         if is_admin:
             solicitante_nombre = usuario.get("nombre", "-")
             solicitante = ft.Text(f"Solicitante: {solicitante_nombre}", size=12, italic=True)
@@ -602,24 +546,12 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         if is_admin:
             menu_items = []
             if current_status == "pendiente":
-                menu_items.append(
-                    ft.PopupMenuItem(text="Aprobar", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "aprobado"))
-                )
-                menu_items.append(
-                    ft.PopupMenuItem(text="Rechazar", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "rechazado"))
-                )
+                menu_items.append(ft.PopupMenuItem(text="Aprobar", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "aprobado")))
+                menu_items.append(ft.PopupMenuItem(text="Rechazar", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "rechazado")))
             elif current_status == "aprobado":
-                menu_items.append(
-                    ft.PopupMenuItem(
-                        text="Marcar como Entregado", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "entregado")
-                    )
-                )
+                menu_items.append(ft.PopupMenuItem(text="Marcar como Entregado", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "entregado")))
             elif current_status == "entregado":
-                menu_items.append(
-                    ft.PopupMenuItem(
-                        text="Marcar como Devuelto", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "devuelto")
-                    )
-                )
+                menu_items.append(ft.PopupMenuItem(text="Marcar como Devuelto", on_click=lambda _, _id=s["id"]: update_loan_status(_id, "devuelto")))
             if menu_items:
                 admin_menu = ft.PopupMenuButton(items=menu_items, icon=ft.Icons.MORE_VERT)
             else:
@@ -635,11 +567,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         plantel_id = lab.get("plantel_id")
         plantel = next((p for p in planteles_cache if p.get("id") == plantel_id), {})
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(
-            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
-            size=12,
-            opacity=0.8,
-        )
+        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}", size=12, opacity=0.8)
         actions = ft.Row(
             [
                 Tonal("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e, _r=r: edit_recurso_click(_r), height=36),
@@ -647,12 +575,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             ],
             spacing=5,
         )
-        return ItemCard(
-            ft.Row([
-                ft.Column([title, subtitle, chip_estado(r.get("estado"))], spacing=4, expand=True),
-                actions,
-            ], vertical_alignment=ft.CrossAxisAlignment.START)
-        )
+        return ItemCard(ft.Row([ft.Column([title, subtitle, chip_estado(r.get("estado"))], spacing=4, expand=True), actions], vertical_alignment=ft.CrossAxisAlignment.START))
 
     def admin_recurso_tile_mobile(r: dict):
         lab_id = r.get("laboratorio_id")
@@ -660,11 +583,7 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         plantel_id = lab.get("plantel_id")
         plantel = next((p for p in planteles_cache if p.get("id") == plantel_id), {})
         title = ft.Text(f"{r.get('tipo', 'Recurso').capitalize()} #{r.get('id', 'N/A')}", size=15, weight=ft.FontWeight.W_600)
-        subtitle = ft.Text(
-            f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}",
-            size=11,
-            opacity=0.85,
-        )
+        subtitle = ft.Text(f"Plantel: {plantel.get('nombre', '-')}\nLab: {lab.get('nombre', '-')}", size=11, opacity=0.85)
         estado_chip = chip_estado(r.get("estado"))
         actions = ft.Row(
             [
@@ -692,7 +611,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
     def open_solicitud_sheet(recurso: dict):
         bs_title.value = f"Solicitar: {recurso.get('tipo','Recurso').capitalize()} #{recurso.get('id')}"
         state["solicitar_recurso_id"] = recurso.get("id")
-        state["solicitar_recurso_obj"] = recurso
         tf_motivo.value = ""
         slider_horas.value = 2
         bs_solicitud.open = True
@@ -725,16 +643,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
         }
         result = api.create_prestamo(prestamo_data)
         if result and "error" not in result:
-            r = state.get("solicitar_recurso_obj") or {}
-            rid = r.get("id")
-            if rid is not None:
-                tipo = r.get("tipo", "")
-                lab_id = r.get("laboratorio_id")
-                specs = r.get("specs", "") or ""
-                try:
-                    api.update_recurso(rid, tipo, "apartado", lab_id, specs)
-                except Exception:
-                    pass
             page.snack_bar = ft.SnackBar(ft.Text("Solicitud creada con éxito."), open=True)
             close_solicitud_sheet(None)
             render_recursos()
@@ -812,7 +720,6 @@ def PrestamosView(page: ft.Page, api: ApiClient):
             dt = datetime.fromisoformat(str(date_str))
             return dt.strftime("%Y-%m-%d %H:%M")
         except (ValueError, TypeError) as e:
-            print(f"WARN format_iso_date: Could not format '{date_str}': {e}")
             return str(date_str)
 
     def chip_estado(txt: str):
