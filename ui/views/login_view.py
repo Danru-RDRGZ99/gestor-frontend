@@ -66,8 +66,16 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
 
         # Open browser to Google Sign-In (try multiple fallbacks)
         instructions_url = f"{api.base_url}/auth/google" if getattr(api, 'base_url', None) else "https://accounts.google.com/signin"
+        print(f"DEBUG: instructions_url={instructions_url}")
+        # show a visual confirmation in the UI so the user knows the click was registered
         try:
-            webbrowser.open(instructions_url)
+            page.snack_bar = ft.SnackBar(ft.Text("Abriendo Google Sign-In..."))
+            page.show_snack_bar()
+        except Exception as _:
+            print("DEBUG: No se pudo mostrar SnackBar")
+        try:
+            opened = webbrowser.open(instructions_url)
+            print(f"DEBUG: webbrowser.open returned {opened}")
         except Exception as ex:
             print(f"DEBUG: webbrowser.open failed: {ex}")
             try:
@@ -77,6 +85,10 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
 
         # Show the dialog so user can paste id_token if needed
         google_dialog.show()
+        try:
+            print(f"DEBUG: dialog.open after show = {google_dialog.dialog.open}")
+        except Exception:
+            print("DEBUG: dialog.open property not available")
 
     def _show_error(message: str):
         """Show error message"""
