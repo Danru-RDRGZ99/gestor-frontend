@@ -1,12 +1,20 @@
 import flet as ft
 import os
 import base64
+import webbrowser
 
 from api_client import ApiClient
 from ui.components.buttons import Primary, Ghost
 from ui.components.cards import Card
+from ui.components.google_oauth import GoogleLoginDialog, GoogleLoginButton
+
 
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
+    """
+    Login view with support for:
+    - Username/Email + Password + CAPTCHA
+    - Google OAuth2 authentication
+    """
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
     flash = page.session.get("flash")
     if flash:
@@ -29,6 +37,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     )
 
     def do_login():
+        """Handle username/password login with CAPTCHA"""
         username = user_field.value.strip()
         password = pwd_field.value or ""
         if not username or not password:
@@ -39,79 +48,43 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         page.session.set("login_attempt", {"username": username, "password": password})
         page.go("/captcha-verify")
 
-    btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
-    btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
-
-    # --- Google Sign-In button and helper dialog ---
     def start_google_login(e):
         """
-        Abre el navegador apuntando al endpoint de inicio de OAuth en el backend
-        (por convención: /auth/google). Luego muestra un cuadro de diálogo donde
-        el usuario puede pegar un idToken si el backend/flujo lo devuelve al usuario.
-
-        Nota: Este flujo es una solución genérica. Idealmente el backend debería
-        manejar la redirección y devolver una sesión; aquí ofrecemos una forma
-        manual de completar el inicio si se obtiene un idToken.
+        Initiates Google OAuth2 login flow:
+        1. Opens instructions dialog
+        2. User follows steps to get Google ID Token
+        3. Pastes token and authenticates
         """
-        auth_url = f"{api.base_url}/auth/google"
-        try:
-            # intentar abrir en el navegador del sistema
-            import webbrowser
-            webbrowser.open(auth_url)
-        except Exception:
-            try:
-                ft.launch_url(auth_url)
-            except Exception:
-                print(f"No se pudo abrir el navegador para: {auth_url}")
-
-        id_field = ft.TextField(label="ID Token (opcional)", hint_text="Pega aquí el idToken si tu backend lo muestra", width=420)
-        status = ft.Text("", color=ft.Colors.RED_400, size=12)
-
-        def submit_idtoken(ev):
-            idt = (id_field.value or "").strip()
-            if not idt:
-                status.value = "Debes pegar un idToken o completar el flujo en el navegador."
-                page.update()
-                return
-            status.value = "Verificando..."
-            page.update()
-            result = api.login_with_google(idt)
-            if result and isinstance(result, dict) and result.get("access_token"):
-                # almacenamiento mínimo de sesión; el backend debería retornar datos de usuario
-                user_info = result.get("user") if isinstance(result.get("user"), dict) else {"user": result.get("user", "usuario")}
-                page.session.set("user_session", {"user": user_info.get("user", "usuario"), "rol": result.get("rol", "")})
-                dialog.open = False
-                page.update()
-                on_success()
-            else:
-                err = "Error autenticando con Google"
-                if isinstance(result, dict) and result.get("error"):
-                    err = result.get("error")
-                status.value = err
-                page.update()
-
-        dialog = ft.AlertDialog(
-            title=ft.Text("Iniciar sesión con Google"),
-            content=ft.Column([
-                ft.Text("Se abrirá el navegador para completar el flujo. Si obtienes un idToken, pégalo aquí y pulsa Continuar."),
-                id_field,
-                status
-            ], tight=True),
-            actions=[
-                ft.TextButton("Cancelar", on_click=lambda ev: (setattr(dialog, 'open', False), page.update())),
-                ft.FilledButton("Continuar", on_click=submit_idtoken),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+        # Show Google login dialog
+        google_dialog = GoogleLoginDialog(
+            page=page,
+            api_client=api,
+            on_success=on_success,
+            on_error=lambda err: _show_error(f"Google Login Error: {err}")
         )
+        
+        # Open browser to Google Sign-In
+        try:
+            # Create a simple HTML page that shows instructions
+            instructions_url = "https://myaccount.google.com"  # Placeholder
+            webbrowser.open(instructions_url)
+        except Exception:
+            pass  # If browser can't open, the dialog still works
+        
+        google_dialog.show()
 
-        page.dialog = dialog
-        dialog.open = True
+    def _show_error(message: str):
+        """Show error message"""
+        info.value = message
+        info.color = ft.Colors.RED_400
         page.update()
 
-    # botón Google (estético simple). Puedes cambiar a Tonal/Outline o añadir imagen de logo.
-    btn_google = ft.OutlinedButton("Iniciar sesión con Google", icon=ft.Icon(ft.Icons.LOGIN), on_click=start_google_login, width=260, height=44)
+    btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
+    btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
+    btn_google = GoogleLoginButton(on_click_handler=start_google_login, width=260, height=44)
 
     def validate(_):
+        """Validate login form"""
         btn_login.disabled = not (user_field.value.strip() and pwd_field.value)
         page.update()
 
@@ -119,6 +92,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     pwd_field.on_change = validate
     validate(None)
 
+    # Load logo
     LOGO_PATH = "ui/assets/a.png"
     logo_b64 = None
     try:
@@ -157,6 +131,8 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             ft.Container(height=4),
             btn_login,
             ft.Container(height=10),
+            ft.Text("O", size=12, opacity=0.6, text_align=ft.TextAlign.CENTER, width=260),
+            ft.Container(height=6),
             btn_google,
             ft.Container(height=10),
             btn_register,
