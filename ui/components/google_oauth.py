@@ -22,12 +22,14 @@ class GoogleLoginDialog:
         page: ft.Page,
         api_client,
         on_success: Callable,
-        on_error: Callable = None
+        on_error: Callable = None,
+        on_close: Callable = None,
     ):
         self.page = page
         self.api_client = api_client
         self.on_success = on_success
         self.on_error = on_error or self._default_error_handler
+        self.on_close = on_close
         
         self.id_token_field = ft.TextField(
             label="Google ID Token",
@@ -74,6 +76,12 @@ class GoogleLoginDialog:
         """Handle dialog cancel"""
         self.dialog.open = False
         self.page.update()
+        # notify caller that dialog closed
+        try:
+            if callable(self.on_close):
+                self.on_close()
+        except Exception:
+            pass
     
     def _on_submit(self, e):
         """Handle token submission"""
@@ -118,6 +126,12 @@ class GoogleLoginDialog:
                 self.dialog.open = False
                 self.page.update()
                 self.on_success()
+                # notify caller that dialog closed
+                try:
+                    if callable(self.on_close):
+                        self.on_close()
+                except Exception:
+                    pass
             else:
                 # Authentication failed
                 error_msg = result.get("error", "Error desconocido") if isinstance(result, dict) else str(result)
@@ -125,6 +139,11 @@ class GoogleLoginDialog:
                 self.status_text.color = ft.Colors.RED_400
                 self.page.update()
                 self.on_error(error_msg)
+                try:
+                    if callable(self.on_close):
+                        self.on_close()
+                except Exception:
+                    pass
                 
         except Exception as e:
             error_msg = str(e)
