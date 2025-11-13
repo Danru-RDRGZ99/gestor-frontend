@@ -55,6 +55,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         2. User follows steps to get Google ID Token
         3. Pastes token and authenticates
         """
+        print("DEBUG: start_google_login called")
         # Show Google login dialog
         google_dialog = GoogleLoginDialog(
             page=page,
@@ -62,15 +63,19 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             on_success=on_success,
             on_error=lambda err: _show_error(f"Google Login Error: {err}")
         )
-        
-        # Open browser to Google Sign-In
+
+        # Open browser to Google Sign-In (try multiple fallbacks)
+        instructions_url = f"{api.base_url}/auth/google" if getattr(api, 'base_url', None) else "https://accounts.google.com/signin"
         try:
-            # Create a simple HTML page that shows instructions
-            instructions_url = "https://myaccount.google.com"  # Placeholder
             webbrowser.open(instructions_url)
-        except Exception:
-            pass  # If browser can't open, the dialog still works
-        
+        except Exception as ex:
+            print(f"DEBUG: webbrowser.open failed: {ex}")
+            try:
+                ft.launch_url(instructions_url)
+            except Exception as ex2:
+                print(f"DEBUG: ft.launch_url failed: {ex2}")
+
+        # Show the dialog so user can paste id_token if needed
         google_dialog.show()
 
     def _show_error(message: str):
