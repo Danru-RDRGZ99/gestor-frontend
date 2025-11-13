@@ -69,16 +69,30 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             # if session fails for any reason, continue without debounce
             pass
         # Show Google login dialog
+        def _on_dialog_close():
+            try:
+                btn_google.disabled = False
+                page.update()
+            except Exception:
+                pass
+
         google_dialog = GoogleLoginDialog(
             page=page,
             api_client=api,
             on_success=on_success,
-            on_error=lambda err: _show_error(f"Google Login Error: {err}")
+            on_error=lambda err: _show_error(f"Google Login Error: {err}"),
+            on_close=_on_dialog_close,
         )
 
         # Open browser to Google Sign-In (try multiple fallbacks)
         instructions_url = f"{api.base_url}/auth/google" if getattr(api, 'base_url', None) else "https://accounts.google.com/signin"
         print(f"DEBUG: instructions_url={instructions_url}")
+        # disable button to avoid further clicks and show a visual confirmation
+        try:
+            btn_google.disabled = True
+            page.update()
+        except Exception:
+            pass
         # show a visual confirmation in the UI so the user knows the click was registered
         try:
             page.snack_bar = ft.SnackBar(ft.Text("Abriendo Google Sign-In..."))
