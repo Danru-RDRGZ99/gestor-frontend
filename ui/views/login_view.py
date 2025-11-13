@@ -89,17 +89,82 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             opened = webbrowser.open(instructions_url)
             print(f"DEBUG: webbrowser.open returned {opened}")
             if not opened:
-                # webbrowser.open didn't raise but returned False -> try flet launcher
+                # webbrowser.open didn't raise but returned False -> try flet launcher if available
                 try:
-                    ft.launch_url(instructions_url)
-                    print("DEBUG: ft.launch_url called as fallback (webbrowser returned False)")
+                    if hasattr(ft, 'launch_url') and callable(getattr(ft, 'launch_url')):
+                        ft.launch_url(instructions_url)
+                        print("DEBUG: ft.launch_url called as fallback (webbrowser returned False)")
+                    elif hasattr(page, 'launch_url') and callable(getattr(page, 'launch_url')):
+                        page.launch_url(instructions_url)
+                        print("DEBUG: page.launch_url called as fallback (webbrowser returned False)")
+                    else:
+                        # As a last resort, show a dialog with the URL so the user can copy it
+                        print("DEBUG: No launch_url available; showing Copy URL dialog to user")
+                        url_field = ft.TextField(value=instructions_url, width=520)
+                        def _copy_and_close(ev):
+                            try:
+                                page.set_clipboard(instructions_url)
+                                page.snack_bar = ft.SnackBar(ft.Text("URL copiada al portapapeles"))
+                                page.show_snack_bar()
+                            except Exception as _:
+                                print("DEBUG: set_clipboard failed or not supported")
+                            dlg.open = False
+                            page.update()
+
+                        dlg = ft.AlertDialog(
+                            title=ft.Text("Abrir Google Sign-In"),
+                            content=ft.Column([
+                                ft.Text("No se pudo abrir el navegador automáticamente. Copia la URL y pégala en tu navegador:"),
+                                url_field
+                            ], tight=True),
+                            actions=[
+                                ft.TextButton("Cerrar", on_click=lambda ev: (setattr(dlg, 'open', False), page.update())),
+                                ft.FilledButton("Copiar URL", on_click=_copy_and_close),
+                            ],
+                            actions_alignment=ft.MainAxisAlignment.END,
+                        )
+                        page.dialog = dlg
+                        dlg.open = True
+                        page.update()
                 except Exception as ex2:
                     print(f"DEBUG: ft.launch_url failed: {ex2}")
         except Exception as ex:
             print(f"DEBUG: webbrowser.open failed: {ex}")
             try:
-                ft.launch_url(instructions_url)
-                print("DEBUG: ft.launch_url called in except block")
+                if hasattr(ft, 'launch_url') and callable(getattr(ft, 'launch_url')):
+                    ft.launch_url(instructions_url)
+                    print("DEBUG: ft.launch_url called in except block")
+                elif hasattr(page, 'launch_url') and callable(getattr(page, 'launch_url')):
+                    page.launch_url(instructions_url)
+                    print("DEBUG: page.launch_url called in except block")
+                else:
+                    print("DEBUG: No launch_url available in except block; presenting URL to user")
+                    url_field = ft.TextField(value=instructions_url, width=520)
+                    def _copy_and_close2(ev):
+                        try:
+                            page.set_clipboard(instructions_url)
+                            page.snack_bar = ft.SnackBar(ft.Text("URL copiada al portapapeles"))
+                            page.show_snack_bar()
+                        except Exception:
+                            print("DEBUG: set_clipboard failed or not supported")
+                        dlg2.open = False
+                        page.update()
+
+                    dlg2 = ft.AlertDialog(
+                        title=ft.Text("Abrir Google Sign-In"),
+                        content=ft.Column([
+                            ft.Text("No se pudo abrir el navegador automáticamente. Copia la URL y pégala en tu navegador:"),
+                            url_field
+                        ], tight=True),
+                        actions=[
+                            ft.TextButton("Cerrar", on_click=lambda ev: (setattr(dlg2, 'open', False), page.update())),
+                            ft.FilledButton("Copiar URL", on_click=_copy_and_close2),
+                        ],
+                        actions_alignment=ft.MainAxisAlignment.END,
+                    )
+                    page.dialog = dlg2
+                    dlg2.open = True
+                    page.update()
             except Exception as ex2:
                 print(f"DEBUG: ft.launch_url also failed: {ex2}")
 
