@@ -2,6 +2,7 @@ import flet as ft
 import os
 import base64
 import webbrowser
+import time
 
 from api_client import ApiClient
 from ui.components.buttons import Primary, Ghost
@@ -56,6 +57,17 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         3. Pastes token and authenticates
         """
         print("DEBUG: start_google_login called")
+        # simple debounce using session timestamp to avoid double-invocation
+        try:
+            now = time.time()
+            last = page.session.get("google_last_click") or 0
+            if now - last < 0.8:
+                print("DEBUG: Ignorando click duplicado de Google (debounce)")
+                return
+            page.session.set("google_last_click", now)
+        except Exception:
+            # if session fails for any reason, continue without debounce
+            pass
         # Show Google login dialog
         google_dialog = GoogleLoginDialog(
             page=page,
@@ -76,12 +88,20 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         try:
             opened = webbrowser.open(instructions_url)
             print(f"DEBUG: webbrowser.open returned {opened}")
+            if not opened:
+                # webbrowser.open didn't raise but returned False -> try flet launcher
+                try:
+                    ft.launch_url(instructions_url)
+                    print("DEBUG: ft.launch_url called as fallback (webbrowser returned False)")
+                except Exception as ex2:
+                    print(f"DEBUG: ft.launch_url failed: {ex2}")
         except Exception as ex:
             print(f"DEBUG: webbrowser.open failed: {ex}")
             try:
                 ft.launch_url(instructions_url)
+                print("DEBUG: ft.launch_url called in except block")
             except Exception as ex2:
-                print(f"DEBUG: ft.launch_url failed: {ex2}")
+                print(f"DEBUG: ft.launch_url also failed: {ex2}")
 
         # Show the dialog so user can paste id_token if needed
         google_dialog.show()
