@@ -9,27 +9,34 @@ from ui.components.cards import Card
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
     Vista de inicio de sesión para BLACKLAB.
-    Tema: Negro, Gris y Cian.
-    Usa carga Base64 para el fondo para garantizar que se muestre la imagen local.
+    Corrección: Fuerza los márgenes de la página a 0 y usa anclaje absoluto para el fondo.
     """
+    # --- CORRECCIÓN CRÍTICA DE PANTALLA ---
+    # Forzamos que la página no tenga márgenes para que el fondo llegue al borde
+    page.padding = 0
+    page.spacing = 0
+    # Aseguramos que la alineación base no interfiera
+    page.vertical_alignment = ft.MainAxisAlignment.START
+    page.horizontal_alignment = ft.CrossAxisAlignment.START
+    page.update() # Aplicamos los cambios inmediatamente
+
     # --- Variables de Estilo ---
-    THEME_CYAN = "#00E5FF"  # Cian vibrante
-    THEME_BG = "#111111"    # Negro casi puro
+    THEME_CYAN = "#00E5FF"
+    THEME_BG = "#111111"
     
-    # Mensajes de error/info
-    info = ft.Text("", color="#EF5350", size=12) # Red 400 hex
+    info = ft.Text("", color="#EF5350", size=12)
     flash = page.session.get("flash")
     if flash:
         info.value = flash
         page.session.remove("flash")
 
-    # Campos de texto con estilo
+    # Campos de texto
     user_field = ft.TextField(
         label="Usuario o Correo",
         prefix_icon=ft.Icons.PERSON,
         autofocus=True,
         text_size=14,
-        border_color="#424242", # Grey 800
+        border_color="#424242",
         focused_border_color=THEME_CYAN,
         cursor_color=THEME_CYAN,
     )
@@ -39,7 +46,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         can_reveal_password=True,
         prefix_icon=ft.Icons.LOCK,
         text_size=14,
-        border_color="#424242", # Grey 800
+        border_color="#424242",
         focused_border_color=THEME_CYAN,
         cursor_color=THEME_CYAN,
         on_submit=lambda e: do_login(),
@@ -95,7 +102,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         [
             logo,
             ft.Text("BLACKLAB", size=24, weight=ft.FontWeight.BOLD, color="white"),
-            ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, color="#BDBDBD"), # Grey 400
+            ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, color="#BDBDBD"),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -118,40 +125,30 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # --- CONFIGURACIÓN DEL FONDO (MÉTODO BASE64) ---
-    # URL por defecto (Cyberpunk)
+    # --- FONDO ---
     default_bg_url = "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?q=80&w=2070&auto=format&fit=crop"
-    
-    # Rutas locales posibles
     local_bg_options = ["ui/assets/background.jpg", "ui/assets/dark_abstract_background.jpg"]
     bg_src_base64 = None
 
-    # Intentamos leer el archivo local y convertirlo a Base64
     for local_path in local_bg_options:
         if os.path.exists(local_path):
             try:
                 with open(local_path, "rb") as f:
                     bg_src_base64 = base64.b64encode(f.read()).decode("utf-8")
-                    print(f"Éxito: Fondo local cargado desde {local_path}")
                     break
-            except Exception as e:
-                print(f"Error leyendo imagen de fondo: {e}")
+            except Exception:
+                pass
 
-    # Configuramos el control de imagen
     if bg_src_base64:
-        # Si leímos el archivo local con éxito
         bg_image_control = ft.Image(
             src_base64=bg_src_base64,
             fit=ft.ImageFit.COVER,
-            expand=True,
             opacity=0.6
         )
     else:
-        # Si falló todo lo local, usamos la URL
         bg_image_control = ft.Image(
             src=default_bg_url,
             fit=ft.ImageFit.COVER,
-            expand=True,
             opacity=0.6,
             error_content=ft.Container(bgcolor=THEME_BG)
         )
@@ -168,47 +165,51 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         ), 
     )
 
-    # Capa de contenido centrada
-    content_layer = ft.Container(
-        content=ft.Row(
-            [card_content],
-            alignment=ft.MainAxisAlignment.CENTER,
-            vertical_alignment=ft.MainAxisAlignment.CENTER,
-        ),
-        expand=True,
-        padding=20, 
-    )
+    # --- ESTRUCTURA FINAL (SOLUCIÓN A CORTE DE PANTALLA) ---
+    # Usamos un Stack que ocupe todo.
+    # Clave: Configuramos el fondo para anclarse a los 4 bordes (left=0, top=0, etc)
     
-    # Overlay oscuro
-    overlay = ft.Container(
-        bgcolor=ft.Colors.with_opacity(0.4, "#000000"), 
-        expand=True
+    main_stack = ft.Stack(
+        controls=[
+            # 1. Fondo Anclado: Esto fuerza a la imagen a estirarse a todo el contenedor padre
+            ft.Container(
+                content=bg_image_control,
+                left=0,
+                top=0,
+                right=0,
+                bottom=0,
+            ),
+            # 2. Overlay Anclado
+            ft.Container(
+                bgcolor=ft.Colors.with_opacity(0.4, "#000000"),
+                left=0,
+                top=0,
+                right=0,
+                bottom=0,
+            ),
+            # 3. Formulario Centrado (Sin anclaje, usando alignment del padre)
+            ft.Container(
+                content=card_content,
+                alignment=ft.alignment.center, # Centra la tarjeta en el stack
+            )
+        ],
+        expand=True # El Stack se expande para llenar el contenedor principal
     )
 
-    # Contenedor Principal con Stack
     main_container = ft.Container(
-        expand=True,
+        content=main_stack,
+        expand=True, # El contenedor principal se expande para llenar la página
         bgcolor=THEME_BG,
         padding=0,
-        content=ft.Stack(
-            controls=[
-                bg_image_control, # 1. Fondo (Base64 o URL)
-                overlay,          # 2. Capa oscura encima
-                content_layer     # 3. Formulario al frente
-            ],
-            expand=True
-        ),
+        margin=0,
         alignment=ft.alignment.center
     )
 
-    # Ajustes Móvil
     if is_mobile:
         card_content.width = None
         card_content.shadow = None
         card_content.border_radius = 0
-        content_layer.padding = 0
-        content_layer.content.vertical_alignment = ft.MainAxisAlignment.START
-        if overlay in main_container.content.controls:
-            main_container.content.controls.remove(overlay)
+        # En móvil simplificamos
+        main_container.content = ft.Column([card_content], alignment=ft.MainAxisAlignment.START)
 
     return main_container
