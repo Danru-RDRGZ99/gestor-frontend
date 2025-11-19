@@ -9,16 +9,14 @@ from ui.components.cards import Card
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
     Vista de inicio de sesión para BLACKLAB.
-    Corrección: Fuerza los márgenes de la página a 0 y usa anclaje absoluto para el fondo.
+    Corrección: Diseño responsivo que adapta la tarjeta en móvil sin perder el fondo.
     """
-    # --- CORRECCIÓN CRÍTICA DE PANTALLA ---
-    # Forzamos que la página no tenga márgenes para que el fondo llegue al borde
+    # --- AJUSTES DE PÁGINA ---
     page.padding = 0
     page.spacing = 0
-    # Aseguramos que la alineación base no interfiera
     page.vertical_alignment = ft.MainAxisAlignment.START
     page.horizontal_alignment = ft.CrossAxisAlignment.START
-    page.update() # Aplicamos los cambios inmediatamente
+    page.update()
 
     # --- Variables de Estilo ---
     THEME_CYAN = "#00E5FF"
@@ -64,6 +62,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         page.session.set("login_attempt", {"username": username, "password": password})
         page.go("/captcha-verify")
 
+    # Botones (Ancho fijo o responsivo según se prefiera, mantenemos 260 para consistencia visual)
     btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
     btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
 
@@ -156,7 +155,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     # Tarjeta de Login
     card_content = ft.Container(
         content=Card(form, padding=22),
-        width=440,
+        width=440, # Ancho por defecto para escritorio
         border_radius=16,
         shadow=ft.BoxShadow(
             blur_radius=40, 
@@ -165,51 +164,56 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         ), 
     )
 
-    # --- ESTRUCTURA FINAL (SOLUCIÓN A CORTE DE PANTALLA) ---
-    # Usamos un Stack que ocupe todo.
-    # Clave: Configuramos el fondo para anclarse a los 4 bordes (left=0, top=0, etc)
-    
+    # Capa intermedia para alinear la tarjeta
+    content_layer = ft.Container(
+        content=ft.Row(
+            [card_content],
+            alignment=ft.MainAxisAlignment.CENTER, # Centrado Horizontal
+            vertical_alignment=ft.MainAxisAlignment.CENTER, # Centrado Vertical
+        ),
+        expand=True,
+        padding=20, 
+    )
+
+    # --- AJUSTES PARA MÓVIL ---
+    if is_mobile:
+        # 1. Quitamos el ancho fijo para evitar desbordes
+        card_content.width = None
+        # 2. Ajustamos el padding para que la tarjeta no toque los bordes del celular
+        content_layer.padding = 15
+        # 3. (Opcional) Reducimos un poco el blur de la sombra para móviles
+        card_content.shadow.blur_radius = 20
+        
+        # IMPORTANTE: Mantenemos la estructura del Stack. 
+        # No reemplazamos main_container.content, así el fondo persiste.
+
+    # --- ESTRUCTURA FINAL (STACK) ---
     main_stack = ft.Stack(
         controls=[
-            # 1. Fondo Anclado: Esto fuerza a la imagen a estirarse a todo el contenedor padre
+            # 1. Fondo Anclado (Pantalla Completa)
             ft.Container(
                 content=bg_image_control,
-                left=0,
-                top=0,
-                right=0,
-                bottom=0,
+                left=0, top=0, right=0, bottom=0,
             ),
             # 2. Overlay Anclado
             ft.Container(
                 bgcolor=ft.Colors.with_opacity(0.4, "#000000"),
-                left=0,
-                top=0,
-                right=0,
-                bottom=0,
+                left=0, top=0, right=0, bottom=0,
             ),
-            # 3. Formulario Centrado (Sin anclaje, usando alignment del padre)
-            ft.Container(
-                content=card_content,
-                alignment=ft.alignment.center, # Centra la tarjeta en el stack
-            )
+            # 3. Contenido (Formulario)
+            # Al usar expand=True en content_layer y alignment.center en sus hijos, se centra solo.
+            content_layer
         ],
-        expand=True # El Stack se expande para llenar el contenedor principal
+        expand=True
     )
 
     main_container = ft.Container(
         content=main_stack,
-        expand=True, # El contenedor principal se expande para llenar la página
+        expand=True,
         bgcolor=THEME_BG,
         padding=0,
         margin=0,
         alignment=ft.alignment.center
     )
-
-    if is_mobile:
-        card_content.width = None
-        card_content.shadow = None
-        card_content.border_radius = 0
-        # En móvil simplificamos
-        main_container.content = ft.Column([card_content], alignment=ft.MainAxisAlignment.START)
 
     return main_container
