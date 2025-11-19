@@ -9,9 +9,11 @@ from ui.components.cards import Card
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
     Vista de inicio de sesión para BLACKLAB.
-    Corrección: Diseño responsivo que adapta la tarjeta en móvil sin perder el fondo.
+    Estrategia: 
+    - Web: Diseño fijo (440px) y centrado.
+    - Móvil: Diseño fluido y centrado, sin perder el fondo.
     """
-    # --- AJUSTES DE PÁGINA ---
+    # --- AJUSTES DE PÁGINA (Necesario para quitar bordes blancos en Web y Móvil) ---
     page.padding = 0
     page.spacing = 0
     page.vertical_alignment = ft.MainAxisAlignment.START
@@ -62,7 +64,6 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         page.session.set("login_attempt", {"username": username, "password": password})
         page.go("/captcha-verify")
 
-    # Botones (Ancho fijo o responsivo según se prefiera, mantenemos 260 para consistencia visual)
     btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
     btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
 
@@ -96,7 +97,6 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.with_opacity(0.2, THEME_CYAN))
     )
 
-    # Estructura del Formulario
     header = ft.Column(
         [
             logo,
@@ -152,45 +152,33 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             error_content=ft.Container(bgcolor=THEME_BG)
         )
 
-    # Tarjeta de Login
-    card_content = ft.Container(
-        content=Card(form, padding=22),
-        width=440, # Ancho por defecto para escritorio
-        border_radius=16,
-        shadow=ft.BoxShadow(
-            blur_radius=40, 
-            spread_radius=0, 
-            color=ft.Colors.with_opacity(0.15, THEME_CYAN)
-        ), 
-    )
+    # --- TARJETA DE LOGIN (CONFIGURACIÓN WEB POR DEFECTO) ---
+    card_width = 440     # Ancho fijo para escritorio
+    card_padding = 22    # Padding interno
+    card_radius = 16     # Bordes redondeados
+    card_shadow = ft.BoxShadow(blur_radius=40, color=ft.Colors.with_opacity(0.15, THEME_CYAN))
+    container_padding = 0 # Padding del contenedor padre
 
-    # Capa intermedia para alinear la tarjeta
-    content_layer = ft.Container(
-        content=ft.Row(
-            [card_content],
-            alignment=ft.MainAxisAlignment.CENTER, # Centrado Horizontal
-            vertical_alignment=ft.MainAxisAlignment.CENTER, # Centrado Vertical
-        ),
-        expand=True,
-        padding=20, 
-    )
-
-    # --- AJUSTES PARA MÓVIL ---
+    # --- AJUSTES SOLO PARA MÓVIL ---
+    # Aquí modificamos las variables si es móvil, sin tocar la estructura lógica
     if is_mobile:
-        # 1. Quitamos el ancho fijo para evitar desbordes
-        card_content.width = None
-        # 2. Ajustamos el padding para que la tarjeta no toque los bordes del celular
-        content_layer.padding = 15
-        # 3. (Opcional) Reducimos un poco el blur de la sombra para móviles
-        card_content.shadow.blur_radius = 20
-        
-        # IMPORTANTE: Mantenemos la estructura del Stack. 
-        # No reemplazamos main_container.content, así el fondo persiste.
+        card_width = None    # Ancho fluido
+        card_radius = 16     # Mantenemos radio o lo bajamos a 0 si prefieres pantalla completa
+        container_padding = 15 # Margen para que no toque los bordes de la pantalla
+        # Nota: Mantenemos la sombra y el resto igual para que se vea bonito
+
+    card_content = ft.Container(
+        content=Card(form, padding=card_padding),
+        width=card_width,
+        border_radius=card_radius,
+        shadow=card_shadow,
+    )
 
     # --- ESTRUCTURA FINAL (STACK) ---
+    # Usamos exactamente la misma estructura que funcionó para Web
     main_stack = ft.Stack(
         controls=[
-            # 1. Fondo Anclado (Pantalla Completa)
+            # 1. Fondo Anclado
             ft.Container(
                 content=bg_image_control,
                 left=0, top=0, right=0, bottom=0,
@@ -200,9 +188,13 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
                 bgcolor=ft.Colors.with_opacity(0.4, "#000000"),
                 left=0, top=0, right=0, bottom=0,
             ),
-            # 3. Contenido (Formulario)
-            # Al usar expand=True en content_layer y alignment.center en sus hijos, se centra solo.
-            content_layer
+            # 3. Contenido Centrado
+            # Usamos Container con alignment, es la forma más segura de centrar en Flet sin alterar layout
+            ft.Container(
+                content=card_content,
+                alignment=ft.alignment.center, 
+                padding=container_padding, # Solo afecta a móvil (0 en web)
+            )
         ],
         expand=True
     )
