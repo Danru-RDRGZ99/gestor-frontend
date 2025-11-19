@@ -121,8 +121,8 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         )
     else:
         print(f"ADVERTENCIA: No se encontró la imagen de fondo en la ruta: {BACKGROUND_IMAGE_PATH}. Usando color de fondo oscuro.")
-        # CORRECCIÓN FINAL: Se usa el shorthand ft.BLACK para evitar el error recurrente con ft.Colors.
-        background_image_control = ft.Container(bgcolor=ft.BLACK, expand=True) # Fallback a un color sólido oscuro
+        # FIX: Usar valor hexadecimal literal (#000000) para evitar problemas de AttributeError con ft.Colors y ft.BLACK.
+        background_image_control = ft.Container(bgcolor="#000000", expand=True) # Fallback a un color sólido oscuro
         
     # 2. El card de login, ligeramente ajustado para mejor sombra sobre el fondo.
     card_container = ft.Container(
