@@ -12,6 +12,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     Incluye una imagen de fondo local 'dark_abstract_background.jpg' con un overlay 
     para mejorar la legibilidad del contenido.
     """
+    # CORREGIDO: ft.Colors (ya estaba bien)
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
     flash = page.session.get("flash")
     if flash:
@@ -39,6 +40,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         password = pwd_field.value or ""
         if not username or not password:
             info.value = "Por favor, completa ambos campos."
+            # CORREGIDO: ft.Colors (ya estaba bien)
             info.color = ft.Colors.RED_400
             page.update()
             return
@@ -108,7 +110,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     # --- Contenedor principal con fondo de imagen y ajustes de responsividad ---
     
     # 1. Ruta local de la imagen de fondo generada
-    BACKGROUND_IMAGE_PATH = "ui/assets/dark_abstract_background.png"
+    BACKGROUND_IMAGE_PATH = "ui/assets/dark_abstract_background.jpg"
 
     # Verificar si la imagen existe localmente. Si no, usa un color de fondo.
     if os.path.exists(BACKGROUND_IMAGE_PATH):
@@ -126,8 +128,8 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         content=Card(form, padding=22),
         width=440,
         border_radius=16,
-        # Sombra más pronunciada para que el card blanco resalte sobre el fondo.
-        shadow=ft.BoxShadow(blur_radius=30, spread_radius=3, color=ft.colors.with_opacity(0.5, ft.colors.BLACK)), 
+        # CORREGIDO: ft.colors -> ft.Colors
+        shadow=ft.BoxShadow(blur_radius=30, spread_radius=3, color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK)), 
     )
 
     # 3. Capa de contenido: Centra el card y le aplica el padding.
@@ -142,8 +144,8 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     )
     
     # 4. Overlay oscuro para asegurar la legibilidad de la tarjeta.
-    # Ajustado a un 40% de opacidad para que la imagen de fondo se vea un poco más.
-    overlay = ft.Container(bgcolor=ft.colors.with_opacity(0.4, ft.colors.BLACK), expand=True)
+    # CORREGIDO: ft.colors -> ft.Colors
+    overlay = ft.Container(bgcolor=ft.Colors.with_opacity(0.4, ft.Colors.BLACK), expand=True)
 
     # El contenedor principal es ahora un Stack para apilar los elementos
     main_container = ft.Container(
