@@ -108,7 +108,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     # --- Contenedor principal con fondo de imagen y ajustes de responsividad ---
     
     # 1. Ruta local de la imagen de fondo generada
-    BACKGROUND_IMAGE_PATH = "ui/assets/dark_abstract_background.jpg"
+    BACKGROUND_IMAGE_PATH = "ui/assets/dark_abstract_background.png"
 
     # Verificar si la imagen existe localmente. Si no, usa un color de fondo.
     if os.path.exists(BACKGROUND_IMAGE_PATH):
