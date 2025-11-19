@@ -10,10 +10,10 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
     Vista de inicio de sesión para BLACKLAB.
     Tema: Negro, Gris y Cian.
+    Fondo ajustado para cubrir el 100% de la pantalla sin bordes.
     """
     # --- Variables de Estilo ---
-    # Definimos los colores del tema aquí para usarlos consistentemente
-    THEME_CYAN = "#00E5FF"  # Cian vibrante tipo neón
+    THEME_CYAN = "#00E5FF"  # Cian vibrante
     THEME_BG = "#111111"    # Negro casi puro
     
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
@@ -28,7 +28,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         autofocus=True,
         text_size=14,
         border_color=ft.Colors.GREY_800,
-        focused_border_color=THEME_CYAN, # Borde cian al enfocar
+        focused_border_color=THEME_CYAN,
         cursor_color=THEME_CYAN,
     )
     pwd_field = ft.TextField(
@@ -55,8 +55,6 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         page.session.set("login_attempt", {"username": username, "password": password})
         page.go("/captcha-verify")
 
-    # Botones personalizados (Si tus componentes Primary/Ghost aceptan color, genial. 
-    # Si no, se verán con el estilo por defecto).
     btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
     btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
 
@@ -79,17 +77,14 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         print(f"Error logo: {e}")
 
     if logo_b64:
-        # Logo con un filtro de color sutil si es transparente, o natural
         logo_content = ft.Image(src_base64=logo_b64, fit=ft.ImageFit.COVER)
     else:
-        # Fallback: Icono coloreado con el tema Cian
         logo_content = ft.Icon(ft.Icons.SCIENCE, size=34, color=THEME_CYAN)
 
     logo = ft.Container(
         content=logo_content, 
         width=56, height=56, 
         alignment=ft.alignment.center,
-        # Sutil brillo cian detrás del logo
         shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.with_opacity(0.2, THEME_CYAN))
     )
 
@@ -120,38 +115,37 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # --- CONFIGURACIÓN DEL FONDO ---
+    # --- CONFIGURACIÓN DEL FONDO (CORREGIDO) ---
     
-    # 1. URL Web: Una imagen abstracta tecnológica oscura con toques cian/azules
-    #    (Cyberpunk/Tech style)
-    bg_src = "https://images.unsplash.com/photo-1535868463750-c78d9543614f?q=80&w=2000&auto=format&fit=crop"
+    # URL nueva: Abstracto oscuro con líneas cian (Cyberpunk)
+    # Esta imagen coincide mejor con tu tema que la bombilla roja.
+    bg_src = "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?q=80&w=2070&auto=format&fit=crop"
     
-    # 2. Archivo Local: Si guardas la imagen generada como 'background.jpg', se usará esa.
+    # Prioridad a imagen local si existe
     local_bg_options = ["ui/assets/background.jpg", "ui/assets/dark_abstract_background.jpg"]
-    
     for local_path in local_bg_options:
         if os.path.exists(local_path):
             bg_src = local_path
-            print(f"Usando fondo local: {bg_src}")
             break
 
-    background_image = ft.Image(
-        src=bg_src,
-        fit=ft.ImageFit.COVER,
-        expand=True,
-        opacity=0.7, # Transparencia para que no compita con el formulario
-        error_content=ft.Container(bgcolor=THEME_BG) # Fallback seguro
+    # Usamos BoxDecoration en lugar de un control Image suelto.
+    # Esto fuerza a la imagen a comportarse como un fondo real (cover).
+    background_decoration = ft.BoxDecoration(
+        image=ft.DecorationImage(
+            src=bg_src,
+            fit=ft.ImageFit.COVER, # Esto asegura que llene TODO el espacio sin deformarse
+            opacity=0.6 # Un poco más oscuro para leer bien el texto
+        )
     )
 
     card_content = ft.Container(
         content=Card(form, padding=22),
         width=440,
         border_radius=16,
-        # Sombra con un toque muy sutil de cian para integrarlo
         shadow=ft.BoxShadow(
             blur_radius=40, 
             spread_radius=0, 
-            color=ft.Colors.with_opacity(0.1, THEME_CYAN)
+            color=ft.Colors.with_opacity(0.15, THEME_CYAN)
         ), 
     )
 
@@ -165,21 +159,22 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         padding=20,
     )
     
-    # Overlay: Un degradado sutil o color plano para unificar
-    # Usamos un gris muy oscuro con opacidad
+    # Overlay: Capa negra semitransparente extra para asegurar contraste
     overlay = ft.Container(
-        bgcolor=ft.Colors.with_opacity(0.5, "#000000"), 
+        bgcolor=ft.Colors.with_opacity(0.4, "#000000"), 
         expand=True
     )
 
     main_container = ft.Container(
         expand=True,
+        # APLICAMOS EL FONDO AQUÍ DIRECTAMENTE
+        decoration=background_decoration, 
+        bgcolor=THEME_BG, # Color de fondo de respaldo
         content=ft.Stack([
-            ft.Container(bgcolor=THEME_BG, expand=True), # Fondo base sólido por si la imagen falla
-            background_image,
-            overlay,
-            content_layer
+            overlay, # Capa oscura
+            content_layer # Formulario
         ]),
+        alignment=ft.alignment.center
     )
 
     if is_mobile:
@@ -188,6 +183,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         card_content.border_radius = 0
         content_layer.padding = 0
         content_layer.content.vertical_alignment = ft.MainAxisAlignment.START
+        # En móvil quitamos el overlay para ver mejor la imagen de fondo
         if overlay in main_container.content.controls:
             main_container.content.controls.remove(overlay)
 
