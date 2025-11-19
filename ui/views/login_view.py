@@ -8,8 +8,9 @@ from ui.components.cards import Card
 
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
-    Vista de inicio de sesión para la aplicación Flet, sin opciones de OAuth (Google).
-    Solo permite el inicio de sesión por usuario/contraseña y registro.
+    Vista de inicio de sesión para la aplicación Flet.
+    Incluye una imagen de fondo local 'dark_abstract_background.jpg' con un overlay 
+    para mejorar la legibilidad del contenido.
     """
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
     flash = page.session.get("flash")
@@ -58,8 +59,8 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     pwd_field.on_change = validate
     validate(None)
 
-    # --- Lógica de carga de Logo ---
-    LOGO_PATH = "ui/assets/a.png"
+    # --- Lógica de carga de Logo (si tienes un logo específico) ---
+    LOGO_PATH = "ui/assets/a.png" # Asegúrate de que esta ruta sea correcta para tu logo
     logo_b64 = None
     try:
         if os.path.exists(LOGO_PATH):
@@ -73,7 +74,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     if logo_b64:
         logo_content = ft.Image(src_base64=logo_b64, fit=ft.ImageFit.COVER)
     else:
-        logo_content = ft.Icon(ft.Icons.SCIENCE, size=34)
+        logo_content = ft.Icon(ft.Icons.SCIENCE, size=34) # Ícono de fallback si no hay logo
 
     logo = ft.Container(content=logo_content, width=56, height=56, alignment=ft.alignment.center)
 
@@ -96,7 +97,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             info,
             ft.Container(height=4),
             btn_login,
-            ft.Container(height=20), # Espacio ajustado
+            ft.Container(height=20),
             btn_register,
         ],
         spacing=10,
@@ -104,26 +105,70 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # --- Contenedor principal y ajustes de responsividad ---
+    # --- Contenedor principal con fondo de imagen y ajustes de responsividad ---
+    
+    # 1. Ruta local de la imagen de fondo generada
+    BACKGROUND_IMAGE_PATH = "ui/assets/dark_abstract_background.jpg"
+
+    # Verificar si la imagen existe localmente. Si no, usa un color de fondo.
+    if os.path.exists(BACKGROUND_IMAGE_PATH):
+        background_image_control = ft.Image(
+            src=BACKGROUND_IMAGE_PATH,
+            fit=ft.ImageFit.COVER,
+            expand=True
+        )
+    else:
+        print(f"ADVERTENCIA: No se encontró la imagen de fondo en la ruta: {BACKGROUND_IMAGE_PATH}. Usando color de fondo oscuro.")
+        background_image_control = ft.Container(bgcolor=ft.colors.BLACK, expand=True) # Fallback a un color sólido oscuro
+        
+    # 2. El card de login, ligeramente ajustado para mejor sombra sobre el fondo.
     card_container = ft.Container(
         content=Card(form, padding=22),
         width=440,
         border_radius=16,
-        shadow=ft.BoxShadow(blur_radius=16, spread_radius=1, color=ft.Colors.with_opacity(0.18, ft.Colors.BLACK)),
+        # Sombra más pronunciada para que el card blanco resalte sobre el fondo.
+        shadow=ft.BoxShadow(blur_radius=30, spread_radius=3, color=ft.colors.with_opacity(0.5, ft.colors.BLACK)), 
     )
 
+    # 3. Capa de contenido: Centra el card y le aplica el padding.
+    content_layer = ft.Container(
+        content=ft.Row(
+            [card_container],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        expand=True,
+        padding=20,
+    )
+    
+    # 4. Overlay oscuro para asegurar la legibilidad de la tarjeta.
+    # Ajustado a un 40% de opacidad para que la imagen de fondo se vea un poco más.
+    overlay = ft.Container(bgcolor=ft.colors.with_opacity(0.4, ft.colors.BLACK), expand=True)
+
+    # El contenedor principal es ahora un Stack para apilar los elementos
     main_container = ft.Container(
         expand=True,
-        content=ft.Row([card_container], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.MainAxisAlignment.CENTER),
-        padding=20,
+        content=ft.Stack([
+            background_image_control, # Usamos el control que puede ser imagen o color
+            overlay,
+            content_layer
+        ]),
     )
 
     if is_mobile:
+        # Ajustes específicos para móvil: el card ocupa todo el ancho y pierde sombra/bordes.
         card_container.width = None
         card_container.shadow = None
         card_container.border_radius = 0
-        main_container.padding = 0
-        main_container.vertical_alignment = ft.MainAxisAlignment.START
-        main_container.alignment = ft.alignment.top_center
+        
+        # Ajustar la capa de contenido
+        content_layer.padding = 0
+        
+        # El Row interno se alinea arriba para que el contenido no quede centrado verticalmente
+        content_layer.content.vertical_alignment = ft.MainAxisAlignment.START
+        
+        # Quitar o reducir la opacidad del overlay en móvil para que el fondo se vea más claro
+        # Aquí lo quitamos, pero podrías ajustar su opacidad si prefieres mantenerlo.
+        main_container.content.controls.remove(overlay) 
 
     return main_container
