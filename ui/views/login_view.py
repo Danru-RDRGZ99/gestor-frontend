@@ -10,7 +10,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
     Vista de inicio de sesión para BLACKLAB.
     Tema: Negro, Gris y Cian.
-    Usa Stack para compatibilidad máxima con el fondo de pantalla.
+    Usa carga Base64 para el fondo para garantizar que se muestre la imagen local.
     """
     # --- Variables de Estilo ---
     THEME_CYAN = "#00E5FF"  # Cian vibrante
@@ -68,7 +68,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     pwd_field.on_change = validate
     validate(None)
 
-    # --- Logo ---
+    # --- Logo (Base64) ---
     LOGO_PATH = "ui/assets/a.png"
     logo_b64 = None
     try:
@@ -118,25 +118,43 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # --- CONFIGURACIÓN DEL FONDO ---
-    # Usamos imagen abstracta estilo Cyberpunk
-    bg_src = "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?q=80&w=2070&auto=format&fit=crop"
+    # --- CONFIGURACIÓN DEL FONDO (MÉTODO BASE64) ---
+    # URL por defecto (Cyberpunk)
+    default_bg_url = "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?q=80&w=2070&auto=format&fit=crop"
     
+    # Rutas locales posibles
     local_bg_options = ["ui/assets/background.jpg", "ui/assets/dark_abstract_background.jpg"]
+    bg_src_base64 = None
+
+    # Intentamos leer el archivo local y convertirlo a Base64
     for local_path in local_bg_options:
         if os.path.exists(local_path):
-            bg_src = local_path
-            break
+            try:
+                with open(local_path, "rb") as f:
+                    bg_src_base64 = base64.b64encode(f.read()).decode("utf-8")
+                    print(f"Éxito: Fondo local cargado desde {local_path}")
+                    break
+            except Exception as e:
+                print(f"Error leyendo imagen de fondo: {e}")
 
-    # IMAGEN DE FONDO (Control independiente para el Stack)
-    bg_image_control = ft.Image(
-        src=bg_src,
-        fit=ft.ImageFit.COVER,  # Clave para cubrir todo el espacio
-        expand=True,            # Clave para expandirse en el Stack
-        opacity=0.6,
-        # Fallback seguro usando un contenedor negro si falla la URL
-        error_content=ft.Container(bgcolor=THEME_BG)
-    )
+    # Configuramos el control de imagen
+    if bg_src_base64:
+        # Si leímos el archivo local con éxito
+        bg_image_control = ft.Image(
+            src_base64=bg_src_base64,
+            fit=ft.ImageFit.COVER,
+            expand=True,
+            opacity=0.6
+        )
+    else:
+        # Si falló todo lo local, usamos la URL
+        bg_image_control = ft.Image(
+            src=default_bg_url,
+            fit=ft.ImageFit.COVER,
+            expand=True,
+            opacity=0.6,
+            error_content=ft.Container(bgcolor=THEME_BG)
+        )
 
     # Tarjeta de Login
     card_content = ft.Container(
@@ -158,7 +176,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
             vertical_alignment=ft.MainAxisAlignment.CENTER,
         ),
         expand=True,
-        padding=20, # Padding solo para que la tarjeta no toque los bordes en pantallas pequeñas
+        padding=20, 
     )
     
     # Overlay oscuro
@@ -171,10 +189,10 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     main_container = ft.Container(
         expand=True,
         bgcolor=THEME_BG,
-        padding=0, # Eliminamos padding del contenedor raíz
+        padding=0,
         content=ft.Stack(
             controls=[
-                bg_image_control, # 1. Fondo al fondo
+                bg_image_control, # 1. Fondo (Base64 o URL)
                 overlay,          # 2. Capa oscura encima
                 content_layer     # 3. Formulario al frente
             ],
