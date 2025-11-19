@@ -8,23 +8,28 @@ from ui.components.cards import Card
 
 def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     """
-    Vista de inicio de sesión para la aplicación Flet.
-    Usa una imagen de fondo desde URL para asegurar visualización inmediata,
-    con fallback a archivo local o color sólido.
+    Vista de inicio de sesión para BLACKLAB.
+    Tema: Negro, Gris y Cian.
     """
-    # Manejo de mensajes flash
+    # --- Variables de Estilo ---
+    # Definimos los colores del tema aquí para usarlos consistentemente
+    THEME_CYAN = "#00E5FF"  # Cian vibrante tipo neón
+    THEME_BG = "#111111"    # Negro casi puro
+    
     info = ft.Text("", color=ft.Colors.RED_400, size=12)
     flash = page.session.get("flash")
     if flash:
         info.value = flash
         page.session.remove("flash")
 
-    # Campos del formulario
     user_field = ft.TextField(
         label="Usuario o Correo",
         prefix_icon=ft.Icons.PERSON,
         autofocus=True,
         text_size=14,
+        border_color=ft.Colors.GREY_800,
+        focused_border_color=THEME_CYAN, # Borde cian al enfocar
+        cursor_color=THEME_CYAN,
     )
     pwd_field = ft.TextField(
         label="Contraseña",
@@ -32,10 +37,12 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         can_reveal_password=True,
         prefix_icon=ft.Icons.LOCK,
         text_size=14,
+        border_color=ft.Colors.GREY_800,
+        focused_border_color=THEME_CYAN,
+        cursor_color=THEME_CYAN,
         on_submit=lambda e: do_login(),
     )
 
-    # Lógica de login
     def do_login():
         username = user_field.value.strip()
         password = pwd_field.value or ""
@@ -48,11 +55,11 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         page.session.set("login_attempt", {"username": username, "password": password})
         page.go("/captcha-verify")
 
-    # Botones
+    # Botones personalizados (Si tus componentes Primary/Ghost aceptan color, genial. 
+    # Si no, se verán con el estilo por defecto).
     btn_login = Primary("Entrar", on_click=lambda e: do_login(), width=260, height=46)
     btn_register = Ghost("Registrarse", on_click=lambda e: page.go("/register"), width=260, height=40)
 
-    # Validación
     def validate(_):
         btn_login.disabled = not (user_field.value.strip() and pwd_field.value)
         page.update()
@@ -72,18 +79,25 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         print(f"Error logo: {e}")
 
     if logo_b64:
+        # Logo con un filtro de color sutil si es transparente, o natural
         logo_content = ft.Image(src_base64=logo_b64, fit=ft.ImageFit.COVER)
     else:
-        logo_content = ft.Icon(ft.Icons.SCIENCE, size=34)
+        # Fallback: Icono coloreado con el tema Cian
+        logo_content = ft.Icon(ft.Icons.SCIENCE, size=34, color=THEME_CYAN)
 
-    logo = ft.Container(content=logo_content, width=56, height=56, alignment=ft.alignment.center)
+    logo = ft.Container(
+        content=logo_content, 
+        width=56, height=56, 
+        alignment=ft.alignment.center,
+        # Sutil brillo cian detrás del logo
+        shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.with_opacity(0.2, THEME_CYAN))
+    )
 
-    # Encabezado y Formulario
     header = ft.Column(
         [
             logo,
-            ft.Text("BLACKLAB", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, opacity=0.8),
+            ft.Text("BLACKLAB", size=24, weight=ft.FontWeight.BOLD, color="white"),
+            ft.Text("Inicia sesión para gestionar reservas y recursos", size=12, color=ft.Colors.GREY_400),
         ],
         spacing=8,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -92,7 +106,7 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
     form = ft.Column(
         controls=[
             header,
-            ft.Divider(opacity=0.2),
+            ft.Divider(color=ft.Colors.GREY_800),
             user_field,
             pwd_field,
             info,
@@ -106,36 +120,44 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # --- FONDO DE PANTALLA (Estrategia URL + Local) ---
+    # --- CONFIGURACIÓN DEL FONDO ---
     
-    # 1. URL de una imagen abstracta oscura (Funciona siempre que haya internet)
-    bg_src = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"
+    # 1. URL Web: Una imagen abstracta tecnológica oscura con toques cian/azules
+    #    (Cyberpunk/Tech style)
+    bg_src = "https://images.unsplash.com/photo-1535868463750-c78d9543614f?q=80&w=2000&auto=format&fit=crop"
     
-    # 2. Si existe la imagen local que intentamos usar antes, la priorizamos
-    local_bg_path = "ui/assets/dark_abstract_background.jpg"
-    if os.path.exists(local_bg_path):
-        bg_src = local_bg_path
+    # 2. Archivo Local: Si guardas la imagen generada como 'background.jpg', se usará esa.
+    local_bg_options = ["ui/assets/background.jpg", "ui/assets/dark_abstract_background.jpg"]
+    
+    for local_path in local_bg_options:
+        if os.path.exists(local_path):
+            bg_src = local_path
+            print(f"Usando fondo local: {bg_src}")
+            break
 
-    background_image_control = ft.Image(
+    background_image = ft.Image(
         src=bg_src,
         fit=ft.ImageFit.COVER,
         expand=True,
-        opacity=0.8, # Un poco de transparencia base
-        # Fallback de seguridad en HEXADECIMAL para evitar errores de ft.Colors
-        error_content=ft.Container(bgcolor="#0f172a") 
+        opacity=0.7, # Transparencia para que no compita con el formulario
+        error_content=ft.Container(bgcolor=THEME_BG) # Fallback seguro
     )
 
-    # Contenedor de la tarjeta
-    card_container = ft.Container(
+    card_content = ft.Container(
         content=Card(form, padding=22),
         width=440,
         border_radius=16,
-        shadow=ft.BoxShadow(blur_radius=30, spread_radius=3, color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK)), 
+        # Sombra con un toque muy sutil de cian para integrarlo
+        shadow=ft.BoxShadow(
+            blur_radius=40, 
+            spread_radius=0, 
+            color=ft.Colors.with_opacity(0.1, THEME_CYAN)
+        ), 
     )
 
     content_layer = ft.Container(
         content=ft.Row(
-            [card_container],
+            [card_content],
             alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.MainAxisAlignment.CENTER,
         ),
@@ -143,27 +165,29 @@ def LoginView(page: ft.Page, api: ApiClient, on_success, is_mobile: bool):
         padding=20,
     )
     
-    # Overlay para oscurecer la imagen y que el texto resalte
-    overlay = ft.Container(bgcolor=ft.Colors.with_opacity(0.4, ft.Colors.BLACK), expand=True)
+    # Overlay: Un degradado sutil o color plano para unificar
+    # Usamos un gris muy oscuro con opacidad
+    overlay = ft.Container(
+        bgcolor=ft.Colors.with_opacity(0.5, "#000000"), 
+        expand=True
+    )
 
     main_container = ft.Container(
         expand=True,
         content=ft.Stack([
-            background_image_control,
+            ft.Container(bgcolor=THEME_BG, expand=True), # Fondo base sólido por si la imagen falla
+            background_image,
             overlay,
             content_layer
         ]),
-        bgcolor="#000000" # Color de fondo base del contenedor principal
     )
 
-    # Ajustes Móvil
     if is_mobile:
-        card_container.width = None
-        card_container.shadow = None
-        card_container.border_radius = 0
+        card_content.width = None
+        card_content.shadow = None
+        card_content.border_radius = 0
         content_layer.padding = 0
         content_layer.content.vertical_alignment = ft.MainAxisAlignment.START
-        # En móvil quitamos el overlay para que se vea más limpio
         if overlay in main_container.content.controls:
             main_container.content.controls.remove(overlay)
 
